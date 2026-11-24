@@ -35,12 +35,12 @@ The in-game **Rules** button shows the same summary.
 
 - **Setup:** each player starts with 3 money and 1 Scientist. Suspicion starts at 0 and the starting player is random. Objective cards are N−2 Prometheus plus one each of Visionary, Inquisitor and Unleasher. They are dealt secretly through a pass-the-device screen, and one card stays unseen.
 - **Objectives:**
-  - *Prometheus*: own a Creature that becomes stable this round; win at dawn.
+  - *Prometheus*: be the only player whose Creature becomes stable in a round; win at dawn.
   - *Visionary*: two or more Creatures become stable in the same round.
   - *Inquisitor*: suspicion reaches 16.
   - *Unleasher*: any Creature is unleashed.
 - **Catastrophes:** the mob (suspicion 16) or an unleashed Creature ends the game immediately. Only the matching antagonist wins, if that role was dealt; otherwise everyone loses.
-- **Round:** Day → Night → secret resurrection commitments → resolution in initiative order → Dawn (objective check, initiative rotates).
+- **Round:** Day → Night → secret resurrection commitments → resolution in initiative order → Dawn (objective check; any stable Creature ends the game, otherwise initiative rotates).
 - **Workers:**
   - The Scientist acts once by day and once by night.
   - Igors cost 4, 7 and 10 (maximum 3). Each acts once per round in either phase, starts the round after hiring, and may only use spaces marked *Igor*.
@@ -71,7 +71,7 @@ These rulings resolve ambiguities in the spec and are implemented in the engine:
    - Discreet Methods reduces suspicion by 1 per copy.
 
    Players still cannot buy a type they personally discovered.
-4. **Stable Creatures become workers.** If the game continues past dawn, each stable Creature joins its owner as a worker the next round, like a newly hired Igor. It may take any action a Scientist may, once per round in either phase. It does not stop its owner from attempting another resurrection, so eligibility only requires a complete body.
+4. **A stable Creature ends the game.** At the dawn of any round in which a Creature becomes stable, the game ends. If exactly one became stable and its owner is a Prometheus, that player wins. If two or more became stable, the Visionary wins if dealt. Otherwise everyone loses. Two Prometheus players stabilizing in the same round both lose. There are no Creature workers.
 
 ---
 
@@ -164,7 +164,6 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 - **Worker IDs:**
   - Scientists are `scientist-p1`.
   - Igors are `igor-p1-1`, `igor-p1-2` and so on.
-  - Creature workers use the Creature's ID, such as `creature-1`.
 - **Choice constraints** returned by `getLegalCommands` take these forms:
   - `{ type: 'enum', values }`
   - `{ type: 'multiset', count, values }`
@@ -249,7 +248,7 @@ For each decision belonging to a seat on stdin, the driver writes `{"type":"deci
 - suspicion tables and Discreet Methods
 - assembly limits, lecture and publish rulings, and research stacking
 - every resurrection outcome and each victory or defeat path
-- Creature workers
+- a stable Creature always ending the game at dawn
 - hidden commitments and filtered views
 - save/load round trips and replay verification, including tamper detection
 - stale-command protection

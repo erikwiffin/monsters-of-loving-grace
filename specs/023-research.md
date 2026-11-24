@@ -25,7 +25,7 @@ A player cannot acquire a research type they have already personally discovered.
 
 ## Publishing
 
-The publish action (day, Scientist or Creature worker only) makes one research type the player has personally discovered permanently available to all players, and pays the publisher 2 money. The publisher keeps personal discovery credit. Every publication is recorded publicly with the publisher, the type and the round.
+The publish action (day, Scientist only) makes one research type the player has personally discovered permanently available to all players, and pays the publisher 2 money. The publisher keeps personal discovery credit. Every publication is recorded publicly with the publisher, the type and the round.
 
 **Ruling:** a player may publish any type they have personally discovered and have not already published themselves, *even if another player has already published that type*. Each player may publish a given type at most once.
 

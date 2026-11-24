@@ -575,16 +575,20 @@ function resolveResurrections(s) {
 }
 
 function dawn(s) {
+  // Any stable Creature ends the game at dawn. Exactly one: its owner wins
+  // if they are a Prometheus. Two or more: the Visionary wins if dealt.
+  // Otherwise everyone loses.
   const transitions = s.stableTransitions;
   const winners = [];
   const visionary = transitions.length >= 2;
+  const soleOwner = transitions.length === 1 ? s.creatures[transitions[0]].ownerId : null;
   for (const p of s.players) {
     const obj = s.objectives[p.id];
     if (obj === 'visionary' && visionary) winners.push(p.id);
-    if (obj === 'prometheus' && transitions.some((cid) => s.creatures[cid].ownerId === p.id)) winners.push(p.id);
+    if (obj === 'prometheus' && p.id === soleOwner) winners.push(p.id);
   }
   emit(s, 'DAWN_CHECK', { stableTransitions: [...transitions], objectiveMet: winners.length > 0 });
-  if (winners.length) {
+  if (transitions.length) {
     endGame(s, 'objective', winners);
     return;
   }
@@ -715,8 +719,6 @@ function resurrect(s, pid) {
     s.creatures[cid] = { id: cid, ownerId: pid, status: 'stable', disposition, round: s.round };
     s.creatureOrder.push(cid);
     s.stableTransitions.push(cid);
-    // Ruling: a stable Creature joins its owner as a worker from next round.
-    addWorker(s, { id: cid, kind: 'creature', ownerId: pid, active: false });
     record.outcome = 'stable';
     record.creatureId = cid;
     s.resurrections.push(record);

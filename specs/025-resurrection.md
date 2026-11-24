@@ -4,7 +4,7 @@ Resurrection is optional, and happens after the night actions. It is not a worke
 
 ## Eligibility and commitment
 
-A player is eligible if their body is complete, with all six slots filled. **Ruling:** owning a stable Creature, which becomes a worker under spec 021, does not block a new attempt. Eligible players secretly commit to attempt or decline, following the procedure in spec 021. Every commitment is locked before any roll is revealed.
+A player is eligible if their body is complete, with all six slots filled. Eligible players secretly commit to attempt or decline, following the procedure in spec 021. Every commitment is locked before any roll is revealed.
 
 ## Rolling
 
@@ -35,7 +35,7 @@ Every raw die roll is displayed and logged with its source, size and sign, along
 Outcomes are checked in this order:
 
 1. **Vitality fails.** No Creature is created. Three of the six consumed parts are salvaged into loose inventory, chosen uniformly at random without replacement; the other three are lost. Suspicion rises by 1 (spec 020), which may form the mob.
-2. **Vitality succeeds, and Control or Humanity succeeds.** A stable Creature is created and owned by the player, and its ID is recorded as a stable transition for this round. It is described as *controlled*, *humane* or *controlled and humane*. These descriptions carry no ongoing mechanical difference in this version. If the game continues past dawn, it becomes its owner's worker (spec 021).
+2. **Vitality succeeds, and Control or Humanity succeeds.** A stable Creature is created and owned by the player, and its ID is recorded as a stable transition for this round. It is described as *controlled*, *humane* or *controlled and humane*. These descriptions carry no ongoing mechanical difference in this version. The game ends at that round's dawn (spec 020).
 3. **Vitality succeeds, but Control and Humanity both fail.** The Creature is unleashed, and the game ends immediately with an Unleasher victory or a collective defeat (spec 020). Suspicion is not added, and the mob is not checked as a secondary consequence. No later commitment is resolved.
 
 ## Odds estimate

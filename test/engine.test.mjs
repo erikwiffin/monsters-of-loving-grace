@@ -283,7 +283,7 @@ test('declined commitments consume nothing; commitments are hidden until reveal'
   assert.ok(s2.players.find((p) => p.id === other).body.head !== null);
 });
 
-test('Prometheus wins at dawn; stable Creature becomes a worker if game continues', () => {
+test('Prometheus wins at dawn with the only stable Creature', () => {
   let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
     st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
     fullBody(st, 'p1');
@@ -291,26 +291,21 @@ test('Prometheus wins at dawn; stable Creature becomes a worker if game continue
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p1', attempt: true });
   assert.equal(s.result.reason, 'objective');
   assert.deepEqual(s.result.winners, ['p1']);
+  assert.ok(!Object.values(s.workers).some((w) => w.kind === 'creature'), 'stable Creatures never become workers');
+});
 
-  let t = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
-    st.objectives = { p1: 'unleasher', p2: 'inquisitor', p3: 'visionary' };
-    fullBody(st, 'p1');
-  });
-  t = ok(t, { type: 'COMMIT_RESURRECTION', playerId: 'p1', attempt: true });
-  assert.equal(t.result, null);
-  assert.equal(t.round, 2);
-  const cw = t.workers['creature-1'];
-  assert.equal(cw.kind, 'creature');
-  assert.equal(cw.active, true);
-  // The Creature may take Scientist-only actions.
-  t.players.find((p) => p.id === 'p1').money = 10;
-  t = passAllUntil(t, (x) => x.activePlayerId === 'p1');
-  const legal = getLegalCommands(t, 'p1');
-  assert.ok(legal.some((c) => c.workerId === 'creature-1' && c.actionId === 'hire'));
-  // Owner may build again with a worker Creature.
-  fullBody(t, 'p1');
-  t = passAllUntil(t, (x) => x.phase === 'commitment');
-  assert.ok(t.commitment.order.includes('p1'));
+test('a lone stable Creature owned by a non-Prometheus ends the game with everyone losing', () => {
+  for (const owner of ['visionary', 'inquisitor', 'unleasher']) {
+    let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
+      const others = ['prometheus', 'inquisitor', 'unleasher', 'visionary'].filter((o) => o !== owner);
+      st.objectives = { p1: owner, p2: others[0], p3: others[1] };
+      fullBody(st, 'p1');
+    });
+    s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p1', attempt: true });
+    assert.equal(s.result.reason, 'objective', owner);
+    assert.deepEqual(s.result.winners, [], owner);
+    assert.equal(s.result.collectiveDefeat, true, owner);
+  }
 });
 
 test('Visionary wins when two Creatures stabilize in one round', () => {
@@ -436,4 +431,27 @@ test('engine source has no DOM, storage, timers or unseeded randomness', () => {
       assert.ok(!src.includes(banned), `${f} uses ${banned}`);
     }
   }
+});
+
+test('two Prometheus players stabilizing in one round both lose; game ends without Visionary', () => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'prometheus', p3: 'inquisitor' };
+    st.unseenObjectives = ['visionary'];
+    fullBody(st, 'p1'); fullBody(st, 'p2');
+  });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
+  assert.equal(s.result.reason, 'objective');
+  assert.deepEqual(s.result.winners, []);
+  assert.equal(s.result.collectiveDefeat, true);
+});
+
+test('Prometheus and another player stabilizing together: only the Visionary wins', () => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
+    fullBody(st, 'p1'); fullBody(st, 'p2');
+  });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
+  assert.deepEqual(s.result.winners, ['p3']);
 });

@@ -1,6 +1,6 @@
 # 022 — Action spaces
 
-Each action space has a phase, a capacity per phase, an Igor permission and an effect. Scientists and Creature workers may take any action; Igors only those marked "Igor: yes". An action may only be chosen if its full cost and every prerequisite can be met. Balances never go negative. All numbers below are default configuration values (spec 010).
+Each action space has a phase, a capacity per phase, an Igor permission and an effect. Scientists may take any action; Igors only those marked "Igor: yes". An action may only be chosen if its full cost and every prerequisite can be met. Balances never go negative. All numbers below are default configuration values (spec 010).
 
 ## Day actions
 

@@ -28,7 +28,7 @@ The shared board always shows only public information:
 - a turn bar showing the active player, a selector for their available workers, and the pass button;
 - every day and night action space, with its location, cost and effect text, capacity, Igor permission and the workers occupying it. Spaces in the current phase are highlighted when the selected worker can legally take them. When a space is unavailable, it explains why;
 - the research market and deck count, plus the publication record;
-- one panel per player in initiative order, showing money, workers (used, pending, Igor or Creature), effective research (own copies, copies via publication, published marks), a body diagram, odds for a complete body, loose parts and Creatures;
+- one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), effective research (own copies, copies via publication, published marks), a body diagram, odds for a complete body, loose parts and Creatures;
 - the Chronicle, a readable log of public events.
 
 The page switches between a light "day" palette and a dark "night" palette. It works at phone width without horizontal scrolling.

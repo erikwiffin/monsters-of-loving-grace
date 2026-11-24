@@ -44,7 +44,6 @@ export function actionText(id, def, cfg) {
 export function workerLabel(w) {
   if (w.kind === 'scientist') return 'Scientist';
   if (w.kind === 'igor') return `Igor ${w.id.split('-').pop()}`;
-  if (w.kind === 'creature') return `Creature ${w.id.split('-').pop()}`;
   return w.id;
 }
 
@@ -62,7 +61,7 @@ export function describeEvent(e, ctx) {
     case 'GAME_STARTED': return `The experiment begins. ${n(e.firstPlayerId)} has initiative.`;
     case 'ROUND_STARTED': return `<span class="log-round">Round ${e.round}</span> — ${n(e.firstPlayerId)} leads.`;
     case 'PHASE_STARTED': return { day: '☀ Day breaks.', night: '☾ Night falls.', commitment: '⚡ Resurrection commitments.', resolution: '⚡ Resurrections resolve.', dawn: '🌅 Dawn.' }[e.phase] || null;
-    case 'WORKER_PLACED': return `${n(e.playerId)} sends ${e.workerKind === 'scientist' ? 'their Scientist' : e.workerKind === 'igor' ? 'an Igor' : 'their Creature'} to the ${esc(e.location)} (${esc(cfg.actions[e.actionId].name.toLowerCase())}).`;
+    case 'WORKER_PLACED': return `${n(e.playerId)} sends ${e.workerKind === 'scientist' ? 'their Scientist' : 'an Igor'} to the ${esc(e.location)} (${esc(cfg.actions[e.actionId].name.toLowerCase())}).`;
     case 'TURN_PASSED': return `${n(e.playerId)} passes for the ${e.phase}.`;
     case 'MONEY_CHANGED': return `${n(e.playerId)} ${e.delta >= 0 ? 'gains' : 'pays'} ${Math.abs(e.delta)} money (now ${e.balance}).`;
     case 'PARTS_GAINED': return `${n(e.playerId)} obtains ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
@@ -85,7 +84,7 @@ export function describeEvent(e, ctx) {
     case 'CREATURE_STABILIZED': return `${n(e.playerId)}'s Creature lives — and is <b>${e.disposition.replace(/_/g, ' ')}</b>!`;
     case 'CREATURE_UNLEASHED': return `${n(e.playerId)}'s Creature is <b class="danger">UNLEASHED</b>!`;
     case 'DAWN_CHECK': return e.stableTransitions.length ? `${e.stableTransitions.length} Creature(s) stabilized this round.` : null;
-    case 'WORKER_ACTIVATED': return e.kind === 'creature' ? `${n(e.playerId)}'s Creature joins their household as a worker.` : `${n(e.playerId)}'s new Igor reports for duty.`;
+    case 'WORKER_ACTIVATED': return `${n(e.playerId)}'s new Igor reports for duty.`;
     case 'MOB_FORMED': return '<b class="danger">The villagers form a mob!</b>';
     case 'SCIENTISTS_ARRESTED': return 'Every scientist is dragged from their laboratory and arrested.';
     case 'OBJECTIVES_REVEALED': return 'All secret objectives are revealed.';

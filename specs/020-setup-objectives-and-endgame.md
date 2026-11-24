@@ -16,7 +16,7 @@ Objectives are secret. Each player sees only their own objective, through a pass
 
 | Objective | Wins when |
 |---|---|
-| Prometheus | The player owns a Creature that newly became stable during the current round. Checked at dawn, provided the mob has not formed. |
+| Prometheus | The player's Creature is the *only* Creature that became stable that round. Checked at dawn, provided the mob has not formed. |
 | Visionary | At least two distinct Creatures became stable in the same round, whoever created them. Checked at dawn. |
 | Inquisitor | Suspicion reaches the mob threshold before the game ends. |
 | Unleasher | Any living Creature is unleashed because both Control and Humanity fail, whoever created it. |
@@ -32,7 +32,14 @@ In either case every other player loses, including anyone who already stabilized
 
 ## Dawn victories
 
-If no catastrophe has occurred, Prometheus and Visionary are checked together at dawn, after all of the round's resurrections. Several players may win together, for example two Prometheus players, or a Prometheus player and the Visionary. A stable Creature made by a non-Prometheus player does not permanently spoil Prometheus: a Prometheus player can still win by stabilizing their own Creature in a later round.
+If no catastrophe has occurred, Prometheus and Visionary are checked together at dawn, after all of the round's resurrections.
+
+**A stable Creature always ends the game.** At the dawn of any round in which one or more Creatures became stable, the game ends. The rest of that round's resurrections still resolve first, so a second Creature can stabilize in the same round. Then:
+
+- **Exactly one Creature became stable.** If its owner is a Prometheus, that player wins alone. If its owner holds any other objective, everyone loses.
+- **Two or more Creatures became stable.** The Visionary wins if that card was dealt to a player; otherwise everyone loses. No Prometheus wins, even one who stabilized a Creature that round. For example, two Prometheus players stabilizing in the same round both lose.
+
+If no Creature became stable, the game continues into the next round. Because a Prometheus win needs exactly one stable Creature and a Visionary win needs at least two, at most one player wins at dawn. Stable Creatures never act in the game.
 
 When the game ends for any reason, every objective, including the unseen card, is revealed.
 

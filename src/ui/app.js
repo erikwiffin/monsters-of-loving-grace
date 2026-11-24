@@ -255,7 +255,7 @@ function actionSpace(view, id, def, enabledPhase) {
   const occ = (view.occupancy[def.phase] && view.occupancy[def.phase][id]) || [];
   const chips = occ.map((wid) => {
     const w = ui.state.workers[wid];
-    return `<span class="meeple pc-bg-${ctx().seat(w.ownerId)}" title="${esc(ctx().name(w.ownerId))} — ${workerLabel(w)}">${w.kind === 'scientist' ? 'S' : w.kind === 'igor' ? 'I' : 'C'}</span>`;
+    return `<span class="meeple pc-bg-${ctx().seat(w.ownerId)}" title="${esc(ctx().name(w.ownerId))} — ${workerLabel(w)}">${w.kind === 'scientist' ? 'S' : 'I'}</span>`;
   }).join('');
   const cap = def.capacity == null ? '∞' : def.capacity;
   let status = { ok: false, reason: '' };
@@ -417,7 +417,7 @@ function gameOverOverlay() {
   const s = ui.state;
   const r = s.result;
   const c = ctx();
-  const headline = { mob: 'The mob has formed. Every scientist is arrested.', unleashed: 'A Creature has been unleashed upon the village.', objective: 'Dawn breaks on a new age of science.' }[r.reason];
+  const headline = { mob: 'The mob has formed. Every scientist is arrested.', unleashed: 'A Creature has been unleashed upon the village.', objective: r.winners.length ? 'Dawn breaks on a new age of science.' : 'A Creature walks the earth, but no one can claim the glory.' }[r.reason];
   const winners = r.winners.length
     ? r.winners.map((pid) => `<span class="pc pc-${c.seat(pid)}">${esc(c.name(pid))}</span> (${OBJ[r.objectives[pid]].name})`).join(', ')
     : 'Nobody — collective defeat.';

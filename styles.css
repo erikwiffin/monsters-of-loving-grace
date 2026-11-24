@@ -123,7 +123,6 @@ pre { max-height: 300px; overflow: auto; background: var(--bg2); padding: .5em; 
 .wchip, .rchip, .part { font-size: 12px; padding: 1px 7px; border-radius: 10px; background: var(--chip); border: 1px solid var(--line); white-space: nowrap; }
 .wchip.pending { border-style: dashed; color: var(--muted); }
 .wchip.used { text-decoration: line-through; color: var(--muted); }
-.wchip.creature { border-color: var(--accent2); }
 .rchip.own { border-color: var(--accent2); }
 .rchip.shared { border-style: dashed; }
 .part.good { border-color: var(--good); color: var(--good); }

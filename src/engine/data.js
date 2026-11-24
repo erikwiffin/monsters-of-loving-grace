@@ -14,7 +14,7 @@ export const OBJECTIVE_INFO = {
   prometheus: {
     name: 'Prometheus',
     summary: 'Create life.',
-    condition: 'Own a Creature that newly becomes stable during the current round. You win at dawn if the mob has not formed.',
+    condition: 'Be the only player whose Creature becomes stable in a round. You win at dawn. If another Creature stabilizes in the same round, you lose.',
   },
   visionary: {
     name: 'Visionary',
@@ -49,7 +49,6 @@ export const DEFAULT_CONFIG = {
     failedVitalitySuspicion: 1,
   },
   // capacity: null means unlimited. igor: whether a hired Igor may take it.
-  // Creature workers may take every action a Scientist may.
   actions: {
     medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: 2, igor: true, gain: 3, igorGain: 2 },
     research: { phase: 'day', name: 'Study research', location: 'University', capacity: 2, igor: false, cost: 2 },
