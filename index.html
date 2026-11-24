@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monsters of Loving Grace</title>
+  <meta name="description" content="Hot-seat browser prototype of the Monsters of Loving Grace board game.">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app"><noscript>This prototype requires JavaScript.</noscript></div>
+
+  <template id="rules-template">
+    <div class="rules">
+      <p>Each player is a scientist trying to create life, or to fulfil a secret ambition. Play is hot-seat: pass the device when prompted.</p>
+      <h3>Setup</h3>
+      <p>Everyone starts with 3 money and one Scientist. Suspicion starts at 0. Objective cards are dealt secretly (N−2 Prometheus, one each of Visionary, Inquisitor and Unleasher; one card is left unseen).</p>
+      <h3>Objectives</h3>
+      <ul>
+        <li><b>Prometheus</b> — own a Creature that becomes stable this round; win at dawn.</li>
+        <li><b>Visionary</b> — two or more Creatures (anyone's) become stable in the same round.</li>
+        <li><b>Inquisitor</b> — suspicion reaches 16: the mob arrests every scientist.</li>
+        <li><b>Unleasher</b> — any Creature is unleashed (Control and Humanity both fail).</li>
+      </ul>
+      <p>A mob or an unleashed Creature ends the game immediately; only the matching antagonist wins, if dealt — otherwise everyone loses.</p>
+      <h3>Round</h3>
+      <ol>
+        <li><b>Day</b> — in turn order, place one worker at a time and resolve it. Pass when done (passing is final for the phase).</li>
+        <li><b>Night</b> — the Scientist refreshes; Igors and Creatures that did not act by day may act now.</li>
+        <li><b>Commitment</b> — everyone with a complete body (2 arms, 2 legs, chest, head) secretly chooses to attempt resurrection or decline.</li>
+        <li><b>Resolution</b> — attempts roll in initiative order.</li>
+        <li><b>Dawn</b> — Prometheus and Visionary are checked. Otherwise initiative rotates and a new round begins.</li>
+      </ol>
+      <h3>Workers</h3>
+      <p>The Scientist acts once by day and once by night. Igors (cost 4/7/10, max 3) act once per round in either phase, arrive the round after hiring, and can only use spaces marked “Igor”. A stable Creature that doesn’t end the game joins its owner as a worker the next round: it can do anything a Scientist can, once per round.</p>
+      <h3>Research</h3>
+      <p>Research cards are permanent. Publishing shares a discovery with everyone (+2 money). Copies stack: your own discovery counts once, plus one for each other player who published that type. Lecture pays 1 + the number of types you have published (max 4).</p>
+      <h3>Resurrection</h3>
+      <p>Roll d20 for Vitality, Control and Humanity, each needing 18+, modified by installed parts and research. Attempting consumes all six installed parts.</p>
+      <ul>
+        <li>Vitality fails → no Creature; 3 random parts are salvaged; +1 suspicion.</li>
+        <li>Vitality succeeds and Control or Humanity succeeds → a stable Creature.</li>
+        <li>Vitality succeeds but both fail → the Creature is <b>unleashed</b> and the game ends.</li>
+      </ul>
+      <h3>Suspicion</h3>
+      <p>Grave robbing, morgue raids and failed resurrections raise suspicion. Charity (−2) and covering tracks (−1) lower it. At 16 the mob forms.</p>
+      <p class="muted small">Prototype v0.3 with designer rulings — see README.</p>
+    </div>
+  </template>
+
+  <script type="module" src="src/ui/app.js"></script>
+</body>
+</html>
