@@ -5,7 +5,7 @@
   "description": "Browser prototype and headless rules engine for the Monsters of Loving Grace board game.",
   "type": "module",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "simulate": "node bin/simulate.mjs",
     "serve": "node bin/serve.mjs"
   },
