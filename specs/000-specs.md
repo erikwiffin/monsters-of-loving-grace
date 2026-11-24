@@ -1,6 +1,6 @@
 # 000 — Specs
 
-This directory holds the specifications that direct development of Monsters of Loving Grace. Each spec describes one behaviour we want: an architectural capability, such as the command bus, or a gameplay mechanic, such as publishing research. Together they replace the original monolithic v0.3 implementation specification and the clarifying Q&A that followed it. Where the original spec was ambiguous or contradicted itself, the specs record the designer's ruling explicitly so it is not lost in chat history.
+This directory holds the specifications that direct development of Monsters of Loving Grace. Each spec describes one behaviour we want: an architectural capability, such as the command bus, or a gameplay mechanic, such as publishing research.
 
 ## Purpose
 
