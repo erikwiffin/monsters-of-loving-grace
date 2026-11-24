@@ -53,16 +53,3 @@ There is no individual suspicion per player in this version.
 ## No forced ending
 
 There is no round cap and no in-game timeout. If players avoid both risk and resurrection, a game may continue indefinitely. External simulation tools may stop runaway games, but must report them as truncated, never as a result (spec 014).
-
-## Out of scope for this version
-
-The following are not part of this version:
-
-- eliminating players before the game ends;
-- individual suspicion meters;
-- tissue decay;
-- wages;
-- moving around a physical map;
-- resources beyond money, body parts and research;
-- direct trading;
-- containing, fighting or rehabilitating a Creature.
