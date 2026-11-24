@@ -9,6 +9,8 @@ one device, and there is a headless rules engine for AI playtesting.
 - No build step, server, accounts, network or CDN. The site is plain HTML, CSS and ES modules with relative URLs.
 - The browser game, the tests and the simulator all run on the same engine (`src/engine/`).
 
+Behaviour is specified in [`specs/`](specs/000-specs.md), a set of short specs that replace the original v0.3 document and record the designer's rulings. Start with `specs/000-specs.md`.
+
 ---
 
 ## Running it
