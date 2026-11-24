@@ -10,9 +10,14 @@ Two built-in policies ship in `src/sim/policies.js`. Each has its own seeded ran
 
 - **random** chooses uniformly among legal non-pass commands, and passes only occasionally, about 10% of the time.
 - **heuristic** is a simple greedy player:
-  - It earns money when short, values safety research (neurology, philosophy) and galvanism, and gathers and assembles good parts.
+  - It earns money when short, and gathers and assembles good parts.
+  - It values research according to its objective. The Unleasher wants galvanism and avoids safety research (neurology, philosophy). The Inquisitor avoids galvanism and Discreet Methods. Everyone else values safety research and galvanism.
   - It manages suspicion unless it is the Inquisitor.
-  - It decides on resurrection using the engine's exact odds. The Unleasher always attempts. The Inquisitor attempts if the chance of unleashing is under 50%. Everyone else attempts when the stable chance clearly exceeds the unleash chance, accepting more risk from round 12.
+  - It decides on resurrection using the engine's exact odds, remembering that any stable Creature ends the game (spec 020):
+    - **Prometheus** attempts when the stable chance clearly exceeds the unleash chance, accepting more risk from round 12.
+    - **Visionary** attempts under the same odds rule, but only when another player also has a complete body, since a lone stable Creature loses for everyone.
+    - **Unleasher** attempts only when the unleash chance exceeds the stable chance.
+    - **Inquisitor** attempts only when suspicion is one below the mob threshold and failure is more likely than not, since a failed Vitality roll would then bring the mob.
 
 ## Runner
 

@@ -52,11 +52,26 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
       const objective = view.private.objective;
       const cfg = view.config;
       if (view.phase === 'commitment') {
+        // Any stable Creature ends the game at dawn (spec 020), so each
+        // objective weighs the outcomes differently.
         const odds = me.resurrectionOdds;
+        const safeEnough = odds.pStable >= odds.pUnleashed * 1.2 || (view.round >= 12 && odds.pStable >= odds.pUnleashed * 0.6);
         let attempt;
-        if (objective === 'unleasher') attempt = true;
-        else if (objective === 'inquisitor') attempt = odds.pUnleashed < 0.5;
-        else attempt = odds.pStable >= odds.pUnleashed * 1.2 || (view.round >= 12 && odds.pStable >= odds.pUnleashed * 0.6);
+        if (objective === 'prometheus') {
+          // Needs a lone stable Creature.
+          attempt = safeEnough;
+        } else if (objective === 'visionary') {
+          // A lone Creature loses for everyone; only try alongside a rival body.
+          const rivalBodies = view.players.some((p) => p.id !== me.id && p.bodyComplete);
+          attempt = rivalBodies && safeEnough;
+        } else if (objective === 'unleasher') {
+          // Wants an unleashed Creature; a stable one loses.
+          attempt = odds.pUnleashed > odds.pStable;
+        } else {
+          // Inquisitor: only a failed Vitality helps (+1 suspicion), and only
+          // when that failure would bring the mob.
+          attempt = view.suspicion >= view.suspicionMax - 1 && odds.pFailed > 0.5;
+        }
         return legal.find((c) => c.attempt === attempt) || legal[0];
       }
       const open = {};
@@ -74,7 +89,11 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
           case 'medicine': return me.money < 4 ? 4 : 1.5;
           case 'research': case 'experiment': {
             const card = view.market.find((k) => k.id === c.choices.researchCardId);
-            const want = { galvanism: 4, neurology: 4.5, philosophy: 4.5, anatomy: 2, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 }[card.type] || 1;
+            const want = (objective === 'unleasher'
+              ? { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, anatomy: 2, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 }
+              : objective === 'inquisitor'
+                ? { galvanism: 0.5, neurology: 1, philosophy: 1, anatomy: 1.5, medicine: 3, discretion: 0 }
+                : { galvanism: 4, neurology: 4.5, philosophy: 4.5, anatomy: 2, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 })[card.type] || 1;
             if (a === 'experiment') {
               const fitsLost = c.choices.partIds.filter((id) => { const x = me.loose.find((y) => y.id === id); return open[x.type] > 0; }).length;
               return want - fitsLost * 1.5 + 0.5;
