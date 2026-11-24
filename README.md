@@ -21,7 +21,7 @@ one device, and there is a headless rules engine for AI playtesting.
 
 ### GitHub Pages deployment
 
-`.github/workflows/pages.yml` runs the tests and a short simulation on every push and pull request. On pushes to `main` it then copies `index.html`, `styles.css`, `.nojekyll`, `assets/` and `src/` into `_site/` and deploys that folder with GitHub Pages.
+`.github/workflows/pages.yml` runs the tests and a short simulation on every push and pull request. On pushes to `main` it then copies `index.html`, `styles.css`, `assets/` and `src/` into `_site/`, uploads it in a build job, and deploys it with GitHub Pages from a separate deploy job.
 
 **One-time setup:** in *Settings → Pages*, set **Source** to **GitHub Actions**. Because all URLs are relative, the site works under the `/<repo>/` subpath without any configuration.
 

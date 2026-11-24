@@ -26,22 +26,27 @@ jobs:
       - run: npm test
       - run: node bin/simulate.mjs --games 20 --policy heuristic,random > /dev/null
 
-  deploy:
+  build:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - name: Assemble static site
         run: |
           mkdir -p _site
-          cp -r index.html styles.css .nojekyll assets src _site/
+          cp -r index.html styles.css assets src _site/
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
