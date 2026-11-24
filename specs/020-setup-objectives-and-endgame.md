@@ -21,8 +21,6 @@ Objectives are secret. Each player sees only their own objective, through a pass
 | Inquisitor | Suspicion reaches the mob threshold before the game ends. |
 | Unleasher | Any living Creature is unleashed because both Control and Humanity fail, whoever created it. |
 
-The former Redeemer objective is removed, because rehabilitation is impossible when an unleashed Creature ends the game immediately. The Unleasher replaces it and preserves the deck size.
-
 ## Catastrophes
 
 Two catastrophes end the game immediately, in whatever phase they happen. No further actions, rolls or resurrection attempts are resolved after them.
