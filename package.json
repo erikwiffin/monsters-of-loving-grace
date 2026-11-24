@@ -1,0 +1,14 @@
+{
+  "name": "monsters-of-loving-grace",
+  "version": "0.3.1",
+  "private": true,
+  "description": "Browser prototype and headless rules engine for the Monsters of Loving Grace board game.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "simulate": "node bin/simulate.mjs",
+    "serve": "node bin/serve.mjs"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}
