@@ -6,6 +6,7 @@ import {
   esc, effectText, variantText, variantName, researchName, actionText, workerLabel, describeEvent,
   sourceLabel, attrName, pct,
 } from './format.js';
+import { POLICIES } from '../sim/policies.js';
 import { storageAvailable, writeSave, readSave, clearSave, makeSave, SAVE_FORMAT, readDebugFlag, writeDebugFlag } from './storage.js';
 
 const root = document.getElementById('app');
@@ -23,7 +24,14 @@ const ui = {
   storageOk: HAS_STORAGE,
   hideGameOver: false,
   menuError: null,
+  aiPaused: false,
+  aiDelay: 700,
+  aiTimer: null,
 };
+
+const AI_KINDS = { heuristic: 'AI — heuristic', random: 'AI — random' };
+const aiKind = (pid) => (ui.meta && ui.meta.ai && ui.meta.ai[pid]) || null;
+const humanIds = () => ui.state.players.filter((p) => !aiKind(p.id)).map((p) => p.id);
 
 const OBJ = E.OBJECTIVE_INFO;
 const ACTIONS_DAY = () => Object.entries(ui.state.config.actions).filter(([, d]) => d.phase === 'day');
@@ -66,10 +74,14 @@ function act(cmd) {
   return true;
 }
 
-function newGame({ names, seed, overrides }) {
+function newGame({ names, seed, overrides, kinds = [] }) {
   const config = { ...(overrides || {}), playerCount: names.length, playerNames: names };
   ui.state = E.createGame(config, seed);
-  ui.meta = { objIndex: 0, objStep: 'pass', objectivesDone: false, reportSeq: 0 };
+  const ai = {};
+  ui.state.players.forEach((p, i) => { if (AI_KINDS[kinds[i]]) ai[p.id] = kinds[i]; });
+  ui.meta = { objIndex: 0, objStep: 'pass', objectivesDone: false, reportSeq: 0, ai };
+  if (!humanIds().length) ui.meta.objectivesDone = true;
+  ui.aiPaused = false;
   ui.screen = 'game';
   ui.modal = null;
   ui.commit = null;
@@ -81,7 +93,8 @@ function loadSaveObject(obj) {
   if (!obj || obj.format !== SAVE_FORMAT) throw new Error('This file is not a Monsters of Loving Grace save.');
   const state = E.deserialize(obj.state);
   ui.state = state;
-  ui.meta = { objIndex: 0, objStep: 'pass', objectivesDone: true, reportSeq: 0, ...(obj.meta || {}) };
+  ui.meta = { objIndex: 0, objStep: 'pass', objectivesDone: true, reportSeq: 0, ai: {}, ...(obj.meta || {}) };
+  if (!ui.meta.ai) ui.meta.ai = {};
   ui.screen = 'game';
   ui.modal = null;
   ui.commit = null;
@@ -191,7 +204,7 @@ function playerPanel(view, p) {
   const looseHtml = Object.entries(loose).map(([vid, arr]) => partChip(cfg, arr[0], arr.length > 1 ? ` ×${arr.length}` : '')).join('') || '<span class="muted">none</span>';
   const creatures = view.creatures.filter((c) => c.ownerId === p.id && c.status === 'stable').length;
   return `<section class="player seat-${p.seat} ${active ? 'active' : ''} ${p.passed && (view.phase === 'day' || view.phase === 'night') ? 'passed' : ''}">
-    <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
+    <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${aiKind(p.id) ? `<span class="badge ai" title="${esc(AI_KINDS[aiKind(p.id)])}">AI</span>` : ''}${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
     <div class="row"><span class="lbl">Workers</span>${workers}${p.nextIgorCost != null ? `<span class="muted small">next Igor ${p.nextIgorCost}</span>` : ''}</div>
     <div class="row"><span class="lbl">Research</span>${research || '<span class="muted">none</span>'}</div>
     ${bodyDiagram(cfg, p)}
@@ -246,7 +259,7 @@ function actionSpace(view, id, def, enabledPhase) {
   }).join('');
   const cap = def.capacity == null ? '∞' : def.capacity;
   let status = { ok: false, reason: '' };
-  if (enabledPhase && !view.result) status = spaceStatus(id, ui.selectedWorker);
+  if (enabledPhase && !view.result && !aiKind(view.activePlayerId)) status = spaceStatus(id, ui.selectedWorker);
   const igorOk = def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist or Creature only">Scientist</span>';
   return `<button class="space ${def.phase} ${status.ok ? 'can' : ''}" data-act="space" data-id="${id}" ${status.ok ? '' : 'aria-disabled="true"'} title="${esc(status.reason || '')}">
     <span class="sp-top"><b>${esc(def.name)}</b>${igorOk}</span>
@@ -272,8 +285,8 @@ function turnBar(view) {
     <span class="who"><span class="pc pc-${p.seat}">${esc(p.name)}</span>'s turn <small>(${view.phase === 'day' ? '☀ day' : '☾ night'})</small></span>
     <span class="wsels">Worker: ${chips}</span>
     <span class="spacer"></span>
-    <button data-act="peek" class="ghost">View my objective</button>
-    <button data-act="pass" class="ghost danger-outline">Pass ${view.phase}</button>
+    ${aiKind(pid) ? `<span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : `<button data-act="peek" class="ghost">View my objective</button>
+    <button data-act="pass" class="ghost danger-outline">Pass ${view.phase}</button>`}
   </div>`;
 }
 
@@ -287,6 +300,7 @@ function renderBoard() {
       <span class="phase">Round ${view.round} · ${{ day: '☀ Day', night: '☾ Night', commitment: '⚡ Commitment', resolution: '⚡ Resolution', dawn: 'Dawn', ended: 'Game over' }[view.phase]}</span>
       ${suspicionMeter(view.suspicion, view.suspicionMax)}
       <nav class="menu">
+        ${Object.keys(ui.meta.ai || {}).length && !view.result ? `<button data-act="ai-pause" class="ghost">${ui.aiPaused ? '▶ Resume AI' : '⏸ Pause AI'}</button>` : ''}
         <button data-act="rules" class="ghost">Rules</button>
         <button data-act="export" class="ghost">Export</button>
         <button data-act="import" class="ghost">Import</button>
@@ -331,9 +345,10 @@ function objectiveCard(obj) {
 
 function objectivesFlow() {
   const s = ui.state;
-  const p = s.players[ui.meta.objIndex];
+  const humans = humanIds();
+  const p = E.getPlayer(s, humans[ui.meta.objIndex]);
   if (ui.meta.objStep === 'pass') {
-    return privacy(`<p class="eyebrow">Secret objectives · ${ui.meta.objIndex + 1} of ${s.players.length}</p>
+    return privacy(`<p class="eyebrow">Secret objectives · ${ui.meta.objIndex + 1} of ${humans.length}</p>
       <h2>Pass the device to <span class="pc pc-${p.seat}">${esc(p.name)}</span></h2>
       <p class="muted">Everyone else, look away.</p>
       <button class="big" data-act="obj-reveal">I am ${esc(p.name)} — show my objective</button>`);
@@ -511,7 +526,8 @@ function debugOverlay() {
 function renderMenu() {
   const save = readSave();
   const n = ui.menuCount || 5;
-  const names = Array.from({ length: n }, (_, i) => `<label>Player ${i + 1} <input name="pname" maxlength="24" value="${esc((ui.menuNames || [])[i] || '')}" placeholder="Scientist ${i + 1}"></label>`).join('');
+  const kindOpts = (i) => [['human', 'Human'], ...Object.entries(AI_KINDS)].map(([k, label]) => `<option value="${k}" ${((ui.menuKinds || [])[i] || 'human') === k ? 'selected' : ''}>${label}</option>`).join('');
+  const names = Array.from({ length: n }, (_, i) => `<div class="prow"><label>Player ${i + 1} <input name="pname" maxlength="24" value="${esc((ui.menuNames || [])[i] || '')}" placeholder="Scientist ${i + 1}"></label><label>Played by <select name="pkind">${kindOpts(i)}</select></label></div>`).join('');
   return `<div class="menu-screen">
     <div class="title"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–5 players.</p></div>
     <div class="menu-grid">
@@ -556,8 +572,9 @@ function render() {
       const rep = pendingReport();
       if (rep) forced = reportOverlay(rep);
       else if (s.result && !ui.hideGameOver && !ui.modal) forced = gameOverOverlay();
-      else if (s.phase === 'commitment') forced = commitmentFlow();
+      else if (s.phase === 'commitment' && !aiKind(s.activePlayerId)) forced = commitmentFlow();
     }
+    ui.blocked = !!forced || !!ui.modal;
     if (forced) html += forced;
     else if (ui.modal) {
       const k = ui.modal.kind;
@@ -569,6 +586,35 @@ function render() {
   root.innerHTML = html;
   if (scroll) { const ol = root.querySelector('.log ol'); if (ol) ol.scrollTop = scroll; }
   document.body.classList.toggle('night', !!ui.state && ui.screen === 'game' && ui.state.phase !== 'day');
+  scheduleAI();
+}
+
+// ---------------------------------------------------------------------------
+// In-browser AI seats: the same policies the headless simulator uses.
+// Policies receive only the filtered player view and legal commands.
+// ---------------------------------------------------------------------------
+
+function scheduleAI() {
+  clearTimeout(ui.aiTimer);
+  const s = ui.state;
+  if (ui.screen !== 'game' || !s || s.result || ui.aiPaused || ui.blocked) return;
+  if (!aiKind(s.activePlayerId)) return;
+  ui.aiTimer = setTimeout(aiStep, ui.aiDelay);
+}
+
+function aiStep() {
+  const s = ui.state;
+  const pid = s.activePlayerId;
+  const kind = aiKind(pid);
+  if (!kind || s.result) return;
+  // Seeded per decision so a resumed game makes the same AI choices.
+  const policy = POLICIES[kind](`${s.seed}:${pid}:${s.commandLog.length}`);
+  const legal = E.enumerateLegalCommands(s, pid);
+  const view = E.getPlayerView(s, pid, { includeEvents: false });
+  let cmd;
+  try { cmd = policy.decide({ playerId: pid, view, legal }); } catch { cmd = null; }
+  if (!cmd || !act(cmd)) act(legal[0]);
+  render();
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +628,9 @@ function askConfirm(title, text, yes, fn) {
 
 const handlers = {
   start() {
-    const names = [...root.querySelectorAll('input[name=pname]')].map((x, i) => x.value.trim() || `Scientist ${i + 1}`);
+    const kinds = [...root.querySelectorAll('select[name=pkind]')].map((x) => x.value);
+    const names = [...root.querySelectorAll('input[name=pname]')].map((x, i) => x.value.trim() || (kinds[i] !== 'human' ? `Automaton ${i + 1}` : `Scientist ${i + 1}`));
+    ui.menuKinds = kinds;
     let overrides = {};
     const ov = root.querySelector('#overrides');
     if (ov && ov.value.trim()) {
@@ -590,7 +638,7 @@ const handlers = {
     }
     const seedInput = root.querySelector('#seed');
     const seed = (seedInput && seedInput.value.trim()) || randomSeed();
-    try { newGame({ names, seed, overrides }); } catch (e) { ui.menuError = e.message; }
+    try { newGame({ names, seed, overrides, kinds }); } catch (e) { ui.menuError = e.message; }
     ui.menuError = null;
     render();
   },
@@ -605,11 +653,13 @@ const handlers = {
   restart() {
     askConfirm('Restart game?', 'This discards the current game and starts a new one with the same players. The current save will be overwritten.', 'Restart', () => {
       const names = ui.state.players.map((p) => p.name);
-      newGame({ names, seed: randomSeed(), overrides: ui.debug ? ui.state.configOverrides : {} });
+      const kinds = ui.state.players.map((p) => aiKind(p.id) || 'human');
+      newGame({ names, seed: randomSeed(), overrides: ui.debug ? ui.state.configOverrides : {}, kinds });
     });
   },
   'new-from-over'() {
     ui.menuNames = ui.state.players.map((p) => p.name);
+    ui.menuKinds = ui.state.players.map((p) => aiKind(p.id) || 'human');
     ui.menuCount = ui.state.players.length;
     ui.screen = 'menu';
     ui.modal = null;
@@ -631,7 +681,7 @@ const handlers = {
   'obj-hide'() {
     ui.meta.objStep = 'pass';
     ui.meta.objIndex += 1;
-    if (ui.meta.objIndex >= ui.state.players.length) ui.meta.objectivesDone = true;
+    if (ui.meta.objIndex >= humanIds().length) ui.meta.objectivesDone = true;
     persist();
     render();
   },
@@ -644,6 +694,7 @@ const handlers = {
   'commit-done'() { ui.commit = null; render(); },
   'report-done'() { const r = pendingReport(); if (r) ui.meta.reportSeq = r.seq; persist(); render(); },
   worker(el) { ui.selectedWorker = el.dataset.id; render(); },
+  'ai-pause'() { ui.aiPaused = !ui.aiPaused; render(); },
   pass() {
     const s = ui.state;
     askConfirm(`Pass the ${s.phase}?`, `${E.getPlayer(s, s.activePlayerId).name} will place no more workers this ${s.phase}. Unused Igors and Creatures can still act ${s.phase === 'day' ? 'tonight' : 'next round'}.`, 'Pass', () => {
@@ -653,6 +704,7 @@ const handlers = {
   peek() { ui.modal = { kind: 'peek', pid: ui.state.activePlayerId, revealed: false }; render(); },
   'peek-reveal'() { ui.modal.revealed = true; render(); },
   space(el) {
+    if (aiKind(ui.state.activePlayerId)) return;
     const id = el.dataset.id;
     const st = spaceStatus(id, ui.selectedWorker);
     if (!st.ok) { if (st.reason) toast(st.reason); return; }
@@ -697,6 +749,7 @@ root.addEventListener('click', (ev) => {
 root.addEventListener('change', (ev) => {
   if (ev.target.id === 'pcount') {
     ui.menuNames = [...root.querySelectorAll('input[name=pname]')].map((x) => x.value);
+    ui.menuKinds = [...root.querySelectorAll('select[name=pkind]')].map((x) => x.value);
     ui.menuCount = Number(ev.target.value);
     render();
   } else if (ev.target.id === 'debug') {

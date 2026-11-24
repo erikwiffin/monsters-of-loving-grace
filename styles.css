@@ -192,3 +192,10 @@ pre { max-height: 300px; overflow: auto; background: var(--bg2); padding: .5em; 
   .rcards { grid-template-columns: 1fr; }
   .turnbar .spacer { display: none; }
 }
+
+/* AI seats */
+.prow { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.names:has(.prow) { grid-template-columns: 1fr; }
+.badge.ai { background: var(--p1); }
+.ai-status { font-style: italic; color: var(--muted); }
+.wsel[disabled] { opacity: .6; }

@@ -80,6 +80,7 @@ These rulings resolve ambiguities in the spec and are implemented in the engine:
   - **Resume** continues the game saved in this browser.
   - **Import** loads a save file.
 - **Game bar:** Rules, Export, Import, Restart (asks for confirmation) and Menu.
+- **AI seats:** in New Game, set any player's *Played by* to *AI — heuristic* or *AI — random*. AI seats use the same policies as the headless simulator (`src/sim/policies.js`) and receive only their own filtered view and legal commands. They play automatically after a short delay, and **⏸ Pause AI** in the top bar stops them. AI seats skip the pass-device screens. Each AI decision is seeded from the game seed and the command count, so a resumed game replays the same AI choices. The AI assignment is stored in the save file.
 - **Privacy screens:** objective dealing, *View my objective* and resurrection commitments all use a pass-the-device screen. This gives casual privacy only; anyone can read browser storage or open developer tools.
 - **Odds:** each complete body shows its exact odds of a stable, unleashed or failed result. These come from `estimateResurrection()` in the engine.
 - **Saving:** the game saves to `localStorage` after every committed command. If storage is unavailable, play continues in memory and a banner says so. Export and Import always work, because they use a JSON file.
