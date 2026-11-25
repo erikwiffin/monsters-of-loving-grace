@@ -25,7 +25,7 @@ Objectives are secret. Each player sees only their own objective, through a pass
 
 Two catastrophes end the game immediately, in whatever phase they happen. No further actions, rolls or resurrection attempts are resolved after them.
 
-- **The mob.** When suspicion reaches the threshold (10), the villagers form a mob and arrest every scientist. The Inquisitor wins if that card was dealt to a player.
+- **The mob.** When suspicion reaches the mob threshold, the villagers form a mob and arrest every scientist. The Inquisitor wins if that card was dealt to a player.
 - **An unleashed monster.** The Unleasher wins if that card was dealt to a player.
 
 **Ruling:** if the mob forms while a monster awaits subduing, the mob cannot stop it. The monster is unleashed instead, and the game ends as an unleashing, not a mob.
@@ -47,7 +47,7 @@ When the game ends for any reason, every objective, including the unseen card, i
 
 ## Suspicion
 
-Suspicion is one shared integer meter from 0 to 10, starting at 0. It is shown as a plain meter, with its current and maximum values and no named or visually distinct bands. Every change is public, attributed to the responsible player and reason, logged, and clamped to 0–10. Every increase immediately checks the mob threshold.
+**Ruling:** the mob threshold shrinks as the table grows: 10 with three or four players, 9 with five, and 8 with six. Suspicion is one shared integer meter from 0 to that threshold, starting at 0. It is shown as a plain meter, with its current and maximum values and no named or visually distinct bands. Every change is public, attributed to the responsible player and reason, logged, and clamped between 0 and the threshold. Every increase immediately checks the mob threshold.
 
 Only five things raise suspicion:
 

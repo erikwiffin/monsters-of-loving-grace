@@ -33,6 +33,7 @@ function deepMerge(base, over) {
 export function resolveConfig(overrides = {}) {
   if (overrides != null && !isPlainObject(overrides)) throw new Error('config must be an object');
   const cfg = deepMerge(clone(DEFAULT_CONFIG), overrides || {});
+  if (cfg.suspicionMax == null && cfg.suspicionMaxByPlayers) cfg.suspicionMax = cfg.suspicionMaxByPlayers[cfg.playerCount];
   validateConfig(cfg);
   return cfg;
 }

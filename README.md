@@ -37,9 +37,9 @@ The in-game **Rules** button shows the same summary.
 - **Objectives:**
   - *Prometheus*: be the only player whose Creature becomes stable in a round; win at dawn.
   - *Visionary*: two or more Creatures become stable in the same round.
-  - *Inquisitor*: suspicion reaches 10.
+  - *Inquisitor*: suspicion reaches the mob threshold (10 with 3–4 players, 9 with 5, 8 with 6).
   - *Unleasher*: any monster is unleashed.
-- **Catastrophes:** the mob (suspicion 10) or an unleashed monster ends the game immediately. Only the matching antagonist wins, if that role was dealt; otherwise everyone loses. If the mob forms while a monster awaits subduing, the monster is unleashed instead.
+- **Catastrophes:** the mob (suspicion at the threshold) or an unleashed monster ends the game immediately. Only the matching antagonist wins, if that role was dealt; otherwise everyone loses. If the mob forms while a monster awaits subduing, the monster is unleashed instead.
 - **Round:** Day → Night → secret resurrection commitments → resolution in initiative order → Dawn (objective check; any stable Creature ends the game, otherwise initiative rotates).
 - **Workers:**
   - The Scientist acts once by day and once by night.

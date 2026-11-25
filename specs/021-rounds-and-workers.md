@@ -52,4 +52,4 @@ Shared action spaces have a capacity per phase that resets every round. Private 
 
 ## Ending
 
-The game ends immediately whenever suspicion reaches 10 or a monster is unleashed, whatever the phase. It also ends at the dawn of any round in which a Creature became stable, even when nobody wins. There is no round limit.
+The game ends immediately whenever suspicion reaches the mob threshold (spec 020) or a monster is unleashed, whatever the phase. It also ends at the dawn of any round in which a Creature became stable, even when nobody wins. There is no round limit.

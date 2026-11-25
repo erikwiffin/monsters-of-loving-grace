@@ -544,7 +544,9 @@ const player = (s, pid) => s.players.find((p) => p.id === pid);
 test('defaults: thresholds 20, suspicion track 10, three control attempts each', () => {
   const s = createGame({}, 'defaults');
   assert.deepEqual(s.config.resurrection.thresholds, { vitality: 20, humanity: 20 });
-  assert.equal(s.config.suspicionMax, 10);
+  assert.equal(s.config.suspicionMax, 9, 'five players');
+  for (const [n, max] of [[3, 10], [4, 10], [5, 9], [6, 8]]) assert.equal(createGame({ playerCount: n }, 'susp').config.suspicionMax, max);
+  assert.equal(createGame({ playerCount: 6, suspicionMax: 12 }, 'susp').config.suspicionMax, 12, 'an explicit maximum overrides the table');
   for (const p of s.players) assert.equal(controlAttempts(s, p.id), 3);
   assert.equal(getPublicView(s).players[0].controlAttempts, 3);
 });

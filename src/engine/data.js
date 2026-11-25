@@ -2,7 +2,7 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.9.0';
+export const ENGINE_VERSION = '0.10.0';
 export const SCHEMA_VERSION = 7;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
@@ -39,7 +39,9 @@ export const DEFAULT_CONFIG = {
   visionaryMinPlayers: 4,
   playerNames: [],
   startingMoney: 3,
-  suspicionMax: 10,
+  // The mob threshold. null: take it from suspicionMaxByPlayers for the player count.
+  suspicionMax: null,
+  suspicionMaxByPlayers: { 3: 10, 4: 10, 5: 9, 6: 8 },
   maxIgors: 3, // including the starting Igor(s)
   startingIgors: 1,
   igorCosts: [4, 7, 10],
