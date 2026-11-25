@@ -2,11 +2,11 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.3.1';
-export const SCHEMA_VERSION = 1;
+export const ENGINE_VERSION = '0.4.0';
+export const SCHEMA_VERSION = 2;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
-export const ATTRIBUTES = ['vitality', 'control', 'humanity'];
+export const ATTRIBUTES = ['vitality', 'humanity'];
 export const ALLOWED_DICE = [4, 6, 8, 10, 12, 20];
 export const PHASES = ['day', 'night', 'commitment', 'resolution', 'dawn', 'ended'];
 
@@ -29,7 +29,7 @@ export const OBJECTIVE_INFO = {
   unleasher: {
     name: 'Unleasher',
     summary: 'Let the monster loose.',
-    condition: 'Any living Creature is unleashed because both Control and Humanity fail, regardless of creator.',
+    condition: 'Any monster is unleashed because its Humanity fails and no player subdues it, regardless of creator.',
   },
 };
 
@@ -37,16 +37,22 @@ export const DEFAULT_CONFIG = {
   playerCount: 5,
   playerNames: [],
   startingMoney: 3,
-  suspicionMax: 16,
+  suspicionMax: 10,
   maxIgors: 3,
   igorCosts: [4, 7, 10],
   marketSize: 4,
   researchCopies: 4,
   resurrection: {
     baseDie: 20,
-    thresholds: { vitality: 18, control: 21, humanity: 21 },
+    thresholds: { vitality: 20, humanity: 20 },
     failedVitalityRefund: 3,
     failedVitalitySuspicion: 1,
+  },
+  // Subduing a monster whose Humanity failed (spec 025).
+  control: {
+    startingAttempts: 3,
+    declineSuspicion: 2,
+    subdueSalvage: 3,
   },
   // capacity: null means unlimited. igor: whether a hired Igor may take it.
   actions: {
@@ -82,17 +88,17 @@ export const DEFAULT_CONFIG = {
     scarred_chest: { name: 'Scarred chest', type: 'chest', effects: [{ attribute: 'vitality', op: 'die', die: 6, sign: -1 }] },
     ordinary_head: { name: 'Ordinary head', type: 'head', effects: [] },
     criminal_brain: { name: 'Brain of a criminal', type: 'head', effects: [{ attribute: 'humanity', op: 'threshold', amount: 3 }] },
-    scholar_brain: { name: 'Brain of a scholar', type: 'head', effects: [{ attribute: 'control', op: 'die', die: 6, sign: 1 }] },
+    scholar_brain: { name: 'Brain of a scholar', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 6, sign: 1 }] },
     poet_brain: { name: 'Brain of a poet', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
   },
-  // Research effect kinds: medicineBonus, assembleCapacity, suspicionReduction,
+  // Research effect kinds: medicineBonus, assembleCapacity, suspicionReduction, controlAttempts,
   // resurrection (same shape as part effects). Every effective copy applies.
   research: {
     anatomy: { name: 'Advanced Anatomy', text: 'Assemble 1 more part per assemble action.', effects: [{ kind: 'assembleCapacity', amount: 1 }] },
     discretion: { name: 'Discreet Methods', text: 'Reduce suspicion from each graves or morgue action by 1 (floor 0).', effects: [{ kind: 'suspicionReduction', amount: 1 }] },
     galvanism: { name: 'Galvanic Mastery', text: 'Add 1d6 to resurrection Vitality.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
     medicine: { name: 'Medical Expertise', text: '+1 money on medicine, including Igor placements.', effects: [{ kind: 'medicineBonus', amount: 1 }] },
-    neurology: { name: 'Neural Conditioning', text: 'Add 1d4 to resurrection Control.', effects: [{ kind: 'resurrection', attribute: 'control', op: 'die', die: 4, sign: 1 }] },
+    neurology: { name: 'Neural Conditioning', text: '+1 control attempt for subduing monsters.', effects: [{ kind: 'controlAttempts', amount: 1 }] },
     philosophy: { name: 'Moral Philosophy', text: 'Add +5 to resurrection Humanity.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'fixed', amount: 5 }] },
   },
 };

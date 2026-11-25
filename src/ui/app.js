@@ -135,21 +135,24 @@ function randomSeed() {
   return `${a[0].toString(36)}${a[1].toString(36)}`;
 }
 
+// The report covers the latest resolution phase. It is shown again whenever
+// that phase produces events the players have not yet seen, for example
+// after each decision in a monster's control chain.
 function pendingReport() {
   const s = ui.state;
   const evs = s.events;
   for (let i = evs.length - 1; i >= 0; i--) {
     const e = evs[i];
-    if (e.seq <= ui.meta.reportSeq) return null;
-    if (e.type === 'COMMITMENTS_REVEALED') {
-      const out = [];
-      for (let j = i + 1; j < evs.length; j++) {
-        if (evs[j].type === 'PHASE_ENDED' || evs[j].type === 'GAME_ENDED') break;
-        out.push(evs[j]);
-      }
-      if (!e.commitments.some((c) => c.attempt)) return null;
-      return { seq: e.seq, reveal: e, events: out };
+    if (e.type !== 'COMMITMENTS_REVEALED') continue;
+    const out = [];
+    for (let j = i + 1; j < evs.length; j++) {
+      if (evs[j].type === 'PHASE_ENDED' || evs[j].type === 'GAME_ENDED') break;
+      out.push(evs[j]);
     }
+    if (!e.commitments.some((c) => c.attempt)) return null;
+    const seq = out.length ? out[out.length - 1].seq : e.seq;
+    if (seq <= ui.meta.reportSeq) return null;
+    return { seq, reveal: e, events: out };
   }
   return null;
 }
@@ -182,8 +185,8 @@ function bodyDiagram(cfg, p) {
 function oddsLine(o) {
   if (!o) return '';
   return `<div class="odds" title="Exact odds with the current body and effective research">
-    <span>Vit ${pct(o.attributes.vitality.success)}</span><span>Ctl ${pct(o.attributes.control.success)}</span><span>Hum ${pct(o.attributes.humanity.success)}</span>
-    <span class="o-stable">Stable ${pct(o.pStable)}</span><span class="o-unleash">Unleash ${pct(o.pUnleashed)}</span><span class="o-fail">Fail ${pct(o.pFailed)}</span>
+    <span>Vit ${pct(o.attributes.vitality.success)}</span><span>Hum ${pct(o.attributes.humanity.success)}</span>
+    <span class="o-stable">Stable ${pct(o.pStable)}</span><span class="o-unleash">Monster ${pct(o.pMonster)}</span><span class="o-fail">Fail ${pct(o.pFailed)}</span>
   </div>`;
 }
 
@@ -207,6 +210,7 @@ function playerPanel(view, p) {
     <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${aiKind(p.id) ? `<span class="badge ai" title="${esc(AI_KINDS[aiKind(p.id)])}">AI</span>` : ''}${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
     <div class="row"><span class="lbl">Workers</span>${workers}${p.nextIgorCost != null ? `<span class="muted small">next Igor ${p.nextIgorCost}</span>` : ''}</div>
     <div class="row"><span class="lbl">Research</span>${research || '<span class="muted">none</span>'}</div>
+    <div class="row"><span class="lbl">Control</span>${p.controlAttempts} attempt${p.controlAttempts === 1 ? '' : 's'} left</div>
     ${bodyDiagram(cfg, p)}
     ${oddsLine(p.resurrectionOdds)}
     <div class="row"><span class="lbl">Loose</span>${looseHtml}</div>
@@ -272,6 +276,11 @@ function actionSpace(view, id, def, enabledPhase) {
 function turnBar(view) {
   if (view.result) {
     return `<div class="turnbar over"><b>The game is over.</b> <button data-act="show-gameover">Show results</button></div>`;
+  }
+  if (view.phase === 'resolution' && view.control) {
+    const p = view.players.find((x) => x.id === view.activePlayerId);
+    return `<div class="turnbar seat-${p.seat}"><span class="who">A monster is loose — <span class="pc pc-${p.seat}">${esc(p.name)}</span> decides whether to subdue it</span>
+      ${aiKind(p.id) ? `<span class="spacer"></span><span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : ''}</div>`;
   }
   if (view.phase !== 'day' && view.phase !== 'night') return '<div class="turnbar">Resolving…</div>';
   const pid = view.activePlayerId;
@@ -381,8 +390,24 @@ function commitmentFlow() {
     <h2>Attempt resurrection?</h2>
     ${bodyDiagram(view.config, me)}
     ${oddsLine(me.resurrectionOdds)}
-    <p class="small muted">Attempting consumes all six installed parts. A failed Vitality roll salvages three parts and adds 1 suspicion. If the Creature lives but both Control and Humanity fail, it is unleashed and the game ends.</p>
+    <p class="small muted">Attempting consumes all six installed parts. A failed Vitality roll salvages three parts and adds 1 suspicion. If the Creature lives but Humanity fails, it is a monster: you, then each player clockwise, may spend a control attempt to subdue it (you have ${me.controlAttempts} left). Each player who could subdue it but doesn't adds ${view.config.control.declineSuspicion} suspicion. If no one subdues it, it is unleashed and the game ends.</p>
     <div class="choice-row"><button class="big danger" data-act="commit" data-v="1">⚡ Attempt</button><button class="big ghost" data-act="commit" data-v="0">Decline</button></div>`, 'wide');
+}
+
+// Subduing is a public decision, so there is no pass-the-device screen.
+function subdueFlow() {
+  const view = E.getPublicView(ui.state, { includeEvents: false });
+  const k = view.control;
+  const c = ctx();
+  const me = view.players.find((x) => x.id === view.activePlayerId);
+  const own = k.creatorId === me.id;
+  const later = k.chain.slice(k.position + 1).filter((pid) => view.players.find((x) => x.id === pid).controlAttempts > 0);
+  const inc = view.config.control.declineSuspicion;
+  return modal('⚡ A monster is loose',
+    `<p>${own ? 'Your' : `<span class="pc pc-${c.seat(k.creatorId)}">${esc(c.name(k.creatorId))}</span>'s`} Creature lives, but its Humanity failed.</p>
+    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Subduing spends one, destroys the monster and gives you ${view.config.control.subdueSalvage} of its parts at random.</p>
+    <p class="small muted">If you don't, suspicion rises by ${inc} (now ${view.suspicion}/${view.suspicionMax}) and ${later.length ? `the monster passes to ${later.map((pid) => esc(c.name(pid))).join(', then ')}` : '<b>nobody else can stop it: it will be unleashed</b>'}. If the mob forms, it cannot stop the monster either.</p>`,
+    '<button class="big" data-act="subdue" data-v="1">Subdue it</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>');
 }
 
 function reportOverlay(rep) {
@@ -391,7 +416,7 @@ function reportOverlay(rep) {
   const blocks = [];
   for (const e of rep.events) {
     if (e.type === 'RESURRECTION_ROLLED') {
-      const rows = ['vitality', 'control', 'humanity'].map((a) => {
+      const rows = Object.keys(e.attributes).map((a) => {
         const at = e.attributes[a];
         const dice = at.dice.map((d) => `<li>${esc(sourceLabel(cfg, d.source))}: ${d.source.kind === 'base' ? '' : d.sign < 0 ? '−' : '+'}d${d.die} → <b>${d.sign < 0 ? '−' : ''}${d.result}</b></li>`).join('');
         const fixed = at.fixed.map((f) => `<li>${esc(sourceLabel(cfg, f.source))}: fixed ${f.amount >= 0 ? '+' : '−'}${Math.abs(f.amount)}</li>`).join('');
@@ -403,10 +428,20 @@ function reportOverlay(rep) {
       blocks.push(`<p class="outcome fail">Vitality failed — no Creature. Salvaged: ${e.refundedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_STABILIZED') {
       blocks.push(`<p class="outcome stable">It lives — a stable, ${esc(e.disposition.replace(/_/g, ' '))} Creature!</p></div>`);
+    } else if (e.type === 'MONSTER_CREATED') {
+      blocks.push('<p class="outcome unleash">It lives — but Humanity failed. It is a monster!</p>');
+    } else if (e.type === 'SUBDUE_DECLINED') {
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} does not subdue it.</p>`);
+    } else if (e.type === 'CONTROL_SKIPPED') {
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} has no control attempts left.</p>`);
+    } else if (e.type === 'MONSTER_SUBDUED') {
+      blocks.push(`<p class="outcome stable">${esc(c.name(e.playerId))} subdues and destroys the monster, salvaging ${e.salvagedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_UNLEASHED') {
-      blocks.push('<p class="outcome unleash">It lives — and it is UNLEASHED!</p></div>');
+      blocks.push('<p class="outcome unleash">The monster is UNLEASHED!</p></div>');
     } else if (e.type === 'MOB_FORMED') {
-      blocks.push('<p class="outcome unleash">The suspicion is too much: the mob forms!</p>');
+      blocks.push(e.overwhelmed ? '<p class="outcome unleash">The mob forms — but it cannot stop the monster!</p>' : '<p class="outcome unleash">The suspicion is too much: the mob forms!</p>');
+    } else if (e.type === 'SUSPICION_CHANGED' && e.reason === 'monster_not_subdued') {
+      blocks.push(`<p class="outcome minor">Suspicion +${e.delta} → ${e.value}/${e.max}.</p>`);
     }
   }
   const reveal = rep.reveal.commitments.map((x) => `<span class="pc pc-${c.seat(x.playerId)}">${esc(c.name(x.playerId))}</span>: ${x.attempt ? '<b>attempt</b>' : 'decline'}`).join(' · ');
@@ -573,6 +608,7 @@ function render() {
       if (rep) forced = reportOverlay(rep);
       else if (s.result && !ui.hideGameOver && !ui.modal) forced = gameOverOverlay();
       else if (s.phase === 'commitment' && !aiKind(s.activePlayerId)) forced = commitmentFlow();
+      else if (s.phase === 'resolution' && s.control && !aiKind(s.activePlayerId) && !ui.modal) forced = subdueFlow();
     }
     ui.blocked = !!forced || !!ui.modal;
     if (forced) html += forced;
@@ -692,6 +728,11 @@ const handlers = {
     render();
   },
   'commit-done'() { ui.commit = null; render(); },
+  subdue(el) {
+    const s = ui.state;
+    act({ type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: el.dataset.v === '1' });
+    render();
+  },
   'report-done'() { const r = pendingReport(); if (r) ui.meta.reportSeq = r.seq; persist(); render(); },
   worker(el) { ui.selectedWorker = el.dataset.id; render(); },
   'ai-pause'() { ui.aiPaused = !ui.aiPaused; render(); },

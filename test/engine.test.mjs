@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import {
   createGame, dispatch, getLegalCommands, enumerateLegalCommands, getPlayerView, getPublicView,
-  serialize, deserialize, replay, getReplayRecord, researchCount, estimateResurrection,
+  serialize, deserialize, replay, getReplayRecord, researchCount, estimateResurrection, controlAttempts,
 } from '../src/engine/index.js';
+import { heuristicPolicy } from '../src/sim/policies.js';
 import { runGame, runBatch } from '../src/sim/runner.js';
 
 const ok = (state, cmd) => {
@@ -221,6 +222,15 @@ test('research and experiment acquire market cards and refill', () => {
   }
 });
 
+function declineChain(s) {
+  let guard = 0;
+  while (!s.result && s.control) {
+    assert.ok(++guard < 20);
+    s = ok(s, { type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: false });
+  }
+  return s;
+}
+
 function resurrectionGame(config, setup) {
   let s = createGame({ playerCount: 3, ...config }, 'res');
   s = passAllUntil(s, (x) => x.phase === 'night');
@@ -231,13 +241,16 @@ function resurrectionGame(config, setup) {
 }
 
 test('unleashed Creature ends the game immediately; Unleasher wins', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: 100, humanity: 100 } } }, (st) => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => {
     st.objectives = { p1: 'unleasher', p2: 'prometheus', p3: 'visionary' };
     for (const p of st.players) fullBody(st, p.id);
   });
   assert.equal(s.phase, 'commitment');
   const first = s.activePlayerId;
   for (let i = 0; i < 3; i++) s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
+  assert.equal(s.phase, 'resolution');
+  assert.equal(s.activePlayerId, first, 'the creator decides first');
+  s = declineChain(s);
   assert.equal(s.result.reason, 'unleashed');
   assert.deepEqual(s.result.winners, ['p1']);
   // Only the first attempt in initiative order resolved; later commitments consumed nothing.
@@ -248,19 +261,20 @@ test('unleashed Creature ends the game immediately; Unleasher wins', () => {
 });
 
 test('collective defeat if the matching antagonist was not dealt', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: 100, humanity: 100 } } }, (st) => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => {
     st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
     st.unseenObjectives = ['unleasher'];
     fullBody(st, 'p1');
   });
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p1', attempt: true });
+  s = declineChain(s);
   assert.equal(s.result.reason, 'unleashed');
   assert.deepEqual(s.result.winners, []);
   assert.equal(s.result.collectiveDefeat, true);
 });
 
 test('failed Vitality refunds 3 parts and adds suspicion', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: 100, control: 0, humanity: 0 } } }, (st) => fullBody(st, 'p2'));
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: 100, humanity: 0 } } }, (st) => fullBody(st, 'p2'));
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
   const p = s.players.find((x) => x.id === 'p2');
   assert.equal(p.loose.length, 3);
@@ -284,7 +298,7 @@ test('declined commitments consume nothing; commitments are hidden until reveal'
 });
 
 test('Prometheus wins at dawn with the only stable Creature', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
     st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
     fullBody(st, 'p1');
   });
@@ -296,7 +310,7 @@ test('Prometheus wins at dawn with the only stable Creature', () => {
 
 test('a lone stable Creature owned by a non-Prometheus ends the game with everyone losing', () => {
   for (const owner of ['visionary', 'inquisitor', 'unleasher']) {
-    let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
+    let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
       const others = ['prometheus', 'inquisitor', 'unleasher', 'visionary'].filter((o) => o !== owner);
       st.objectives = { p1: owner, p2: others[0], p3: others[1] };
       fullBody(st, 'p1');
@@ -309,7 +323,7 @@ test('a lone stable Creature owned by a non-Prometheus ends the game with everyo
 });
 
 test('Visionary wins when two Creatures stabilize in one round', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: -100 } } }, (st) => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
     st.objectives = { p1: 'unleasher', p2: 'inquisitor', p3: 'visionary' };
     fullBody(st, 'p1'); fullBody(st, 'p2');
   });
@@ -342,7 +356,7 @@ test('resurrection rolls are fully itemised and consistent', () => {
   assert.deepEqual(v.fixed.map((f) => f.amount), [-2]);
   assert.equal(v.score, v.dice.reduce((a, d) => a + d.value, 0) - 2);
   const h = rolled.attributes.humanity;
-  assert.equal(h.threshold, 24);
+  assert.equal(h.threshold, 23);
   assert.deepEqual(h.fixed.map((f) => f.amount), [5]);
   for (const a of Object.values(rolled.attributes)) assert.equal(a.success, a.score >= a.threshold);
 });
@@ -351,16 +365,16 @@ test('estimateResurrection matches base odds', () => {
   const s = createGame({ playerCount: 3 }, 'odds');
   fullBody(s, 'p1');
   const o = estimateResurrection(s, 'p1');
-  assert.ok(Math.abs(o.attributes.vitality.success - 0.15) < 1e-9);
-  assert.equal(o.attributes.control.success, 0, 'a bare d20 cannot reach the Control threshold of 21');
-  assert.equal(o.attributes.humanity.success, 0, 'a bare d20 cannot reach the Humanity threshold of 21');
-  assert.equal(o.pStable, 0);
-  assert.ok(Math.abs(o.pUnleashed - 0.15) < 1e-9);
-  assert.ok(Math.abs(o.pFailed + o.pStable + o.pUnleashed - 1) < 1e-9);
+  assert.ok(Math.abs(o.attributes.vitality.success - 0.05) < 1e-9, 'a bare d20 reaches Vitality 20 only on a 20');
+  assert.ok(Math.abs(o.attributes.humanity.success - 0.05) < 1e-9, 'a bare d20 reaches Humanity 20 only on a 20');
+  assert.ok(!('control' in o.attributes));
+  assert.ok(Math.abs(o.pStable - 0.0025) < 1e-9);
+  assert.ok(Math.abs(o.pMonster - 0.0475) < 1e-9);
+  assert.ok(Math.abs(o.pFailed + o.pStable + o.pMonster - 1) < 1e-9);
   assert.equal(estimateResurrection(s, 'p2'), null);
-  // Brain of a scholar (+1d6 Control): d20 + d6 >= 21 has probability 3.5/20.
+  // Brain of a scholar (+1d6 Humanity): d20 + d6 >= 20 has probability 27/120.
   fullBody(s, 'p2', { head: 'scholar_brain' });
-  assert.ok(Math.abs(estimateResurrection(s, 'p2').attributes.control.success - 0.175) < 1e-9);
+  assert.ok(Math.abs(estimateResurrection(s, 'p2').attributes.humanity.success - 27 / 120) < 1e-9);
 });
 
 test('player views hide secrets', () => {
@@ -440,7 +454,7 @@ test('engine source has no DOM, storage, timers or unseeded randomness', () => {
 });
 
 test('two Prometheus players stabilizing in one round both lose; game ends without Visionary', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
     st.objectives = { p1: 'prometheus', p2: 'prometheus', p3: 'inquisitor' };
     st.unseenObjectives = ['visionary'];
     fullBody(st, 'p1'); fullBody(st, 'p2');
@@ -453,7 +467,7 @@ test('two Prometheus players stabilizing in one round both lose; game ends witho
 });
 
 test('Prometheus and another player stabilizing together: only the Visionary wins', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, control: -100, humanity: 100 } } }, (st) => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
     st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
     fullBody(st, 'p1'); fullBody(st, 'p2');
   });
@@ -465,11 +479,149 @@ test('Prometheus and another player stabilizing together: only the Visionary win
 test('saves made under different default rules still load and keep their rules', () => {
   // Simulate a save from before a balance change by giving it non-default thresholds
   // in its resolved config while its overrides stay empty.
-  const legacy = replay({ config: { playerCount: 3, resurrection: { thresholds: { vitality: 18, control: 18, humanity: 18 } } }, seed: 'old-rules', commands: [] });
+  const legacy = replay({ config: { playerCount: 3, resurrection: { thresholds: { vitality: 18, humanity: 18 } } }, seed: 'old-rules', commands: [] });
   legacy.configOverrides = { playerCount: 3 };
   let st = legacy;
   for (let i = 0; i < 30 && !st.result; i++) st = dispatch(st, enumerateLegalCommands(st, st.activePlayerId)[0]).state;
   const back = deserialize(serialize(st));
-  assert.equal(back.config.resurrection.thresholds.control, 18);
+  assert.equal(back.config.resurrection.thresholds.humanity, 18);
   assert.equal(serialize(back), serialize(st));
+});
+
+// ---------------------------------------------------------------------------
+// Control attempts and monsters (spec 025)
+// ---------------------------------------------------------------------------
+
+const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 } } };
+const player = (s, pid) => s.players.find((p) => p.id === pid);
+
+test('defaults: thresholds 20, suspicion track 10, three control attempts each', () => {
+  const s = createGame({}, 'defaults');
+  assert.deepEqual(s.config.resurrection.thresholds, { vitality: 20, humanity: 20 });
+  assert.equal(s.config.suspicionMax, 10);
+  for (const p of s.players) assert.equal(controlAttempts(s, p.id), 3);
+  assert.equal(getPublicView(s).players[0].controlAttempts, 3);
+});
+
+test('creator may subdue their own monster: destroyed, 3 parts salvaged, no suspicion, game continues', () => {
+  let s = resurrectionGame(MONSTER, (st) => fullBody(st, 'p2'));
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  assert.equal(s.phase, 'resolution');
+  assert.equal(s.activePlayerId, 'p2');
+  assert.deepEqual(getLegalCommands(s, 'p2').map((c) => c.subdue), [true, false]);
+  assert.deepEqual(getLegalCommands(s, 'p1'), []);
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
+  assert.equal(controlAttempts(s, 'p2'), 2);
+  assert.equal(player(s, 'p2').loose.length, 3);
+  assert.equal(s.suspicion, 0);
+  assert.equal(s.resurrections[0].outcome, 'subdued');
+  assert.equal(s.resurrections[0].subduedBy, 'p2');
+  assert.equal(s.creatures[s.resurrections[0].creatureId].status, 'destroyed');
+  assert.equal(s.result, null);
+  assert.equal(s.round, 2, 'a subdued monster is not stable, so the game continues past dawn');
+});
+
+test('the chain runs clockwise from the creator; each decline adds 2 suspicion; the subduer takes the parts', () => {
+  let s = resurrectionGame(MONSTER, (st) => fullBody(st, 'p2'));
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+  assert.equal(s.suspicion, 2);
+  assert.equal(s.activePlayerId, 'p3');
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
+  assert.equal(s.suspicion, 4);
+  assert.equal(s.activePlayerId, 'p1');
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p1', subdue: true });
+  assert.equal(player(s, 'p1').loose.length, 3);
+  assert.equal(player(s, 'p2').loose.length, 0);
+  assert.equal(controlAttempts(s, 'p1'), 2);
+  assert.equal(controlAttempts(s, 'p2'), 3);
+  assert.deepEqual(s.resurrections[0].controlDecisions, [
+    { playerId: 'p2', subdue: false }, { playerId: 'p3', subdue: false }, { playerId: 'p1', subdue: true },
+  ]);
+  assert.equal(s.result, null);
+});
+
+test('players with no control attempts are skipped without suspicion', () => {
+  let s = resurrectionGame(MONSTER, (st) => {
+    fullBody(st, 'p2');
+    st.players.find((p) => p.id === 'p3').controlAttemptsUsed = 3;
+  });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+  assert.equal(s.activePlayerId, 'p1');
+  assert.equal(s.suspicion, 2);
+  assert.ok(s.events.some((e) => e.type === 'CONTROL_SKIPPED' && e.playerId === 'p3'));
+});
+
+test('a monster nobody can subdue is unleashed immediately', () => {
+  let s = resurrectionGame(MONSTER, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'unleasher', p3: 'visionary' };
+    fullBody(st, 'p2');
+    for (const p of st.players) p.controlAttemptsUsed = 3;
+  });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  assert.equal(s.result.reason, 'unleashed');
+  assert.deepEqual(s.result.winners, ['p2']);
+  assert.equal(s.suspicion, 0);
+});
+
+test('if a decline brings the mob, the monster is unleashed: the Unleasher wins, not the Inquisitor', () => {
+  let s = resurrectionGame({ ...MONSTER, suspicionMax: 3 }, (st) => {
+    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
+    fullBody(st, 'p2');
+  });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+  assert.equal(s.result, null);
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
+  assert.equal(s.suspicion, 3);
+  assert.equal(s.result.reason, 'unleashed');
+  assert.deepEqual(s.result.winners, ['p3']);
+  assert.ok(s.events.some((e) => e.type === 'MOB_FORMED' && e.overwhelmed));
+});
+
+test('resolution continues with the next commitment after a monster is subdued', () => {
+  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p1'); fullBody(st, 'p2'); });
+  const order = s.commitment.order;
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
+  assert.equal(s.activePlayerId, order[0]);
+  assert.equal(player(s, order[1]).body.head !== null, true, 'the second attempt waits for the chain');
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: order[0], subdue: true });
+  assert.equal(s.activePlayerId, order[1], 'the second monster starts its own chain');
+  assert.equal(player(s, order[1]).body.head, null);
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: order[1], subdue: true });
+  assert.equal(s.resurrections.length, 2);
+  assert.equal(s.round, 2);
+});
+
+test('Neural Conditioning grants a control attempt per effective copy, including via publication', () => {
+  const s = createGame({ playerCount: 3 }, 'neuro');
+  player(s, 'p1').research = ['neurology'];
+  assert.equal(controlAttempts(s, 'p1'), 4);
+  assert.equal(controlAttempts(s, 'p2'), 3);
+  s.publications.push({ playerId: 'p1', type: 'neurology', round: 1 });
+  assert.equal(controlAttempts(s, 'p1'), 4, 'own publication does not count again');
+  assert.equal(controlAttempts(s, 'p2'), 4);
+});
+
+test('SUBDUE_MONSTER is rejected outside a control chain', () => {
+  const s = createGame({ playerCount: 3 }, 'nosubdue');
+  assert.equal(dispatch(s, { type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: true }).error.code, 'WRONG_PHASE');
+});
+
+test('heuristic: non-Unleashers subdue when last in the chain; Unleashers never do', () => {
+  for (const objective of ['prometheus', 'visionary', 'inquisitor', 'unleasher']) {
+    let s = resurrectionGame(MONSTER, (st) => {
+      st.objectives = { p1: objective, p2: 'prometheus', p3: 'prometheus' };
+      fullBody(st, 'p2');
+    });
+    s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+    s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+    s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
+    assert.equal(s.activePlayerId, 'p1');
+    const view = getPlayerView(s, 'p1');
+    const cmd = heuristicPolicy('h').decide({ playerId: 'p1', view, legal: enumerateLegalCommands(s, 'p1') });
+    assert.equal(cmd.subdue, objective !== 'unleasher', objective);
+  }
 });

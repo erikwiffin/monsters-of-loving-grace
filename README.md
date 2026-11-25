@@ -37,9 +37,9 @@ The in-game **Rules** button shows the same summary.
 - **Objectives:**
   - *Prometheus*: be the only player whose Creature becomes stable in a round; win at dawn.
   - *Visionary*: two or more Creatures become stable in the same round.
-  - *Inquisitor*: suspicion reaches 16.
-  - *Unleasher*: any Creature is unleashed.
-- **Catastrophes:** the mob (suspicion 16) or an unleashed Creature ends the game immediately. Only the matching antagonist wins, if that role was dealt; otherwise everyone loses.
+  - *Inquisitor*: suspicion reaches 10.
+  - *Unleasher*: any monster is unleashed.
+- **Catastrophes:** the mob (suspicion 10) or an unleashed monster ends the game immediately. Only the matching antagonist wins, if that role was dealt; otherwise everyone loses. If the mob forms while a monster awaits subduing, the monster is unleashed instead.
 - **Round:** Day → Night → secret resurrection commitments → resolution in initiative order → Dawn (objective check; any stable Creature ends the game, otherwise initiative rotates).
 - **Workers:**
   - The Scientist acts once by day and once by night.
@@ -53,11 +53,11 @@ The in-game **Rules** button shows the same summary.
 
   Each action space shows its cost and effect.
 - **Resurrection:**
-  - Roll d20 each for Vitality (needs 18+), Control (21+) and Humanity (21+). Installed parts and research add dice, fixed modifiers or threshold changes. With no Control or Humanity bonus, a body that passes Vitality is always unleashed.
+  - Roll d20 each for Vitality (needs 20+) and Humanity (20+). Installed parts and research add dice, fixed modifiers or threshold changes.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
-  - Vitality and at least one of Control or Humanity succeed → a stable Creature.
-  - Vitality succeeds but both behaviour rolls fail → the Creature is unleashed.
-- **Suspicion** comes only from graves, the morgue and failed resurrections. Charity lowers it by 2 and covering tracks by 1.
+  - Vitality and Humanity succeed → a stable Creature.
+  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to subdue it, which destroys it and gives the subduer 3 of its parts at random. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
+- **Suspicion** comes only from graves, the morgue, failed resurrections and monsters left unsubdued. Charity lowers it by 2 and covering tracks by 1.
 
 ### Designer rulings (clarifications to spec v0.3)
 
@@ -150,6 +150,7 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 |---|---|
 | `PASS_TURN` | — (gives up all remaining placements this day/night) |
 | `COMMIT_RESURRECTION` | `attempt: boolean` — only for the prompted eligible player |
+| `SUBDUE_MONSTER` | `subdue: boolean` — only for the player currently deciding in a monster's control chain |
 | `PLACE_MEEPLE` | `workerId`, `actionId`, `choices` (below) |
 
 | `actionId` | `choices` |
@@ -176,7 +177,7 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 - **Public reveals:** `COMMITMENTS_REVEALED` publishes all commitments before any roll, and `OBJECTIVES_REVEALED` publishes every objective at game end.
 - **Filtered views:** `getPlayerView` and `filterEvents` never include other players' objectives or commitments, the seed, the RNG state or the deck order.
 - **Dice detail:** `RESURRECTION_ROLLED` lists every die with its source, sign and result, plus fixed modifiers, threshold adjustments, the adjusted threshold and the final score. Dice are rolled in a fixed order:
-  1. Vitality, then Control, then Humanity.
+  1. Vitality, then Humanity.
   2. Within each attribute: the base die, then parts in slot order, then research in sorted type ID order.
 
 ---

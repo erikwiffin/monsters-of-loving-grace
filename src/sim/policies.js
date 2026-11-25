@@ -51,11 +51,30 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
       const me = view.players.find((p) => p.id === view.viewerId);
       const objective = view.private.objective;
       const cfg = view.config;
+      if (view.phase === 'resolution' && view.control) {
+        // A monster is loose in the control chain (spec 025). Subduing costs
+        // one control attempt; declining adds suspicion.
+        const k = view.control;
+        const attemptsOf = (pid) => view.players.find((p) => p.id === pid).controlAttempts;
+        const last = !k.chain.slice(k.position + 1).some((pid) => attemptsOf(pid) > 0);
+        const declineBringsMob = view.suspicion + cfg.control.declineSuspicion >= view.suspicionMax;
+        let doSubdue;
+        if (objective === 'unleasher') doSubdue = false;
+        else if (objective === 'inquisitor') doSubdue = last;
+        else if (objective === 'prometheus') doSubdue = k.creatorId === me.id || last || declineBringsMob || me.controlAttempts > 1;
+        else doSubdue = true;
+        return legal.find((c) => c.subdue === doSubdue) || legal[0];
+      }
       if (view.phase === 'commitment') {
         // Any stable Creature ends the game at dawn (spec 020), so each
-        // objective weighs the outcomes differently.
+        // objective weighs the outcomes differently. A player who still has
+        // a control attempt will subdue their own monster, so for them a
+        // monster is a setback rather than a catastrophe.
         const odds = me.resurrectionOdds;
-        const safeEnough = odds.pStable >= odds.pUnleashed * 1.2 || (view.round >= 12 && odds.pStable >= odds.pUnleashed * 0.6);
+        const late = view.round >= 12;
+        const safeEnough = me.controlAttempts > 0
+          ? odds.pStable >= (late ? 0.1 : 0.2)
+          : odds.pStable >= odds.pMonster * 1.2 || (late && odds.pStable >= odds.pMonster * 0.6);
         let attempt;
         if (objective === 'prometheus') {
           // Needs a lone stable Creature.
@@ -65,8 +84,8 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
           const rivalBodies = view.players.some((p) => p.id !== me.id && p.bodyComplete);
           attempt = rivalBodies && safeEnough;
         } else if (objective === 'unleasher') {
-          // Wants an unleashed Creature; a stable one loses.
-          attempt = odds.pUnleashed > odds.pStable;
+          // Wants a monster to escape; a stable Creature loses.
+          attempt = odds.pMonster > odds.pStable;
         } else {
           // Inquisitor: only a failed Vitality helps (+1 suspicion), and only
           // when that failure would bring the mob.

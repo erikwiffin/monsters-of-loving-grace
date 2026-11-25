@@ -3,7 +3,7 @@
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const ATTR = { vitality: 'Vitality', control: 'Control', humanity: 'Humanity' };
+const ATTR = { vitality: 'Vitality', humanity: 'Humanity' };
 export const attrName = (a) => ATTR[a] || a;
 const signed = (n) => (n >= 0 ? `+${n}` : `−${Math.abs(n)}`);
 
@@ -50,7 +50,7 @@ export function workerLabel(w) {
 const REASONS = {
   medicine: 'medicine', research: 'research', specimens: 'specimens', hire: 'hiring', charity: 'charity',
   lecture: 'lecture', publish: 'publication', graves: 'grave robbing', morgue: 'morgue raid', conceal: 'covering tracks',
-  failed_resurrection: 'failed resurrection',
+  failed_resurrection: 'failed resurrection', monster_not_subdued: 'monster not subdued',
 };
 
 /** One-line description of a public event, or null to omit it from the log. */
@@ -79,13 +79,17 @@ export function describeEvent(e, ctx) {
     case 'COMMITMENT_LOCKED': return `${n(e.playerId)} locks a secret decision.`;
     case 'COMMITMENTS_REVEALED': return e.commitments.length ? `Revealed: ${e.commitments.map((c) => `${n(c.playerId)} ${c.attempt ? '<b>attempts</b>' : 'declines'}`).join(', ')}.` : null;
     case 'RESURRECTION_STARTED': return `${n(e.playerId)} throws the switch…`;
-    case 'RESURRECTION_ROLLED': return `${n(e.playerId)}: ${['vitality', 'control', 'humanity'].map((a) => `${attrName(a)} ${e.attributes[a].score}/${e.attributes[a].threshold} ${e.attributes[a].success ? '✓' : '✗'}`).join(', ')}.`;
+    case 'RESURRECTION_ROLLED': return `${n(e.playerId)}: ${Object.keys(e.attributes).map((a) => `${attrName(a)} ${e.attributes[a].score}/${e.attributes[a].threshold} ${e.attributes[a].success ? '✓' : '✗'}`).join(', ')}.`;
     case 'RESURRECTION_FAILED': return `${n(e.playerId)}'s body fails to quicken. ${e.refundedParts.length} parts salvaged.`;
     case 'CREATURE_STABILIZED': return `${n(e.playerId)}'s Creature lives — and is <b>${e.disposition.replace(/_/g, ' ')}</b>!`;
-    case 'CREATURE_UNLEASHED': return `${n(e.playerId)}'s Creature is <b class="danger">UNLEASHED</b>!`;
+    case 'MONSTER_CREATED': return `${n(e.playerId)}'s Creature lives — but it is a <b class="danger">monster</b>! Who will subdue it?`;
+    case 'SUBDUE_DECLINED': return `${n(e.playerId)} does not subdue the monster.`;
+    case 'CONTROL_SKIPPED': return `${n(e.playerId)} has no control attempts left.`;
+    case 'MONSTER_SUBDUED': return `${n(e.playerId)} subdues and destroys the monster (${e.attemptsLeft} control attempt${e.attemptsLeft === 1 ? '' : 's'} left), salvaging ${e.salvagedParts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
+    case 'CREATURE_UNLEASHED': return `${n(e.playerId)}'s monster is <b class="danger">UNLEASHED</b>!`;
     case 'DAWN_CHECK': return e.stableTransitions.length ? `${e.stableTransitions.length} Creature(s) stabilized this round.` : null;
     case 'WORKER_ACTIVATED': return `${n(e.playerId)}'s new Igor reports for duty.`;
-    case 'MOB_FORMED': return '<b class="danger">The villagers form a mob!</b>';
+    case 'MOB_FORMED': return e.overwhelmed ? '<b class="danger">The villagers form a mob — but the monster tears through it!</b>' : '<b class="danger">The villagers form a mob!</b>';
     case 'SCIENTISTS_ARRESTED': return 'Every scientist is dragged from their laboratory and arrested.';
     case 'OBJECTIVES_REVEALED': return 'All secret objectives are revealed.';
     case 'GAME_ENDED': return `<b>Game over.</b> ${e.winners.length ? `Winners: ${e.winners.map(n).join(', ')}.` : 'Everyone loses.'}`;

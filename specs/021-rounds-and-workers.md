@@ -32,7 +32,7 @@ Eligible players decide in initiative order, one at a time and in private. In th
 
 ## Resurrection resolution
 
-All commitments are revealed together. The attempts then resolve in initiative order, with dice rolled automatically and research applied automatically (spec 025). Each stable Creature is recorded as a stable transition for the round. If the mob forms or a Creature is unleashed during resolution, resolution stops at once: commitments not yet resolved consume no parts and have no effect.
+All commitments are revealed together. The attempts then resolve in initiative order, with dice rolled automatically and research applied automatically (spec 025). Each stable Creature is recorded as a stable transition for the round. When an attempt creates a monster, resolution pauses while players decide in its control chain, starting with its creator and going clockwise (spec 025), and continues with the next attempt once the monster is subdued. If the mob forms or a monster is unleashed during resolution, resolution stops at once: commitments not yet resolved consume no parts and have no effect.
 
 ## Dawn
 
@@ -52,4 +52,4 @@ Shared action spaces have a capacity per phase that resets every round. Private 
 
 ## Ending
 
-The game ends immediately whenever suspicion reaches 16 or a Creature is unleashed, whatever the phase. It also ends at the dawn of any round in which a Creature became stable, even when nobody wins. There is no round limit.
+The game ends immediately whenever suspicion reaches 10 or a monster is unleashed, whatever the phase. It also ends at the dawn of any round in which a Creature became stable, even when nobody wins. There is no round limit.

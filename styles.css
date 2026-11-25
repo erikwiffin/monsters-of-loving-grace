@@ -170,6 +170,7 @@ pre { max-height: 300px; overflow: auto; background: var(--bg2); padding: .5em; 
 .attr ul { margin: 0; padding-left: 1.1em; font-size: 12px; }
 .outcome { font-family: var(--serif); font-size: 1.15rem; font-weight: 700; margin: 8px 0 0; }
 .outcome.stable { color: var(--good); } .outcome.unleash { color: var(--bad); } .outcome.fail { color: var(--muted); }
+.outcome.minor { font-family: inherit; font-size: 0.95rem; font-weight: 400; color: var(--muted); margin-top: 4px; }
 .reveal { font-size: 14px; }
 .headline { font-family: var(--serif); font-size: 1.3rem; }
 .results { width: 100%; border-collapse: collapse; margin: 10px 0; }

@@ -28,7 +28,7 @@ The shared board always shows only public information:
 - a turn bar showing the active player, a selector for their available workers, and the pass button;
 - every day and night action space, with its location, cost and effect text, capacity, Igor permission and the workers occupying it. Spaces in the current phase are highlighted when the selected worker can legally take them. When a space is unavailable, it explains why;
 - the research market and deck count, plus the publication record;
-- one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), effective research (own copies, copies via publication, published marks), a body diagram, odds for a complete body, loose parts and Creatures;
+- one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), effective research (own copies, copies via publication, published marks), a body diagram, remaining control attempts, odds for a complete body, loose parts and Creatures;
 - the Chronicle, a readable log of public events.
 
 The page switches between a light "day" palette and a dark "night" palette. It works at phone width without horizontal scrolling.
@@ -47,7 +47,11 @@ Nothing is sent until the player confirms. Invalid choices are reported using th
 
 ## Reports and game over
 
-After resolution, a resurrection report shows the revealed commitments and, for every attempt, each attribute's dice, sources, modifiers, threshold, score and outcome. It stays until dismissed. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
+After resolution, a resurrection report shows the revealed commitments and, for every attempt, each attribute's dice, sources, modifiers, threshold, score and outcome. It stays until dismissed. When a monster is created, the report appears before the control chain begins, and again after each decision that produced new events, so it also shows every subdue, decline, skip and suspicion change.
+
+## Subduing monsters
+
+Subduing is a public decision, so there is no pass-the-device screen. While a human player is deciding in a control chain (spec 025), a dialog over the board names the monster's creator and shows the player's remaining control attempts, what subduing gives them, the suspicion a decline adds, and who comes next in the chain, or that nobody else can stop the monster. It offers Subdue it and Let it pass. Every player panel shows that player's remaining control attempts, and the turn bar names who is deciding. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
 
 ## Game controls
 

@@ -133,7 +133,7 @@ export function runBatch({ games = 100, seedPrefix = 'batch', ...opts } = {}) {
 export function aggregate(results) {
   const agg = {
     games: results.length, truncated: 0, byReason: {}, winsByObjective: {}, collectiveDefeats: 0,
-    avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, failed: 0, stable: 0, unleashed: 0 },
+    avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, failed: 0, stable: 0, subdued: 0, unleashed: 0 },
   };
   for (const r of results) {
     if (r.truncated) agg.truncated++;

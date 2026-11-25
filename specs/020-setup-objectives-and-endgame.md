@@ -4,7 +4,7 @@ Each player is a scientist competing to create life or to fulfil a secret ambiti
 
 ## Setup
 
-- Each player starts with 3 money, one Scientist, no Igors, no loose or installed body parts, no research and no Creature.
+- Each player starts with 3 money, one Scientist, 3 control attempts (spec 025), no Igors, no loose or installed body parts, no research and no Creature.
 - Village suspicion starts at 0.
 - The starting player is chosen at random.
 
@@ -19,14 +19,16 @@ Objectives are secret. Each player sees only their own objective, through a pass
 | Prometheus | The player's Creature is the *only* Creature that became stable that round. Checked at dawn, provided the mob has not formed. |
 | Visionary | At least two distinct Creatures became stable in the same round, whoever created them. Checked at dawn. |
 | Inquisitor | Suspicion reaches the mob threshold before the game ends. |
-| Unleasher | Any living Creature is unleashed because both Control and Humanity fail, whoever created it. |
+| Unleasher | Any monster is unleashed because its Humanity fails and no player subdues it, whoever created it (spec 025). |
 
 ## Catastrophes
 
 Two catastrophes end the game immediately, in whatever phase they happen. No further actions, rolls or resurrection attempts are resolved after them.
 
-- **The mob.** When suspicion reaches the threshold (16), the villagers form a mob and arrest every scientist. The Inquisitor wins if that card was dealt to a player.
-- **An unleashed Creature.** The Unleasher wins if that card was dealt to a player.
+- **The mob.** When suspicion reaches the threshold (10), the villagers form a mob and arrest every scientist. The Inquisitor wins if that card was dealt to a player.
+- **An unleashed monster.** The Unleasher wins if that card was dealt to a player.
+
+**Ruling:** if the mob forms because a player declined to subdue a monster, the mob cannot stop it. The monster is unleashed instead, and the game ends as an unleashing, not a mob.
 
 In either case every other player loses, including anyone who already stabilized a Creature that round. If the matching antagonist is the unseen card, or otherwise not dealt, everyone loses together. Neither antagonist wins from the other's catastrophe.
 
@@ -45,13 +47,14 @@ When the game ends for any reason, every objective, including the unseen card, i
 
 ## Suspicion
 
-Suspicion is one shared integer meter from 0 to 16, starting at 0. It is shown as a plain meter, with its current and maximum values and no named or visually distinct bands. Every change is public, attributed to the responsible player and reason, logged, and clamped to 0–16. Every increase immediately checks the mob threshold.
+Suspicion is one shared integer meter from 0 to 10, starting at 0. It is shown as a plain meter, with its current and maximum values and no named or visually distinct bands. Every change is public, attributed to the responsible player and reason, logged, and clamped to 0–10. Every increase immediately checks the mob threshold.
 
-Only three things raise suspicion:
+Only four things raise suspicion:
 
 - discovered grave robbing (graves action);
 - discovered morgue theft (morgue action);
-- a failed resurrection, meaning a failed Vitality roll.
+- a failed resurrection, meaning a failed Vitality roll;
+- declining to subdue a monster when able to (+2 per player who declines).
 
 Only two things lower it: charity (−2) and covering tracks (−1). Specs 022 and 025 give the details. Suspicion never rises automatically, at dawn or over time, and dawn does not change it.
 

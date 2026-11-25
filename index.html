@@ -20,10 +20,10 @@
       <ul>
         <li><b>Prometheus</b> — be the <i>only</i> player whose Creature becomes stable that round; win at dawn.</li>
         <li><b>Visionary</b> — two or more Creatures (anyone's) become stable in the same round.</li>
-        <li><b>Inquisitor</b> — suspicion reaches 16: the mob arrests every scientist.</li>
-        <li><b>Unleasher</b> — any Creature is unleashed (Control and Humanity both fail).</li>
+        <li><b>Inquisitor</b> — suspicion reaches 10: the mob arrests every scientist.</li>
+        <li><b>Unleasher</b> — any monster is unleashed (its Humanity fails and nobody subdues it).</li>
       </ul>
-      <p>A mob or an unleashed Creature ends the game immediately; only the matching antagonist wins, if dealt — otherwise everyone loses.</p>
+      <p>A mob or an unleashed monster ends the game immediately; if the mob forms while a monster is waiting to be subdued, the mob cannot stop it and the monster is unleashed. Only the matching antagonist wins, if dealt — otherwise everyone loses.</p>
       <h3>Round</h3>
       <ol>
         <li><b>Day</b> — in turn order, place one worker at a time and resolve it. Pass when done (passing is final for the phase).</li>
@@ -37,14 +37,16 @@
       <h3>Research</h3>
       <p>Research cards are permanent. Publishing shares a discovery with everyone (+2 money). Copies stack: your own discovery counts once, plus one for each other player who published that type. Lecture pays 1 + the number of types you have published (max 4).</p>
       <h3>Resurrection</h3>
-      <p>Roll d20 for Vitality (needs 18+), Control (21+) and Humanity (21+), modified by installed parts and research. A bare d20 can never reach 21, so a Creature can only be stable with Control or Humanity bonuses. Attempting consumes all six installed parts.</p>
+      <p>Roll d20 for Vitality (needs 20+) and Humanity (20+), modified by installed parts and research. Attempting consumes all six installed parts.</p>
       <ul>
         <li>Vitality fails → no Creature; 3 random parts are salvaged; +1 suspicion.</li>
-        <li>Vitality succeeds and Control or Humanity succeeds → a stable Creature.</li>
-        <li>Vitality succeeds but both fail → the Creature is <b>unleashed</b> and the game ends.</li>
+        <li>Vitality and Humanity succeed → a stable Creature.</li>
+        <li>Vitality succeeds but Humanity fails → a <b>monster</b>.</li>
       </ul>
+      <h3>Control</h3>
+      <p>Everyone starts with 3 control attempts (+1 per copy of Neural Conditioning). When a monster is created, its creator, then each player clockwise, may spend one attempt to subdue it. Subduing destroys the monster and gives the subduer 3 of its parts at random. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is <b>unleashed</b> and the game ends.</p>
       <h3>Suspicion</h3>
-      <p>Grave robbing, morgue raids and failed resurrections raise suspicion. Charity (−2) and covering tracks (−1) lower it. At 16 the mob forms.</p>
+      <p>Grave robbing, morgue raids and failed resurrections raise suspicion. Charity (−2) and covering tracks (−1) lower it. Declining to subdue a monster adds 2. At 10 the mob forms.</p>
       <p class="muted small">Prototype v0.3 with designer rulings — see README.</p>
     </div>
   </template>

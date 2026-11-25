@@ -4,7 +4,7 @@ Every committed action that a player would perform at the physical table is a se
 
 ## What is and isn't a command
 
-Commands are player decisions: placing a worker with all of its choices, passing, and committing to or declining a resurrection attempt. Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
+Commands are player decisions: placing a worker with all of its choices, passing, committing to or declining a resurrection attempt, and choosing whether to subdue a monster. Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
 
 Dice outcomes, suspicion changes, resource grants, research refills, phase transitions, resurrection results, victory and defeat are never commands. The engine resolves them automatically.
 
@@ -14,6 +14,7 @@ Every command has a `type` and the acting `playerId`. It may also carry an optio
 
 - `PASS_TURN` gives up all of the player's remaining placements in the current day or night phase. Passing is irrevocable for that phase.
 - `COMMIT_RESURRECTION` with `attempt: true | false` is legal only for the eligible player currently being prompted during the commitment phase.
+- `SUBDUE_MONSTER` with `subdue: true | false` is legal only for the player currently deciding in a monster's control chain during resolution (spec 025).
 - `PLACE_MEEPLE` names a `workerId`, an `actionId` and a `choices` object. `choices` may be omitted for actions that need no choices. The choices required by each action are:
 
 | Action | Choices |
@@ -61,7 +62,8 @@ A command may include `seq`, equal to the number of commands accepted so far. If
 
 - `PASS_TURN`, which is always legal in day or night;
 - one entry per available worker and legal action;
-- both commitment options during the commitment phase.
+- both commitment options during the commitment phase;
+- both subdue options for the player deciding in a control chain.
 
 Templates for actions needing choices carry machine-readable constraints. These are an `enum` of values, a `multiset` with a count, or a `subset` with a minimum, a maximum and optional per-part-type maximums.
 

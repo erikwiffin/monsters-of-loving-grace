@@ -13,11 +13,16 @@ Two built-in policies ship in `src/sim/policies.js`. Each has its own seeded ran
   - It earns money when short, and gathers and assembles good parts.
   - It values research according to its objective. The Unleasher wants galvanism and avoids safety research (neurology, philosophy). The Inquisitor avoids galvanism and Discreet Methods. Everyone else values safety research and galvanism.
   - It manages suspicion unless it is the Inquisitor.
-  - It decides on resurrection using the engine's exact odds, remembering that any stable Creature ends the game (spec 020):
-    - **Prometheus** attempts when the stable chance clearly exceeds the unleash chance, accepting more risk from round 12.
+  - It decides on resurrection using the engine's exact odds, remembering that any stable Creature ends the game (spec 020). A player with a control attempt left will subdue their own monster, so the odds rule depends on it. With an attempt left, the stable chance must reach 20%, or 10% from round 12. Without one, the stable chance must clearly exceed the monster chance, with more risk accepted from round 12.
+    - **Prometheus** attempts under that odds rule.
     - **Visionary** attempts under the same odds rule, but only when another player also has a complete body, since a lone stable Creature loses for everyone.
-    - **Unleasher** attempts only when the unleash chance exceeds the stable chance.
+    - **Unleasher** attempts only when the monster chance exceeds the stable chance.
     - **Inquisitor** attempts only when suspicion is one below the mob threshold and failure is more likely than not, since a failed Vitality roll would then bring the mob.
+  - It decides whether to subdue a monster (spec 025) by objective:
+    - **Unleasher** never subdues.
+    - **Inquisitor** subdues only when it is the last player in the chain with an attempt left; otherwise it declines, since a decline adds suspicion.
+    - **Prometheus** subdues its own monster. It subdues another player's when it is the last in the chain, when a decline would bring the mob, or when it has more than one attempt left.
+    - **Visionary** always subdues.
 
 ## Runner
 
@@ -45,7 +50,7 @@ Each game produces a machine-readable summary containing:
 - every resurrection, with its scores and outcome;
 - optionally, the full replay command list.
 
-Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, average final suspicion and resurrection outcome counts.
+Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, average final suspicion and resurrection outcome counts (failed, stable, subdued and unleashed).
 
 ## Command-line tools
 

@@ -11,7 +11,7 @@ There are six research types, each with a persistent effect:
 | medicine | Medical Expertise | +1 money from the medicine action, including Igor placements |
 | anatomy | Advanced Anatomy | Assemble one more part per assemble action |
 | galvanism | Galvanic Mastery | Add 1d6 to the resurrection Vitality score |
-| neurology | Neural Conditioning | Add 1d4 to the resurrection Control score |
+| neurology | Neural Conditioning | +1 control attempt for subduing monsters (spec 025) |
 | philosophy | Moral Philosophy | Add a fixed +5 to the resurrection Humanity score |
 | discretion | Discreet Methods | Reduce the suspicion caused by each graves or morgue action by 1, to a minimum of 0 |
 
@@ -46,6 +46,7 @@ Every effective copy applies its effect in full. For example:
 - With three copies of Moral Philosophy, the player adds +15 to Humanity.
 - With two copies of Advanced Anatomy, the player may assemble 4 parts per action.
 - With two copies of Discreet Methods, discovery suspicion is reduced by 2.
+- With two copies of Neural Conditioning, the player has 2 more control attempts. Because another player's publication adds a copy, it can grant attempts partway through the game.
 
 Effective research counts are public, since they derive from public discoveries and publications, and are shown for every player.
 

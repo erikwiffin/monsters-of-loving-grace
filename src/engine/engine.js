@@ -41,6 +41,12 @@ function validateConfig(cfg) {
   const n = cfg.playerCount;
   if (!Number.isInteger(n) || n < 3 || n > 5) throw new Error('playerCount must be an integer from 3 to 5');
   if (!Number.isInteger(cfg.suspicionMax) || cfg.suspicionMax < 1) throw new Error('suspicionMax must be a positive integer');
+  for (const attr of ATTRIBUTES) {
+    if (!Number.isInteger(cfg.resurrection.thresholds[attr])) throw new Error(`resurrection threshold for ${attr} must be an integer`);
+  }
+  for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSalvage']) {
+    if (!Number.isInteger(cfg.control[k]) || cfg.control[k] < 0) throw new Error(`control.${k} must be a non-negative integer`);
+  }
   for (const [id, v] of Object.entries(cfg.partVariants)) {
     if (!cfg.partTypes[v.type]) throw new Error(`part variant ${id} has unknown type ${v.type}`);
     for (const e of v.effects) validateEffect(e, `part variant ${id}`);
@@ -132,6 +138,13 @@ export function assembleCapacity(s, pid) {
   return s.config.actions.assemble.max + researchBonus(s, pid, 'assembleCapacity');
 }
 
+/** Control attempts a player has left: the starting allowance, plus one per effective Neural Conditioning, minus those spent. */
+export function controlAttempts(s, pid) {
+  const p = getPlayer(s, pid);
+  if (!p) return 0;
+  return Math.max(0, s.config.control.startingAttempts + researchBonus(s, pid, 'controlAttempts') - p.controlAttemptsUsed);
+}
+
 function playerWorkers(s, pid) {
   return s.workerOrder.map((id) => s.workers[id]).filter((w) => w.ownerId === pid);
 }
@@ -164,14 +177,14 @@ function changeMoney(s, p, delta, reason) {
   emit(s, 'MONEY_CHANGED', { playerId: p.id, delta, balance: p.money, reason });
 }
 
-function changeSuspicion(s, delta, reason, playerId = null) {
+function changeSuspicion(s, delta, reason, playerId = null, onMob = formMob) {
   const max = s.config.suspicionMax;
   const before = s.suspicion;
   const after = Math.max(0, Math.min(max, before + delta));
   s.suspicion = after;
   s.suspicionHistory.push({ eventSeq: s.events.length + 1, round: s.round, phase: s.phase, value: after, delta: after - before, reason, playerId });
   emit(s, 'SUSPICION_CHANGED', { playerId, requested: delta, delta: after - before, value: after, max, reason });
-  if (delta > 0 && after >= max) formMob(s);
+  if (delta > 0 && after >= max) onMob(s);
 }
 
 function makePart(s, variantId) {
@@ -478,6 +491,7 @@ export function createGame(config = {}, seed) {
     publications: [],
     occupancy: { day: {}, night: {} },
     commitment: null,
+    control: null,
     stableTransitions: [],
     creatures: {},
     creatureOrder: [],
@@ -492,7 +506,7 @@ export function createGame(config = {}, seed) {
   for (let i = 0; i < n; i++) {
     const id = `p${i + 1}`;
     const name = (cfg.playerNames && cfg.playerNames[i]) || `Scientist ${i + 1}`;
-    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, passed: false });
+    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, controlAttemptsUsed: 0, passed: false });
     addWorker(s, { id: `scientist-${id}`, kind: 'scientist', ownerId: id, active: true });
   }
   s.firstPlayerIndex = randInt(s.rng, n);
@@ -562,16 +576,19 @@ function startCommitment(s) {
     if (bodyComplete(getPlayer(s, pid))) eligible.push(pid);
     else emit(s, 'COMMITMENT_AUTO_DECLINED', { playerId: pid, reason: 'incomplete_body' });
   }
-  s.commitment = { order: eligible, choices: {} };
+  s.commitment = { order: eligible, choices: {}, resolved: 0 };
 }
 
-function resolveResurrections(s) {
-  const c = s.commitment;
-  emit(s, 'COMMITMENTS_REVEALED', { commitments: c.order.map((pid) => ({ playerId: pid, attempt: c.choices[pid] })) });
-  for (const pid of c.order) {
-    if (s.result) break;
-    if (c.choices[pid]) resurrect(s, pid);
+/** The next player in a control chain who could subdue the monster, skipping (and logging) those with no attempts left. */
+function nextController(s) {
+  const k = s.control;
+  while (k.position < k.chain.length) {
+    const pid = k.chain[k.position];
+    if (controlAttempts(s, pid) > 0) return pid;
+    emit(s, 'CONTROL_SKIPPED', { playerId: pid, creatureId: k.creatureId, reason: 'no_control_attempts' });
+    k.position += 1;
   }
+  return null;
 }
 
 function dawn(s) {
@@ -626,8 +643,24 @@ function advance(s) {
       endPhase(s);
       s.phase = 'resolution';
       emit(s, 'PHASE_STARTED', {});
-      resolveResurrections(s);
-      if (s.result) break;
+      const c = s.commitment;
+      emit(s, 'COMMITMENTS_REVEALED', { commitments: c.order.map((id) => ({ playerId: id, attempt: c.choices[id] })) });
+    } else if (s.phase === 'resolution') {
+      // Attempts resolve in initiative order; a monster pauses resolution
+      // while players decide, one at a time, whether to subdue it.
+      if (s.control) {
+        const pid = nextController(s);
+        if (pid) { s.activePlayerId = pid; return; }
+        unleash(s, 'no_one_subdued');
+        continue;
+      }
+      const c = s.commitment;
+      if (c.resolved < c.order.length) {
+        const pid = c.order[c.resolved];
+        c.resolved += 1;
+        if (c.choices[pid]) resurrect(s, pid);
+        continue;
+      }
       endPhase(s);
       s.phase = 'dawn';
       emit(s, 'PHASE_STARTED', {});
@@ -699,7 +732,7 @@ function resurrect(s, pid) {
     scores: Object.fromEntries(ATTRIBUTES.map((a) => [a, { score: attributes[a].score, threshold: attributes[a].threshold, success: attributes[a].success }])),
     outcome: null, creatureId: null,
   };
-  const { vitality, control, humanity } = attributes;
+  const { vitality, humanity } = attributes;
   if (!vitality.success) {
     const pool = [...consumed];
     const refund = [];
@@ -714,24 +747,70 @@ function resurrect(s, pid) {
   }
   s.counters.creature += 1;
   const cid = `creature-${s.counters.creature}`;
-  if (control.success || humanity.success) {
-    const disposition = control.success && humanity.success ? 'controlled_and_humane' : control.success ? 'controlled' : 'humane';
-    s.creatures[cid] = { id: cid, ownerId: pid, status: 'stable', disposition, round: s.round };
+  if (humanity.success) {
+    s.creatures[cid] = { id: cid, ownerId: pid, status: 'stable', disposition: 'humane', round: s.round };
     s.creatureOrder.push(cid);
     s.stableTransitions.push(cid);
     record.outcome = 'stable';
     record.creatureId = cid;
     s.resurrections.push(record);
-    emit(s, 'CREATURE_STABILIZED', { playerId: pid, creatureId: cid, disposition });
-  } else {
-    s.creatures[cid] = { id: cid, ownerId: pid, status: 'unleashed', disposition: 'unleashed', round: s.round };
-    s.creatureOrder.push(cid);
-    record.outcome = 'unleashed';
-    record.creatureId = cid;
-    s.resurrections.push(record);
-    emit(s, 'CREATURE_UNLEASHED', { playerId: pid, creatureId: cid });
-    endGame(s, 'unleashed', s.players.filter((x) => s.objectives[x.id] === 'unleasher').map((x) => x.id));
+    emit(s, 'CREATURE_STABILIZED', { playerId: pid, creatureId: cid, disposition: 'humane' });
+    return;
   }
+  // A monster: the control chain starts with its creator and runs clockwise.
+  s.creatures[cid] = { id: cid, ownerId: pid, status: 'monster', disposition: 'monster', round: s.round };
+  s.creatureOrder.push(cid);
+  record.creatureId = cid;
+  record.controlDecisions = [];
+  const n = s.players.length;
+  const chain = Array.from({ length: n }, (_, i) => s.players[(p.seat + i) % n].id);
+  s.control = { creatorId: pid, creatureId: cid, parts: clone(consumed), chain, position: 0, record };
+  emit(s, 'MONSTER_CREATED', { playerId: pid, creatureId: cid, chain: [...chain] });
+}
+
+function subdue(s, pid) {
+  const k = s.control;
+  const p = getPlayer(s, pid);
+  p.controlAttemptsUsed += 1;
+  const pool = [...k.parts];
+  const salvage = [];
+  const n = Math.min(s.config.control.subdueSalvage, pool.length);
+  for (let i = 0; i < n; i++) salvage.push(pool.splice(randInt(s.rng, pool.length), 1)[0]);
+  p.loose.push(...salvage);
+  const c = s.creatures[k.creatureId];
+  c.status = 'destroyed';
+  c.disposition = 'subdued';
+  c.subduedBy = pid;
+  k.record.controlDecisions.push({ playerId: pid, subdue: true });
+  k.record.outcome = 'subdued';
+  k.record.subduedBy = pid;
+  s.resurrections.push(k.record);
+  s.control = null;
+  emit(s, 'MONSTER_SUBDUED', { playerId: pid, creatorId: c.ownerId, creatureId: c.id, attemptsLeft: controlAttempts(s, pid), salvagedParts: clone(salvage), lostParts: clone(pool) });
+}
+
+function declineSubdue(s, pid) {
+  const k = s.control;
+  k.record.controlDecisions.push({ playerId: pid, subdue: false });
+  k.position += 1;
+  emit(s, 'SUBDUE_DECLINED', { playerId: pid, creatureId: k.creatureId });
+  // The mob cannot stop a monster: if it forms now, the monster is unleashed.
+  changeSuspicion(s, s.config.control.declineSuspicion, 'monster_not_subdued', pid, (st) => {
+    emit(st, 'MOB_FORMED', { suspicion: st.suspicion, overwhelmed: true });
+    unleash(st, 'mob_overwhelmed');
+  });
+}
+
+function unleash(s, cause) {
+  const k = s.control;
+  const c = s.creatures[k.creatureId];
+  c.status = 'unleashed';
+  c.disposition = 'unleashed';
+  k.record.outcome = 'unleashed';
+  s.resurrections.push(k.record);
+  s.control = null;
+  emit(s, 'CREATURE_UNLEASHED', { playerId: c.ownerId, creatureId: c.id, cause });
+  endGame(s, 'unleashed', s.players.filter((x) => s.objectives[x.id] === 'unleasher').map((x) => x.id));
 }
 
 /**
@@ -765,14 +844,12 @@ export function estimateResurrection(s, pid) {
     out[attr] = { threshold, success };
   }
   const pv = out.vitality.success;
-  const pc = out.control.success;
   const ph = out.humanity.success;
-  const pBehaviourFails = (1 - pc) * (1 - ph);
   return {
     attributes: out,
     pFailed: 1 - pv,
-    pStable: pv * (1 - pBehaviourFails),
-    pUnleashed: pv * pBehaviourFails,
+    pStable: pv * ph,
+    pMonster: pv * (1 - ph),
   };
 }
 
@@ -810,6 +887,7 @@ const COMMAND_FIELDS = {
   PLACE_MEEPLE: { required: ['type', 'playerId', 'workerId', 'actionId'], optional: ['choices', 'seq'] },
   PASS_TURN: { required: ['type', 'playerId'], optional: ['seq'] },
   COMMIT_RESURRECTION: { required: ['type', 'playerId', 'attempt'], optional: ['seq'] },
+  SUBDUE_MONSTER: { required: ['type', 'playerId', 'subdue'], optional: ['seq'] },
 };
 
 export const COMMAND_TYPES = Object.keys(COMMAND_FIELDS);
@@ -834,6 +912,11 @@ export function validateCommand(s, cmd) {
   if (cmd.type === 'COMMIT_RESURRECTION') {
     if (s.phase !== 'commitment') return err('WRONG_PHASE', 'Not in the resurrection commitment phase.');
     if (typeof cmd.attempt !== 'boolean') return err('INVALID_CHOICE', 'attempt must be a boolean.');
+    return null;
+  }
+  if (cmd.type === 'SUBDUE_MONSTER') {
+    if (s.phase !== 'resolution' || !s.control) return err('WRONG_PHASE', 'There is no monster to subdue.');
+    if (typeof cmd.subdue !== 'boolean') return err('INVALID_CHOICE', 'subdue must be a boolean.');
     return null;
   }
   if (s.phase !== 'day' && s.phase !== 'night') return err('WRONG_PHASE', 'Workers can only be placed by day or night.');
@@ -874,6 +957,9 @@ function applyCommand(s, cmd) {
     s.commitment.choices[p.id] = cmd.attempt;
     emit(s, 'COMMITMENT_LOCKED', { playerId: p.id });
     emit(s, 'COMMITMENT_RECORDED', { playerId: p.id, attempt: cmd.attempt }, [p.id]);
+  } else if (cmd.type === 'SUBDUE_MONSTER') {
+    if (cmd.subdue) subdue(s, p.id);
+    else declineSubdue(s, p.id);
   }
 }
 
@@ -912,6 +998,12 @@ export function getLegalCommands(s, pid) {
     return [
       { type: 'COMMIT_RESURRECTION', playerId: pid, attempt: true },
       { type: 'COMMIT_RESURRECTION', playerId: pid, attempt: false },
+    ];
+  }
+  if (s.phase === 'resolution') {
+    return [
+      { type: 'SUBDUE_MONSTER', playerId: pid, subdue: true },
+      { type: 'SUBDUE_MONSTER', playerId: pid, subdue: false },
     ];
   }
   const p = getPlayer(s, pid);
@@ -1039,6 +1131,7 @@ function publicPlayer(s, p) {
     passed: p.passed,
     effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, researchCount(s, p.id, t)])),
     assembleCapacity: assembleCapacity(s, p.id),
+    controlAttempts: controlAttempts(s, p.id),
     resurrectionOdds: estimateResurrection(s, p.id),
     workers: playerWorkers(s, p.id).map((w) => ({ ...clone(w), availableNow: (s.phase === 'day' || s.phase === 'night') ? workerAvailable(s, w) : false })),
   };
@@ -1064,6 +1157,10 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     creatures: s.creatureOrder.map((id) => clone(s.creatures[id])),
     stableTransitions: [...s.stableTransitions],
     commitment: s.commitment ? { order: [...s.commitment.order], decided: s.commitment.order.filter((pid) => pid in s.commitment.choices) } : null,
+    control: s.control ? {
+      creatorId: s.control.creatorId, creatureId: s.control.creatureId, chain: [...s.control.chain], position: s.control.position,
+      deciderId: s.control.chain[s.control.position] || null, decisions: clone(s.control.record.controlDecisions),
+    } : null,
     resurrections: clone(s.resurrections),
     commandCount: s.commandLog.length,
     result: s.result ? clone(s.result) : null,

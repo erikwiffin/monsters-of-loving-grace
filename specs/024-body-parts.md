@@ -23,7 +23,7 @@ Loose parts are kept as a list of part instances. Each instance has a unique ID 
 | scarred_chest | Scarred chest | chest | Vitality −1d6 |
 | ordinary_head | Ordinary head | head | None |
 | criminal_brain | Brain of a criminal | head | Humanity success threshold +3 |
-| scholar_brain | Brain of a scholar | head | Control +1d6 |
+| scholar_brain | Brain of a scholar | head | Humanity +1d6 |
 | poet_brain | Brain of a poet | head | Humanity +1d4 |
 
 Named brains occupy the head slot; there is no separate brain resource or slot. These fictional traits are gameplay abstractions. The catalogue lives in configuration data and can be edited independently of engine logic. Each effect names an attribute and an operation: an additional signed die, a signed fixed modifier, or a threshold adjustment. Different installed parts contribute independently, including duplicates of the same variant.
@@ -32,7 +32,7 @@ Named brains occupy the head slot; there is no separate brain resource or slot. 
 
 - **Random draws** (graves: 2 parts; morgue: 3 parts). Each part is drawn independently, with replacement and from unlimited supply. First the type is chosen with weights arm 2/6, leg 2/6, chest 1/6 and head 1/6. Then a variant of that type is chosen uniformly.
 - **Specimens** (day): choose exactly two variants by ID, duplicates allowed, for 2 money (spec 022).
-- **Salvage**: a failed resurrection returns three of the six consumed parts to loose inventory (spec 025).
+- **Salvage**: a failed resurrection returns three of the six consumed parts to its creator's loose inventory, and subduing a monster gives three of its six parts to the subduing player (spec 025).
 
 ## Assembly
 
