@@ -9,15 +9,7 @@ A policy is anything that, given `{ playerId, view, legal }`, returns a command.
 Two built-in policies ship in `src/sim/policies.js`. Each has its own seeded randomness, separate from the engine's RNG.
 
 - **random** chooses uniformly among legal non-pass commands, and passes only occasionally, about 10% of the time.
-- **heuristic** is a simple greedy player:
-  - It earns money when short, and gathers and assembles good parts.
-  - It values research according to its objective. The Unleasher wants galvanism and avoids safety research (neurology, philosophy). The Inquisitor avoids galvanism and Discreet Methods. Everyone else values safety research and galvanism.
-  - It manages suspicion unless it is the Inquisitor.
-  - It decides on resurrection using the engine's exact odds, remembering that any stable Creature ends the game (spec 020):
-    - **Prometheus** attempts when the stable chance clearly exceeds the unleash chance, accepting more risk from round 12.
-    - **Visionary** attempts under the same odds rule, but only when another player also has a complete body, since a lone stable Creature loses for everyone.
-    - **Unleasher** attempts only when the unleash chance exceeds the stable chance.
-    - **Inquisitor** attempts only when suspicion is one below the mob threshold and failure is more likely than not, since a failed Vitality roll would then bring the mob.
+- **heuristic** is a simple scripted player that pursues its own objective using only its view and the engine's exact odds. Its strategy is not specified and may be tuned freely to keep playtests meaningful.
 
 ## Runner
 
@@ -45,7 +37,7 @@ Each game produces a machine-readable summary containing:
 - every resurrection, with its scores and outcome;
 - optionally, the full replay command list.
 
-Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, average final suspicion and resurrection outcome counts.
+Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, the median round in which games end, average final suspicion and resurrection outcome counts (failed, stable, subdued and unleashed). For balance work, they also report how many players were dealt each objective and each objective's win rate: wins divided by players dealt it.
 
 ## Command-line tools
 

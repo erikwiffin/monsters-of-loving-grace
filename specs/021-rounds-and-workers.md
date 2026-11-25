@@ -14,6 +14,7 @@ Day and night follow the same procedure. Starting with the first player and goin
 - A player with no legal placement at the moment is skipped automatically; they don't have to pass. If another player's action later makes one of their placements legal, they get another turn.
 - The phase ends automatically when nobody who hasn't passed has a legal placement.
 - Passing is always allowed when it is your turn.
+- Before placing or passing, the active player may publish any of their discoveries as a free action (spec 023). Publishing does not end the turn.
 
 At the start of night, everyone's pass status resets and the turn returns to the first player.
 
@@ -22,7 +23,7 @@ At the start of night, everyone's pass status resets and the turn returns to the
 Each worker has a stable ID. There are two kinds.
 
 - **Scientist** (`scientist-pN`): every player has one from the start. It acts once by day and once by night, refreshing for the night. It may take any action.
-- **Igor** (`igor-pN-k`): hired at the Tavern for 4, then 7, then 10 money, up to three per player. There are no wages. A newly hired Igor is pending and becomes available at the start of the next round, which prevents chaining actions within one round. An Igor acts once per full round, in either day or night. An Igor used by day can't act that night; one left unused by day may act at night. There is no advance assignment. An Igor may only take actions marked as Igor-permitted (spec 022).
+- **Igor** (`igor-pN-k`): every player starts with one Igor (`igor-pN-1`), available from round 1. More are hired at the Tavern for 4, then 7 money, up to three Igors per player in all. There are no wages. A newly hired Igor can act at once (spec 022). An Igor acts once per full round, in either day or night. An Igor used by day can't act that night; one left unused by day may act at night. There is no advance assignment. An Igor may only take actions marked as Igor-permitted (spec 022).
 
 ## Resurrection commitment
 
@@ -32,7 +33,7 @@ Eligible players decide in initiative order, one at a time and in private. In th
 
 ## Resurrection resolution
 
-All commitments are revealed together. The attempts then resolve in initiative order, with dice rolled automatically and research applied automatically (spec 025). Each stable Creature is recorded as a stable transition for the round. If the mob forms or a Creature is unleashed during resolution, resolution stops at once: commitments not yet resolved consume no parts and have no effect.
+All commitments are revealed together. The attempts then resolve in initiative order, with dice rolled automatically and research applied automatically (spec 025). Each stable Creature is recorded as a stable transition for the round. When an attempt creates a monster, resolution pauses while players decide in its control chain, starting with its creator and going clockwise (spec 025), and continues with the next attempt once the monster is subdued. If the mob forms or a monster is unleashed during resolution, resolution stops at once: commitments not yet resolved consume no parts and have no effect.
 
 ## Dawn
 
@@ -40,7 +41,6 @@ At dawn, Prometheus and Visionary are checked together (spec 020). If any Creatu
 
 - the first player rotates one seat;
 - all action-space occupancy and worker-used flags are cleared;
-- pending workers (newly hired Igors) become available;
 - the round's stable transitions are cleared;
 - the round number increases, and a new day begins.
 
@@ -52,4 +52,4 @@ Shared action spaces have a capacity per phase that resets every round. Private 
 
 ## Ending
 
-The game ends immediately whenever suspicion reaches 16 or a Creature is unleashed, whatever the phase. It also ends at the dawn of any round in which a Creature became stable, even when nobody wins. There is no round limit.
+The game ends immediately whenever suspicion reaches the mob threshold (spec 020) or a monster is unleashed, whatever the phase. It also ends at the dawn of any round in which a Creature became stable, even when nobody wins. There is no round limit.

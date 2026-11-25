@@ -135,21 +135,24 @@ function randomSeed() {
   return `${a[0].toString(36)}${a[1].toString(36)}`;
 }
 
+// The report covers the latest resolution phase. It is shown again whenever
+// that phase produces events the players have not yet seen, for example
+// after each decision in a monster's control chain.
 function pendingReport() {
   const s = ui.state;
   const evs = s.events;
   for (let i = evs.length - 1; i >= 0; i--) {
     const e = evs[i];
-    if (e.seq <= ui.meta.reportSeq) return null;
-    if (e.type === 'COMMITMENTS_REVEALED') {
-      const out = [];
-      for (let j = i + 1; j < evs.length; j++) {
-        if (evs[j].type === 'PHASE_ENDED' || evs[j].type === 'GAME_ENDED') break;
-        out.push(evs[j]);
-      }
-      if (!e.commitments.some((c) => c.attempt)) return null;
-      return { seq: e.seq, reveal: e, events: out };
+    if (e.type !== 'COMMITMENTS_REVEALED') continue;
+    const out = [];
+    for (let j = i + 1; j < evs.length; j++) {
+      if (evs[j].type === 'PHASE_ENDED' || evs[j].type === 'GAME_ENDED') break;
+      out.push(evs[j]);
     }
+    if (!e.commitments.some((c) => c.attempt)) return null;
+    const seq = out.length ? out[out.length - 1].seq : e.seq;
+    if (seq <= ui.meta.reportSeq) return null;
+    return { seq, reveal: e, events: out };
   }
   return null;
 }
@@ -182,8 +185,8 @@ function bodyDiagram(cfg, p) {
 function oddsLine(o) {
   if (!o) return '';
   return `<div class="odds" title="Exact odds with the current body and effective research">
-    <span>Vit ${pct(o.attributes.vitality.success)}</span><span>Ctl ${pct(o.attributes.control.success)}</span><span>Hum ${pct(o.attributes.humanity.success)}</span>
-    <span class="o-stable">Stable ${pct(o.pStable)}</span><span class="o-unleash">Unleash ${pct(o.pUnleashed)}</span><span class="o-fail">Fail ${pct(o.pFailed)}</span>
+    <span>Vit ${pct(o.attributes.vitality.success)}</span><span>Hum ${pct(o.attributes.humanity.success)}</span>
+    <span class="o-stable">Stable ${pct(o.pStable)}</span><span class="o-unleash">Monster ${pct(o.pMonster)}</span><span class="o-fail">Fail ${pct(o.pFailed)}</span>
   </div>`;
 }
 
@@ -207,6 +210,7 @@ function playerPanel(view, p) {
     <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${aiKind(p.id) ? `<span class="badge ai" title="${esc(AI_KINDS[aiKind(p.id)])}">AI</span>` : ''}${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
     <div class="row"><span class="lbl">Workers</span>${workers}${p.nextIgorCost != null ? `<span class="muted small">next Igor ${p.nextIgorCost}</span>` : ''}</div>
     <div class="row"><span class="lbl">Research</span>${research || '<span class="muted">none</span>'}</div>
+    <div class="row"><span class="lbl">Control</span>${p.controlAttempts} attempt${p.controlAttempts === 1 ? '' : 's'} left · ${pct(p.controlChance)} per roll${p.garrisoned ? ' · <b>garrisoned</b>' : ''}</div>
     ${bodyDiagram(cfg, p)}
     ${oddsLine(p.resurrectionOdds)}
     <div class="row"><span class="lbl">Loose</span>${looseHtml}</div>
@@ -260,7 +264,7 @@ function actionSpace(view, id, def, enabledPhase) {
   const cap = def.capacity == null ? '∞' : def.capacity;
   let status = { ok: false, reason: '' };
   if (enabledPhase && !view.result && !aiKind(view.activePlayerId)) status = spaceStatus(id, ui.selectedWorker);
-  const igorOk = def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist or Creature only">Scientist</span>';
+  const igorOk = def.scientist === false ? '<span class="tag" title="Igors only">Igor only</span>' : def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist or Creature only">Scientist</span>';
   return `<button class="space ${def.phase} ${status.ok ? 'can' : ''}" data-act="space" data-id="${id}" ${status.ok ? '' : 'aria-disabled="true"'} title="${esc(status.reason || '')}">
     <span class="sp-top"><b>${esc(def.name)}</b>${igorOk}</span>
     <span class="sp-loc">${esc(def.location)}</span>
@@ -272,6 +276,11 @@ function actionSpace(view, id, def, enabledPhase) {
 function turnBar(view) {
   if (view.result) {
     return `<div class="turnbar over"><b>The game is over.</b> <button data-act="show-gameover">Show results</button></div>`;
+  }
+  if (view.phase === 'resolution' && view.control) {
+    const p = view.players.find((x) => x.id === view.activePlayerId);
+    return `<div class="turnbar seat-${p.seat}"><span class="who">A monster is loose — <span class="pc pc-${p.seat}">${esc(p.name)}</span> decides whether to subdue it</span>
+      ${aiKind(p.id) ? `<span class="spacer"></span><span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : ''}</div>`;
   }
   if (view.phase !== 'day' && view.phase !== 'night') return '<div class="turnbar">Resolving…</div>';
   const pid = view.activePlayerId;
@@ -285,7 +294,7 @@ function turnBar(view) {
     <span class="who"><span class="pc pc-${p.seat}">${esc(p.name)}</span>'s turn <small>(${view.phase === 'day' ? '☀ day' : '☾ night'})</small></span>
     <span class="wsels">Worker: ${chips}</span>
     <span class="spacer"></span>
-    ${aiKind(pid) ? `<span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : `<button data-act="peek" class="ghost">View my objective</button>
+    ${aiKind(pid) ? `<span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : `${p.research.some((t) => !p.published.includes(t)) ? '<button data-act="publish-open" class="ghost">Publish…</button>' : ''}<button data-act="peek" class="ghost">View my objective</button>
     <button data-act="pass" class="ghost danger-outline">Pass ${view.phase}</button>`}
   </div>`;
 }
@@ -355,7 +364,7 @@ function objectivesFlow() {
   }
   return privacy(`<p class="eyebrow">${esc(p.name)}, your secret objective</p>
     ${objectiveCard(s.objectives[p.id])}
-    <p class="muted small">Other roles in play may include Prometheus, Visionary, Inquisitor and Unleasher. One card is left unseen.</p>
+    <p class="muted small">Other roles in play may include ${[...new Set(E.objectiveDeckFor(s.config))].map((o) => OBJ[o].name).join(', ')}. One card is left unseen.</p>
     <button class="big" data-act="obj-hide">Hide and pass the device</button>`);
 }
 
@@ -381,8 +390,47 @@ function commitmentFlow() {
     <h2>Attempt resurrection?</h2>
     ${bodyDiagram(view.config, me)}
     ${oddsLine(me.resurrectionOdds)}
-    <p class="small muted">Attempting consumes all six installed parts. A failed Vitality roll salvages three parts and adds 1 suspicion. If the Creature lives but both Control and Humanity fail, it is unleashed and the game ends.</p>
+    <p class="small muted">Attempting consumes all six installed parts. A failed Vitality roll salvages three parts and adds 1 suspicion. If the Creature lives but Humanity fails, it is a monster: you, then each player clockwise with an Igor in the garrison, may spend a control attempt to subdue it (you have ${me.controlAttempts} left). Subduing adds ${view.config.control.subdueSuspicion} suspicion; each player who could subdue it but doesn't adds ${view.config.control.declineSuspicion}. If no one subdues it, it is unleashed and the game ends.</p>
     <div class="choice-row"><button class="big danger" data-act="commit" data-v="1">⚡ Attempt</button><button class="big ghost" data-act="commit" data-v="0">Decline</button></div>`, 'wide');
+}
+
+// After a morgue raid the player keeps some of the drawn parts (public).
+function pickFlow() {
+  const s = ui.state;
+  const cfg = s.config;
+  const k = s.pendingPick;
+  const opts = E.getLegalCommands(s, s.activePlayerId);
+  const label = (ids) => ids.map((id) => { const x = k.parts.find((y) => y.id === id); return `${esc(variantName(cfg, x.variantId))}<small class="muted"> — ${esc(variantText(cfg, x.variantId))}</small>`; }).join(' + ');
+  return modal(`${esc(cfg.actions[k.actionId].name)}: keep ${k.keep}`,
+    `<p>You uncover these parts. Keep ${k.keep}; the rest are lost.</p><div class="opts">${opts.map((c, i) => `<button class="opt" data-act="pick" data-i="${i}">${label(c.partIds)}</button>`).join('')}</div>`,
+    '');
+}
+
+// Subduing is a public decision, so there is no pass-the-device screen.
+function subdueFlow() {
+  const view = E.getPublicView(ui.state, { includeEvents: false });
+  const k = view.control;
+  const c = ctx();
+  const me = view.players.find((x) => x.id === view.activePlayerId);
+  const own = k.creatorId === me.id;
+  const later = k.upcoming;
+  const inc = view.config.control.declineSuspicion;
+  return modal('⚡ A monster is loose',
+    `<p>${own ? 'Your' : `<span class="pc pc-${c.seat(k.creatorId)}">${esc(c.name(k.creatorId))}</span>'s`} Creature lives, but its Humanity failed.</p>
+    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Trying spends one and rolls d20 + your control research: you need ${view.config.control.threshold}+, a <b>${pct(me.controlChance)}</b> chance. Success destroys the monster, gives you ${view.config.control.subdueSalvage} of its parts at random and adds ${view.config.control.subdueSuspicion} suspicion. Failure adds nothing and passes the monster on.</p>
+    <p class="small muted">If you don't, suspicion rises by ${inc} (now ${view.suspicion}/${view.suspicionMax}) and ${later.length ? `the monster passes to ${later.map((pid) => esc(c.name(pid))).join(', then ')}` : '<b>nobody else can stop it: it will be unleashed</b>'}. If the mob forms, it cannot stop the monster either.</p>`,
+    `<button class="big" data-act="subdue" data-v="1">Try to subdue (${pct(me.controlChance)})</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>`);
+}
+
+// Publishing is a free action on your own turn (spec 023).
+function publishModal() {
+  const s = ui.state;
+  const cfg = s.config;
+  const opts = E.getLegalCommands(s, s.activePlayerId).filter((c) => c.type === 'PUBLISH_RESEARCH');
+  const p = E.getPlayer(s, s.activePlayerId);
+  const body = `<p>Share a discovery with every player. It costs nothing and doesn't use your turn. Each discovery you publish adds 1 to your lecture income (now ${cfg.actions.lecture.base + p.published.length}).</p>
+    <div class="choice-row">${opts.map((c) => `<button data-act="publish" data-id="${c.researchType}" title="${esc(cfg.research[c.researchType].text)}">${esc(cfg.research[c.researchType].name)}</button>`).join('')}</div>`;
+  return modal('Publish a discovery', body, '<button data-act="close" class="ghost">Cancel</button>');
 }
 
 function reportOverlay(rep) {
@@ -391,7 +439,7 @@ function reportOverlay(rep) {
   const blocks = [];
   for (const e of rep.events) {
     if (e.type === 'RESURRECTION_ROLLED') {
-      const rows = ['vitality', 'control', 'humanity'].map((a) => {
+      const rows = Object.keys(e.attributes).map((a) => {
         const at = e.attributes[a];
         const dice = at.dice.map((d) => `<li>${esc(sourceLabel(cfg, d.source))}: ${d.source.kind === 'base' ? '' : d.sign < 0 ? '−' : '+'}d${d.die} → <b>${d.sign < 0 ? '−' : ''}${d.result}</b></li>`).join('');
         const fixed = at.fixed.map((f) => `<li>${esc(sourceLabel(cfg, f.source))}: fixed ${f.amount >= 0 ? '+' : '−'}${Math.abs(f.amount)}</li>`).join('');
@@ -403,10 +451,23 @@ function reportOverlay(rep) {
       blocks.push(`<p class="outcome fail">Vitality failed — no Creature. Salvaged: ${e.refundedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_STABILIZED') {
       blocks.push(`<p class="outcome stable">It lives — a stable, ${esc(e.disposition.replace(/_/g, ' '))} Creature!</p></div>`);
+    } else if (e.type === 'MONSTER_CREATED') {
+      blocks.push('<p class="outcome unleash">It lives — but Humanity failed. It is a monster!</p>');
+    } else if (e.type === 'SUBDUE_DECLINED') {
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} does not subdue it.</p>`);
+    } else if (e.type === 'CONTROL_SKIPPED') {
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} ${e.reason === 'not_garrisoned' ? 'has no one in the garrison' : 'has no control attempts left'}.</p>`);
+    } else if (e.type === 'CONTROL_ROLLED') {
+      const parts = [...e.dice.map((d) => `${esc(sourceLabel(cfg, d.source))} d${d.die} → ${d.result}`), ...e.fixed.map((f) => `${esc(sourceLabel(cfg, f.source))} +${f.amount}`)].join(', ');
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} tries to subdue it: ${parts} = <b>${e.score}</b> vs ${e.threshold}+ ${e.success ? '✓' : '✗ — it breaks free'}</p>`);
+    } else if (e.type === 'MONSTER_SUBDUED') {
+      blocks.push(`<p class="outcome stable">${esc(c.name(e.playerId))} subdues and destroys the monster, salvaging ${e.salvagedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_UNLEASHED') {
-      blocks.push('<p class="outcome unleash">It lives — and it is UNLEASHED!</p></div>');
+      blocks.push('<p class="outcome unleash">The monster is UNLEASHED!</p></div>');
     } else if (e.type === 'MOB_FORMED') {
-      blocks.push('<p class="outcome unleash">The suspicion is too much: the mob forms!</p>');
+      blocks.push(e.overwhelmed ? '<p class="outcome unleash">The mob forms — but it cannot stop the monster!</p>' : '<p class="outcome unleash">The suspicion is too much: the mob forms!</p>');
+    } else if (e.type === 'SUSPICION_CHANGED' && (e.reason === 'monster_not_subdued' || e.reason === 'monster_subdued')) {
+      blocks.push(`<p class="outcome minor">Suspicion +${e.delta} → ${e.value}/${e.max}.</p>`);
     }
   }
   const reveal = rep.reveal.commitments.map((x) => `<span class="pc pc-${c.seat(x.playerId)}">${esc(c.name(x.playerId))}</span>: ${x.attempt ? '<b>attempt</b>' : 'decline'}`).join(' · ');
@@ -452,17 +513,13 @@ function choiceModal() {
   switch (m.actionId) {
     case 'research': body += `<div class="opts">${marketOptions('card')}</div>`; break;
     case 'experiment': body += `<h3>Spend ${def.partCost} parts</h3><div class="opts">${looseOptions(false)}</div><h3>Take a card</h3><div class="opts">${marketOptions('card')}</div>`; break;
-    case 'assemble': body += `<p class="small">Choose up to ${E.assembleCapacity(s, p.id)} parts for empty slots.</p><div class="opts">${looseOptions(true)}</div>`; break;
-    case 'publish': body += `<div class="opts">${p.research.map((t) => {
-      const done = p.published.includes(t);
-      return `<label class="opt ${done ? 'disabled' : ''}"><input type="radio" name="rtype" value="${t}" ${done ? 'disabled' : ''}> <b>${esc(cfg.research[t].name)}</b>${done ? ' <span class="muted">(you already published this)</span>' : ''}</label>`;
-    }).join('')}</div>`; break;
+    case 'assemble': body += `<p class="small">Choose any parts for empty slots — up to a whole body.</p><div class="opts">${looseOptions(true)}</div>`; break;
     case 'specimens': {
       const opts = Object.entries(cfg.partTypes).map(([t, td]) => `<optgroup label="${esc(td.name)}">${Object.entries(cfg.partVariants).filter(([, v]) => v.type === t).map(([id, v]) => `<option value="${id}">${esc(v.name)} — ${esc(v.effects.length ? v.effects.map(effectText).join(', ') : 'no effect')}</option>`).join('')}</optgroup>`).join('');
       body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="variant${i}">${opts}</select></label>`).join('');
       break;
     }
-    case 'hire': body += `<p>Cost: <b>${cfg.igorCosts[p.igorsHired]}</b> money. You have ${p.money}.</p>`; break;
+    case 'hire': body += `<p>Cost: <b>${cfg.igorCosts[p.igorsHired]}</b> money. You have ${p.money}. The Igor can work straight away.</p>`; break;
     default: break;
   }
   return modal(title, body, '<button data-act="close" class="ghost">Cancel</button><button data-act="confirm-place" class="big">Confirm</button>');
@@ -478,7 +535,6 @@ function collectChoices() {
     case 'research': return { researchCardId: card() };
     case 'experiment': return { partIds: checkedParts(), researchCardId: card() };
     case 'assemble': return { partIds: checkedParts() };
-    case 'publish': return { researchType: (q('.modal input[name=rtype]:checked') || {}).value };
     case 'specimens': return { variantIds: qa('.modal select[name^=variant]').map((x) => x.value) };
     default: return undefined;
   }
@@ -529,11 +585,11 @@ function renderMenu() {
   const kindOpts = (i) => [['human', 'Human'], ...Object.entries(AI_KINDS)].map(([k, label]) => `<option value="${k}" ${((ui.menuKinds || [])[i] || 'human') === k ? 'selected' : ''}>${label}</option>`).join('');
   const names = Array.from({ length: n }, (_, i) => `<div class="prow"><label>Player ${i + 1} <input name="pname" maxlength="24" value="${esc((ui.menuNames || [])[i] || '')}" placeholder="Scientist ${i + 1}"></label><label>Played by <select name="pkind">${kindOpts(i)}</select></label></div>`).join('');
   return `<div class="menu-screen">
-    <div class="title"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–5 players.</p></div>
+    <div class="title"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–6 players.</p></div>
     <div class="menu-grid">
       <section class="panel">
         <h2>New game</h2>
-        <label>Players <select id="pcount">${[3, 4, 5].map((k) => `<option ${k === n ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+        <label>Players <select id="pcount">${[3, 4, 5, 6].map((k) => `<option ${k === n ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
         <div class="names">${names}</div>
         ${ui.debug ? `<label>Seed (debug) <input id="seed" placeholder="random"></label>
           <label>Config overrides JSON (debug) <textarea id="overrides" rows="3" placeholder='{"startingMoney": 5}'></textarea></label>` : ''}
@@ -573,12 +629,14 @@ function render() {
       if (rep) forced = reportOverlay(rep);
       else if (s.result && !ui.hideGameOver && !ui.modal) forced = gameOverOverlay();
       else if (s.phase === 'commitment' && !aiKind(s.activePlayerId)) forced = commitmentFlow();
+      else if (s.phase === 'resolution' && s.control && !aiKind(s.activePlayerId) && !ui.modal) forced = subdueFlow();
+      else if (s.pendingPick && !s.result && !aiKind(s.activePlayerId) && !ui.modal) forced = pickFlow();
     }
     ui.blocked = !!forced || !!ui.modal;
     if (forced) html += forced;
     else if (ui.modal) {
       const k = ui.modal.kind;
-      html += k === 'choice' ? choiceModal() : k === 'peek' ? peekOverlay() : k === 'confirm' ? confirmOverlay() : k === 'rules' ? rulesOverlay() : k === 'debug' ? debugOverlay() : '';
+      html += k === 'choice' ? choiceModal() : k === 'publish' ? publishModal() : k === 'peek' ? peekOverlay() : k === 'confirm' ? confirmOverlay() : k === 'rules' ? rulesOverlay() : k === 'debug' ? debugOverlay() : '';
     }
   }
   if (ui.toast) html += `<div class="toast ${ui.toast.kind}" role="status">${esc(ui.toast.msg)}</div>`;
@@ -692,12 +750,28 @@ const handlers = {
     render();
   },
   'commit-done'() { ui.commit = null; render(); },
+  pick(el) {
+    const s = ui.state;
+    const c = E.getLegalCommands(s, s.activePlayerId)[Number(el.dataset.i)];
+    if (c) act(c);
+    render();
+  },
+  'publish-open'() { ui.modal = { kind: 'publish' }; render(); },
+  publish(el) {
+    if (act({ type: 'PUBLISH_RESEARCH', playerId: ui.state.activePlayerId, researchType: el.dataset.id })) ui.modal = null;
+    render();
+  },
+  subdue(el) {
+    const s = ui.state;
+    act({ type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: el.dataset.v === '1' });
+    render();
+  },
   'report-done'() { const r = pendingReport(); if (r) ui.meta.reportSeq = r.seq; persist(); render(); },
   worker(el) { ui.selectedWorker = el.dataset.id; render(); },
   'ai-pause'() { ui.aiPaused = !ui.aiPaused; render(); },
   pass() {
     const s = ui.state;
-    askConfirm(`Pass the ${s.phase}?`, `${E.getPlayer(s, s.activePlayerId).name} will place no more workers this ${s.phase}. Unused Igors and Creatures can still act ${s.phase === 'day' ? 'tonight' : 'next round'}.`, 'Pass', () => {
+    askConfirm(`Pass the ${s.phase}?`, `${E.getPlayer(s, s.activePlayerId).name} will place no more workers this ${s.phase}. Unused Igors can still act ${s.phase === 'day' ? 'tonight' : 'next round'}.`, 'Pass', () => {
       act({ type: 'PASS_TURN', playerId: s.activePlayerId });
     });
   },

@@ -133,9 +133,11 @@ export function runBatch({ games = 100, seedPrefix = 'batch', ...opts } = {}) {
 export function aggregate(results) {
   const agg = {
     games: results.length, truncated: 0, byReason: {}, winsByObjective: {}, collectiveDefeats: 0,
-    avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, failed: 0, stable: 0, unleashed: 0 },
+    avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, failed: 0, stable: 0, subdued: 0, unleashed: 0 },
   };
+  const dealt = {};
   for (const r of results) {
+    for (const o of Object.values(r.objectives)) dealt[o] = (dealt[o] || 0) + 1;
     if (r.truncated) agg.truncated++;
     const reason = r.terminalReason || 'truncated';
     agg.byReason[reason] = (agg.byReason[reason] || 0) + 1;
@@ -145,7 +147,14 @@ export function aggregate(results) {
     agg.avgFinalSuspicion += r.finalSuspicion / results.length;
     for (const x of r.resurrections) { agg.resurrections.attempts++; agg.resurrections[x.outcome]++; }
   }
+  // Per-role balance: the share of players dealt each objective who won.
+  agg.dealtByObjective = dealt;
+  agg.winRateByObjective = Object.fromEntries(Object.keys(dealt).sort().map((o) => [o, Math.round(1000 * (agg.winsByObjective[o] || 0) / dealt[o]) / 1000]));
   agg.avgRounds = Math.round(agg.avgRounds * 100) / 100;
+  // The round the median game ended in (truncated games count at the round they stopped).
+  const rounds = results.map((r) => r.rounds).sort((x, y) => x - y);
+  const mid = rounds.length >> 1;
+  agg.medianRounds = rounds.length ? (rounds.length % 2 ? rounds[mid] : (rounds[mid - 1] + rounds[mid]) / 2) : 0;
   agg.avgFinalSuspicion = Math.round(agg.avgFinalSuspicion * 100) / 100;
   return agg;
 }

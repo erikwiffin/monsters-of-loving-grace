@@ -33,20 +33,36 @@ function deepMerge(base, over) {
 export function resolveConfig(overrides = {}) {
   if (overrides != null && !isPlainObject(overrides)) throw new Error('config must be an object');
   const cfg = deepMerge(clone(DEFAULT_CONFIG), overrides || {});
+  if (cfg.suspicionMax == null && cfg.suspicionMaxByPlayers) cfg.suspicionMax = cfg.suspicionMaxByPlayers[cfg.playerCount];
   validateConfig(cfg);
   return cfg;
 }
 
 function validateConfig(cfg) {
   const n = cfg.playerCount;
-  if (!Number.isInteger(n) || n < 3 || n > 5) throw new Error('playerCount must be an integer from 3 to 5');
+  if (!Number.isInteger(n) || n < 3 || n > 6) throw new Error('playerCount must be an integer from 3 to 6');
   if (!Number.isInteger(cfg.suspicionMax) || cfg.suspicionMax < 1) throw new Error('suspicionMax must be a positive integer');
+  if (!Number.isInteger(cfg.startingIgors) || cfg.startingIgors < 0 || cfg.startingIgors > cfg.maxIgors) throw new Error('startingIgors must be an integer from 0 to maxIgors');
+  for (const attr of ATTRIBUTES) {
+    if (!Number.isInteger(cfg.resurrection.thresholds[attr])) throw new Error(`resurrection threshold for ${attr} must be an integer`);
+  }
+  for (const k of ['failedVitalitySuspicion']) {
+    if (!Number.isInteger(cfg.resurrection[k]) || cfg.resurrection[k] < 0) throw new Error(`resurrection.${k} must be a non-negative integer`);
+  }
+  if (!ALLOWED_DICE.includes(cfg.control.baseDie)) throw new Error('control.baseDie must be a supported die');
+  if (!Number.isInteger(cfg.control.threshold)) throw new Error('control.threshold must be an integer');
+  for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSuspicion', 'subdueSalvage']) {
+    if (!Number.isInteger(cfg.control[k]) || cfg.control[k] < 0) throw new Error(`control.${k} must be a non-negative integer`);
+  }
   for (const [id, v] of Object.entries(cfg.partVariants)) {
     if (!cfg.partTypes[v.type]) throw new Error(`part variant ${id} has unknown type ${v.type}`);
     for (const e of v.effects) validateEffect(e, `part variant ${id}`);
   }
   for (const [id, r] of Object.entries(cfg.research)) {
-    for (const e of r.effects) if (e.kind === 'resurrection') validateEffect(e, `research ${id}`);
+    for (const e of r.effects) {
+      if (e.kind === 'resurrection') validateEffect(e, `research ${id}`);
+      if (e.kind === 'control') validateEffect({ ...e, attribute: ATTRIBUTES[0] }, `research ${id}`);
+    }
   }
   for (const [id, a] of Object.entries(cfg.actions)) {
     if (!HANDLERS[id]) throw new Error(`action ${id} has no rules handler`);
@@ -128,8 +144,17 @@ function researchBonus(s, pid, kind) {
   return total;
 }
 
-export function assembleCapacity(s, pid) {
-  return s.config.actions.assemble.max + researchBonus(s, pid, 'assembleCapacity');
+/** Most parts one assemble action may install: the configured max, or a whole body when it is null. */
+export function assembleCapacity(s) {
+  const max = s.config.actions.assemble.max;
+  return max == null ? SLOT_ORDER.length : max;
+}
+
+/** Control attempts a player has left: the starting allowance, plus one per effective Neural Conditioning, minus those spent. */
+export function controlAttempts(s, pid) {
+  const p = getPlayer(s, pid);
+  if (!p) return 0;
+  return Math.max(0, s.config.control.startingAttempts + researchBonus(s, pid, 'controlAttempts') - p.controlAttemptsUsed);
 }
 
 function playerWorkers(s, pid) {
@@ -151,6 +176,10 @@ function eligibleMarketCards(s, p) {
   return s.market.filter((c) => !p.research.includes(c.type));
 }
 
+function igorCount(s, p) {
+  return playerWorkers(s, p.id).filter((w) => w.kind === 'igor').length;
+}
+
 function nextIgorCost(s, p) {
   return s.config.igorCosts[p.igorsHired];
 }
@@ -164,14 +193,14 @@ function changeMoney(s, p, delta, reason) {
   emit(s, 'MONEY_CHANGED', { playerId: p.id, delta, balance: p.money, reason });
 }
 
-function changeSuspicion(s, delta, reason, playerId = null) {
+function changeSuspicion(s, delta, reason, playerId = null, onMob = formMob) {
   const max = s.config.suspicionMax;
   const before = s.suspicion;
   const after = Math.max(0, Math.min(max, before + delta));
   s.suspicion = after;
   s.suspicionHistory.push({ eventSeq: s.events.length + 1, round: s.round, phase: s.phase, value: after, delta: after - before, reason, playerId });
   emit(s, 'SUSPICION_CHANGED', { playerId, requested: delta, delta: after - before, value: after, max, reason });
-  if (delta > 0 && after >= max) formMob(s);
+  if (delta > 0 && after >= max) onMob(s);
 }
 
 function makePart(s, variantId) {
@@ -247,8 +276,14 @@ function checkLooseParts(p, partIds, min, max) {
 function resolveDiscovery(s, p, w, def, actionId) {
   const parts = [];
   for (let i = 0; i < def.parts; i++) parts.push(drawRandomPart(s));
-  p.loose.push(...parts);
-  emit(s, 'PARTS_GAINED', { playerId: p.id, source: actionId, parts: clone(parts) });
+  if (def.keep) {
+    // The player chooses which drawn parts to keep after the die (PICK_PARTS).
+    s.pendingPick = { playerId: p.id, actionId, parts: clone(parts), keep: def.keep };
+    emit(s, 'PARTS_DRAWN', { playerId: p.id, source: actionId, parts: clone(parts), keep: def.keep });
+  } else {
+    p.loose.push(...parts);
+    emit(s, 'PARTS_GAINED', { playerId: p.id, source: actionId, parts: clone(parts) });
+  }
   const roll = rollDie(s.rng, 6);
   const base = def.suspicionTable[roll - 1] || 0;
   const reduction = researchBonus(s, p.id, 'suspicionReduction');
@@ -263,8 +298,7 @@ export const HANDLERS = {
     choiceKeys: [],
     prereq: () => null,
     apply(s, p, w, def) {
-      const base = w.kind === 'igor' ? def.igorGain : def.gain;
-      changeMoney(s, p, base + researchBonus(s, p.id, 'medicineBonus'), 'medicine');
+      changeMoney(s, p, def.gain + researchBonus(s, p.id, 'medicineBonus'), 'medicine');
     },
   },
   research: {
@@ -299,16 +333,17 @@ export const HANDLERS = {
   hire: {
     choiceKeys: [],
     prereq(s, p) {
-      if (p.igorsHired >= s.config.maxIgors) return err('MAX_IGORS', 'You already employ the maximum number of Igors.');
+      if (igorCount(s, p) >= s.config.maxIgors) return err('MAX_IGORS', 'You already employ the maximum number of Igors.');
       return needMoney(p, nextIgorCost(s, p));
     },
     apply(s, p) {
       const cost = nextIgorCost(s, p);
       changeMoney(s, p, -cost, 'hire');
       p.igorsHired += 1;
-      const id = `igor-${p.id}-${p.igorsHired}`;
-      addWorker(s, { id, kind: 'igor', ownerId: p.id, active: false });
-      emit(s, 'IGOR_HIRED', { playerId: p.id, workerId: id, cost, availableFromRound: s.round + 1 });
+      // A hired Igor can act at once, later this day or tonight.
+      const id = `igor-${p.id}-${igorCount(s, p) + 1}`;
+      addWorker(s, { id, kind: 'igor', ownerId: p.id, active: true });
+      emit(s, 'IGOR_HIRED', { playerId: p.id, workerId: id, cost, availableFromRound: s.round });
     },
   },
   charity: {
@@ -326,30 +361,17 @@ export const HANDLERS = {
     choiceKeys: [],
     prereq: () => null,
     apply(s, p, w, def) {
-      // Ruling: 1 + research types this player has published, capped at 4 total.
-      changeMoney(s, p, Math.min(def.cap, def.base + p.published.length), 'lecture');
+      // 1 + one per discovery this player has published (no cap by default).
+      const pay = def.base + p.published.length;
+      changeMoney(s, p, def.cap == null ? pay : Math.min(def.cap, pay), 'lecture');
     },
   },
-  publish: {
-    choiceKeys: ['researchType'],
-    prereq(s, p) {
-      return p.research.some((t) => !p.published.includes(t)) ? null : err('NOTHING_TO_PUBLISH', 'You have no unpublished discoveries.');
-    },
-    checkChoices(s, p, w, def, c) {
-      const t = c.researchType;
-      if (typeof t !== 'string' || !s.config.research[t]) return err('INVALID_TARGET', `Unknown research type ${t}.`);
-      if (!p.research.includes(t)) return err('NOT_DISCOVERED', `You have not discovered ${t}.`);
-      if (p.published.includes(t)) return err('ALREADY_PUBLISHED', `You already published ${t}.`);
-      return null;
-    },
-    constraints: (s, p) => ({ researchType: { type: 'enum', values: p.research.filter((t) => !p.published.includes(t)) } }),
-    apply(s, p, w, def, c) {
-      p.published.push(c.researchType);
-      p.published.sort();
-      s.publications.push({ playerId: p.id, type: c.researchType, round: s.round });
-      emit(s, 'RESEARCH_PUBLISHED', { playerId: p.id, researchType: c.researchType });
-      changeMoney(s, p, def.gain, 'publish');
-    },
+  garrison: {
+    // No effect of its own: a garrisoned worker lets its owner subdue other
+    // players' monsters during this round's resolution (spec 025).
+    choiceKeys: [],
+    prereq: () => null,
+    apply() {},
   },
   graves: {
     choiceKeys: [],
@@ -417,12 +439,23 @@ export const HANDLERS = {
       acquireResearch(s, p, c.researchCardId, 'experiment');
     },
   },
-  conceal: {
-    choiceKeys: [],
-    prereq: (s) => (s.suspicion > 0 ? null : err('NO_SUSPICION', 'Suspicion is already 0.')),
-    apply: (s, p, w, def) => changeSuspicion(s, -def.reduction, 'conceal', p.id),
-  },
 };
+
+function publishError(s, p, t) {
+  if (typeof t !== 'string' || !s.config.research[t]) return err('INVALID_TARGET', `Unknown research type ${t}.`);
+  if (!p.research.includes(t)) return err('NOT_DISCOVERED', `You have not discovered ${t}.`);
+  if (p.published.includes(t)) return err('ALREADY_PUBLISHED', `You already published ${t}.`);
+  return null;
+}
+
+function publishable(p) {
+  return p.research.filter((t) => !p.published.includes(t));
+}
+
+/** Whether a player has a worker in the garrison this round. */
+export function garrisoned(s, pid) {
+  return (s.occupancy.day.garrison || []).some((wid) => s.workers[wid] && s.workers[wid].ownerId === pid);
+}
 
 /** Prerequisite check for placing a worker on an action, ignoring choices. */
 function placementError(s, p, w, actionId) {
@@ -433,6 +466,7 @@ function placementError(s, p, w, actionId) {
   if (!w.active) return err('WORKER_PENDING', 'That worker is not available until next round.');
   if (!workerAvailable(s, w)) return err('WORKER_USED', 'That worker has already acted.');
   if (w.kind === 'igor' && !def.igor) return err('IGOR_NOT_PERMITTED', 'Igors may not take that action.');
+  if (w.kind === 'scientist' && def.scientist === false) return err('SCIENTIST_NOT_PERMITTED', 'Only an Igor may take that action.');
   if (def.capacity != null && occupancyOf(s, actionId).length >= def.capacity) return err('SPACE_FULL', `${def.location} is full.`);
   return HANDLERS[actionId].prereq(s, p, w, def);
 }
@@ -445,6 +479,16 @@ function hasLegalPlacement(s, p) {
     }
   }
   return false;
+}
+
+/**
+ * The N+1 objective cards for a configuration: the Inquisitor, the Unleasher,
+ * the Visionary from visionaryMinPlayers players, and Prometheus for the rest.
+ */
+export function objectiveDeckFor(cfg) {
+  const n = cfg.playerCount;
+  const special = n >= cfg.visionaryMinPlayers ? ['visionary', 'inquisitor', 'unleasher'] : ['inquisitor', 'unleasher'];
+  return [...Array(n + 1 - special.length).fill('prometheus'), ...special];
 }
 
 // ---------------------------------------------------------------------------
@@ -478,6 +522,8 @@ export function createGame(config = {}, seed) {
     publications: [],
     occupancy: { day: {}, night: {} },
     commitment: null,
+    control: null,
+    pendingPick: null,
     stableTransitions: [],
     creatures: {},
     creatureOrder: [],
@@ -492,13 +538,14 @@ export function createGame(config = {}, seed) {
   for (let i = 0; i < n; i++) {
     const id = `p${i + 1}`;
     const name = (cfg.playerNames && cfg.playerNames[i]) || `Scientist ${i + 1}`;
-    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, passed: false });
+    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, controlAttemptsUsed: 0, passed: false });
     addWorker(s, { id: `scientist-${id}`, kind: 'scientist', ownerId: id, active: true });
+    for (let k = 1; k <= cfg.startingIgors; k++) addWorker(s, { id: `igor-${id}-${k}`, kind: 'igor', ownerId: id, active: true });
   }
   s.firstPlayerIndex = randInt(s.rng, n);
   s.turnPointer = s.firstPlayerIndex;
 
-  const objectiveDeck = [...Array(n - 2).fill('prometheus'), 'visionary', 'inquisitor', 'unleasher'];
+  const objectiveDeck = objectiveDeckFor(cfg);
   shuffle(s.rng, objectiveDeck);
   s.players.forEach((p, i) => { s.objectives[p.id] = objectiveDeck[i]; });
   s.unseenObjectives = objectiveDeck.slice(n);
@@ -562,16 +609,26 @@ function startCommitment(s) {
     if (bodyComplete(getPlayer(s, pid))) eligible.push(pid);
     else emit(s, 'COMMITMENT_AUTO_DECLINED', { playerId: pid, reason: 'incomplete_body' });
   }
-  s.commitment = { order: eligible, choices: {} };
+  s.commitment = { order: eligible, choices: {}, resolved: 0 };
 }
 
-function resolveResurrections(s) {
-  const c = s.commitment;
-  emit(s, 'COMMITMENTS_REVEALED', { commitments: c.order.map((pid) => ({ playerId: pid, attempt: c.choices[pid] })) });
-  for (const pid of c.order) {
-    if (s.result) break;
-    if (c.choices[pid]) resurrect(s, pid);
+/** Whether a player may subdue the current monster: an attempt left, and a garrisoned worker unless they created it. */
+function canSubdue(s, pid) {
+  return controlAttempts(s, pid) > 0 && (pid === s.control.creatorId || garrisoned(s, pid));
+}
+
+/** The next player in a control chain who could subdue the monster, skipping (and logging) those with no attempts left. */
+function nextController(s) {
+  const k = s.control;
+  while (k.position < k.chain.length) {
+    const pid = k.chain[k.position];
+    const reason = controlAttempts(s, pid) <= 0 ? 'no_control_attempts'
+      : pid !== k.creatorId && !garrisoned(s, pid) ? 'not_garrisoned' : null;
+    if (!reason) return pid;
+    emit(s, 'CONTROL_SKIPPED', { playerId: pid, creatureId: k.creatureId, reason });
+    k.position += 1;
   }
+  return null;
 }
 
 function dawn(s) {
@@ -615,6 +672,7 @@ function advance(s) {
   while (!s.result) {
     if (++guard > 100000) throw new Error('advance(): no decision point reached');
     if (s.phase === 'day' || s.phase === 'night') {
+      if (s.pendingPick) { s.activePlayerId = s.pendingPick.playerId; return; }
       const p = nextPlacementPlayer(s);
       if (p) { s.activePlayerId = p.id; return; }
       endPhase(s);
@@ -626,8 +684,24 @@ function advance(s) {
       endPhase(s);
       s.phase = 'resolution';
       emit(s, 'PHASE_STARTED', {});
-      resolveResurrections(s);
-      if (s.result) break;
+      const c = s.commitment;
+      emit(s, 'COMMITMENTS_REVEALED', { commitments: c.order.map((id) => ({ playerId: id, attempt: c.choices[id] })) });
+    } else if (s.phase === 'resolution') {
+      // Attempts resolve in initiative order; a monster pauses resolution
+      // while players decide, one at a time, whether to subdue it.
+      if (s.control) {
+        const pid = nextController(s);
+        if (pid) { s.activePlayerId = pid; return; }
+        unleash(s, 'no_one_subdued');
+        continue;
+      }
+      const c = s.commitment;
+      if (c.resolved < c.order.length) {
+        const pid = c.order[c.resolved];
+        c.resolved += 1;
+        if (c.choices[pid]) resurrect(s, pid);
+        continue;
+      }
       endPhase(s);
       s.phase = 'dawn';
       emit(s, 'PHASE_STARTED', {});
@@ -699,7 +773,7 @@ function resurrect(s, pid) {
     scores: Object.fromEntries(ATTRIBUTES.map((a) => [a, { score: attributes[a].score, threshold: attributes[a].threshold, success: attributes[a].success }])),
     outcome: null, creatureId: null,
   };
-  const { vitality, control, humanity } = attributes;
+  const { vitality, humanity } = attributes;
   if (!vitality.success) {
     const pool = [...consumed];
     const refund = [];
@@ -714,24 +788,123 @@ function resurrect(s, pid) {
   }
   s.counters.creature += 1;
   const cid = `creature-${s.counters.creature}`;
-  if (control.success || humanity.success) {
-    const disposition = control.success && humanity.success ? 'controlled_and_humane' : control.success ? 'controlled' : 'humane';
-    s.creatures[cid] = { id: cid, ownerId: pid, status: 'stable', disposition, round: s.round };
+  if (humanity.success) {
+    s.creatures[cid] = { id: cid, ownerId: pid, status: 'stable', disposition: 'humane', round: s.round };
     s.creatureOrder.push(cid);
     s.stableTransitions.push(cid);
     record.outcome = 'stable';
     record.creatureId = cid;
     s.resurrections.push(record);
-    emit(s, 'CREATURE_STABILIZED', { playerId: pid, creatureId: cid, disposition });
-  } else {
-    s.creatures[cid] = { id: cid, ownerId: pid, status: 'unleashed', disposition: 'unleashed', round: s.round };
-    s.creatureOrder.push(cid);
-    record.outcome = 'unleashed';
-    record.creatureId = cid;
-    s.resurrections.push(record);
-    emit(s, 'CREATURE_UNLEASHED', { playerId: pid, creatureId: cid });
-    endGame(s, 'unleashed', s.players.filter((x) => s.objectives[x.id] === 'unleasher').map((x) => x.id));
+    emit(s, 'CREATURE_STABILIZED', { playerId: pid, creatureId: cid, disposition: 'humane' });
+    return;
   }
+  // A monster: the control chain starts with its creator and runs clockwise.
+  s.creatures[cid] = { id: cid, ownerId: pid, status: 'monster', disposition: 'monster', round: s.round };
+  s.creatureOrder.push(cid);
+  record.creatureId = cid;
+  record.controlDecisions = [];
+  const n = s.players.length;
+  const chain = Array.from({ length: n }, (_, i) => s.players[(p.seat + i) % n].id);
+  s.control = { creatorId: pid, creatureId: cid, parts: clone(consumed), chain, position: 0, record };
+  emit(s, 'MONSTER_CREATED', { playerId: pid, creatureId: cid, chain: [...chain] });
+}
+
+function mobCannotStopMonster(s) {
+  emit(s, 'MOB_FORMED', { suspicion: s.suspicion, overwhelmed: true });
+  unleash(s, 'mob_overwhelmed');
+}
+
+/** Control-roll effects for a player: research in type order, one entry per effective copy. */
+function controlEffects(s, pid) {
+  const out = [];
+  for (const type of Object.keys(s.config.research).sort()) {
+    const copies = researchCount(s, pid, type);
+    for (let i = 0; i < copies; i++) for (const e of s.config.research[type].effects) if (e.kind === 'control') out.push({ e, source: { kind: 'research', researchType: type, copy: i + 1 } });
+  }
+  return out;
+}
+
+/** Exact chance that a player's control roll succeeds. Pure: consumes no RNG. */
+export function estimateControl(s, pid) {
+  const cc = s.config.control;
+  return successChance([{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, pid).map((x) => x.e)], cc.threshold);
+}
+
+function successChance(effects, threshold) {
+  let dist = new Map([[0, 1]]);
+  for (const e of effects) {
+    if (e.op === 'threshold') { threshold += e.amount; continue; }
+    const faces = e.op === 'die' ? Array.from({ length: e.die }, (_, i) => e.sign * (i + 1)) : [e.amount];
+    const next = new Map();
+    for (const [v, pr] of dist) for (const f of faces) next.set(v + f, (next.get(v + f) || 0) + pr / faces.length);
+    dist = next;
+  }
+  let success = 0;
+  for (const [v, pr] of dist) if (v >= threshold) success += pr;
+  return success;
+}
+
+function attemptControl(s, pid) {
+  const k = s.control;
+  const p = getPlayer(s, pid);
+  const cc = s.config.control;
+  p.controlAttemptsUsed += 1;
+  const acc = { dice: [], fixed: [], thresholdAdjustments: [] };
+  const base = rollDie(s.rng, cc.baseDie);
+  acc.dice.push({ source: { kind: 'base' }, die: cc.baseDie, sign: 1, result: base, value: base });
+  for (const { e, source } of controlEffects(s, pid)) applyEffect(s, e, source, acc);
+  const score = acc.dice.reduce((a, d) => a + d.value, 0) + acc.fixed.reduce((a, f) => a + f.amount, 0);
+  const success = score >= cc.threshold;
+  for (const d of acc.dice) emit(s, 'DIE_ROLLED', { playerId: pid, purpose: 'control', source: d.source, die: d.die, sign: d.sign, result: d.result });
+  const roll = { dice: acc.dice, fixed: acc.fixed, threshold: cc.threshold, score, success };
+  emit(s, 'CONTROL_ROLLED', { playerId: pid, creatureId: k.creatureId, attemptsLeft: controlAttempts(s, pid), ...clone(roll) });
+  k.record.controlDecisions.push({ playerId: pid, subdue: true, score, threshold: cc.threshold, success });
+  if (success) { subdue(s, pid); return; }
+  // A failed attempt adds no suspicion; the monster passes on.
+  k.position += 1;
+}
+
+function subdue(s, pid) {
+  const k = s.control;
+  const p = getPlayer(s, pid);
+  const pool = [...k.parts];
+  const salvage = [];
+  const n = Math.min(s.config.control.subdueSalvage, pool.length);
+  for (let i = 0; i < n; i++) salvage.push(pool.splice(randInt(s.rng, pool.length), 1)[0]);
+  p.loose.push(...salvage);
+  const c = s.creatures[k.creatureId];
+  c.status = 'destroyed';
+  c.disposition = 'subdued';
+  c.subduedBy = pid;
+  k.record.outcome = 'subdued';
+  k.record.subduedBy = pid;
+  s.resurrections.push(k.record);
+  s.control = null;
+  emit(s, 'MONSTER_SUBDUED', { playerId: pid, creatorId: c.ownerId, creatureId: c.id, attemptsLeft: controlAttempts(s, pid), salvagedParts: clone(salvage), lostParts: clone(pool) });
+  // The struggle is noticed. The monster is already destroyed, so a mob
+  // formed now is an ordinary mob.
+  changeSuspicion(s, s.config.control.subdueSuspicion, 'monster_subdued', pid);
+}
+
+function declineSubdue(s, pid) {
+  const k = s.control;
+  k.record.controlDecisions.push({ playerId: pid, subdue: false });
+  k.position += 1;
+  emit(s, 'SUBDUE_DECLINED', { playerId: pid, creatureId: k.creatureId });
+  // The mob cannot stop a monster: if it forms now, the monster is unleashed.
+  changeSuspicion(s, s.config.control.declineSuspicion, 'monster_not_subdued', pid, mobCannotStopMonster);
+}
+
+function unleash(s, cause) {
+  const k = s.control;
+  const c = s.creatures[k.creatureId];
+  c.status = 'unleashed';
+  c.disposition = 'unleashed';
+  k.record.outcome = 'unleashed';
+  s.resurrections.push(k.record);
+  s.control = null;
+  emit(s, 'CREATURE_UNLEASHED', { playerId: c.ownerId, creatureId: c.id, cause });
+  endGame(s, 'unleashed', s.players.filter((x) => s.objectives[x.id] === 'unleasher').map((x) => x.id));
 }
 
 /**
@@ -751,28 +924,16 @@ export function estimateResurrection(s, pid) {
       const copies = researchCount(s, pid, type);
       for (let i = 0; i < copies; i++) for (const e of s.config.research[type].effects) if (e.kind === 'resurrection' && e.attribute === attr) effects.push(e);
     }
-    let dist = new Map([[0, 1]]);
-    let threshold = rc.thresholds[attr];
-    for (const e of effects) {
-      if (e.op === 'threshold') { threshold += e.amount; continue; }
-      const faces = e.op === 'die' ? Array.from({ length: e.die }, (_, i) => e.sign * (i + 1)) : [e.amount];
-      const next = new Map();
-      for (const [v, pr] of dist) for (const f of faces) next.set(v + f, (next.get(v + f) || 0) + pr / faces.length);
-      dist = next;
-    }
-    let success = 0;
-    for (const [v, pr] of dist) if (v >= threshold) success += pr;
-    out[attr] = { threshold, success };
+    const threshold = rc.thresholds[attr] + effects.filter((e) => e.op === 'threshold').reduce((a, e) => a + e.amount, 0);
+    out[attr] = { threshold, success: successChance(effects, rc.thresholds[attr]) };
   }
   const pv = out.vitality.success;
-  const pc = out.control.success;
   const ph = out.humanity.success;
-  const pBehaviourFails = (1 - pc) * (1 - ph);
   return {
     attributes: out,
     pFailed: 1 - pv,
-    pStable: pv * (1 - pBehaviourFails),
-    pUnleashed: pv * pBehaviourFails,
+    pStable: pv * ph,
+    pMonster: pv * (1 - ph),
   };
 }
 
@@ -810,6 +971,9 @@ const COMMAND_FIELDS = {
   PLACE_MEEPLE: { required: ['type', 'playerId', 'workerId', 'actionId'], optional: ['choices', 'seq'] },
   PASS_TURN: { required: ['type', 'playerId'], optional: ['seq'] },
   COMMIT_RESURRECTION: { required: ['type', 'playerId', 'attempt'], optional: ['seq'] },
+  SUBDUE_MONSTER: { required: ['type', 'playerId', 'subdue'], optional: ['seq'] },
+  PUBLISH_RESEARCH: { required: ['type', 'playerId', 'researchType'], optional: ['seq'] },
+  PICK_PARTS: { required: ['type', 'playerId', 'partIds'], optional: ['seq'] },
 };
 
 export const COMMAND_TYPES = Object.keys(COMMAND_FIELDS);
@@ -836,8 +1000,23 @@ export function validateCommand(s, cmd) {
     if (typeof cmd.attempt !== 'boolean') return err('INVALID_CHOICE', 'attempt must be a boolean.');
     return null;
   }
-  if (s.phase !== 'day' && s.phase !== 'night') return err('WRONG_PHASE', 'Workers can only be placed by day or night.');
+  if (cmd.type === 'SUBDUE_MONSTER') {
+    if (s.phase !== 'resolution' || !s.control) return err('WRONG_PHASE', 'There is no monster to subdue.');
+    if (typeof cmd.subdue !== 'boolean') return err('INVALID_CHOICE', 'subdue must be a boolean.');
+    return null;
+  }
+  if (cmd.type === 'PICK_PARTS') {
+    const k = s.pendingPick;
+    if (!k) return err('WRONG_PHASE', 'There are no drawn parts to pick from.');
+    const ids = cmd.partIds;
+    if (!Array.isArray(ids) || ids.length !== k.keep || new Set(ids).size !== ids.length) return err('INVALID_CHOICE', `Pick exactly ${k.keep} of the drawn parts.`);
+    for (const id of ids) if (!k.parts.some((x) => x.id === id)) return err('INVALID_TARGET', `Part ${id} was not drawn.`);
+    return null;
+  }
+  if (s.pendingPick) return err('PICK_PENDING', 'Pick from the drawn parts first.');
+  if (s.phase !== 'day' && s.phase !== 'night') return err('WRONG_PHASE', cmd.type === 'PUBLISH_RESEARCH' ? 'You can only publish on your day or night turn.' : 'Workers can only be placed by day or night.');
   if (cmd.type === 'PASS_TURN') return null;
+  if (cmd.type === 'PUBLISH_RESEARCH') return publishError(s, p, cmd.researchType);
 
   if (typeof cmd.workerId !== 'string') return err('INVALID_COMMAND', 'workerId must be a string.');
   if (typeof cmd.actionId !== 'string' || !s.config.actions[cmd.actionId]) return err('UNKNOWN_ACTION', `Unknown action ${cmd.actionId}.`);
@@ -874,6 +1053,22 @@ function applyCommand(s, cmd) {
     s.commitment.choices[p.id] = cmd.attempt;
     emit(s, 'COMMITMENT_LOCKED', { playerId: p.id });
     emit(s, 'COMMITMENT_RECORDED', { playerId: p.id, attempt: cmd.attempt }, [p.id]);
+  } else if (cmd.type === 'PICK_PARTS') {
+    const k = s.pendingPick;
+    const kept = k.parts.filter((x) => cmd.partIds.includes(x.id));
+    const discarded = k.parts.filter((x) => !cmd.partIds.includes(x.id));
+    p.loose.push(...kept);
+    s.pendingPick = null;
+    emit(s, 'PARTS_PICKED', { playerId: p.id, source: k.actionId, kept: clone(kept), discarded: clone(discarded) });
+  } else if (cmd.type === 'PUBLISH_RESEARCH') {
+    // A free action: the player keeps their turn.
+    p.published.push(cmd.researchType);
+    p.published.sort();
+    s.publications.push({ playerId: p.id, type: cmd.researchType, round: s.round });
+    emit(s, 'RESEARCH_PUBLISHED', { playerId: p.id, researchType: cmd.researchType });
+  } else if (cmd.type === 'SUBDUE_MONSTER') {
+    if (cmd.subdue) attemptControl(s, p.id);
+    else declineSubdue(s, p.id);
   }
 }
 
@@ -914,8 +1109,19 @@ export function getLegalCommands(s, pid) {
       { type: 'COMMIT_RESURRECTION', playerId: pid, attempt: false },
     ];
   }
+  if (s.phase === 'resolution') {
+    return [
+      { type: 'SUBDUE_MONSTER', playerId: pid, subdue: true },
+      { type: 'SUBDUE_MONSTER', playerId: pid, subdue: false },
+    ];
+  }
   const p = getPlayer(s, pid);
+  if (s.pendingPick) {
+    const k = s.pendingPick;
+    return combinations(k.parts.map((x) => x.id), k.keep).map((partIds) => ({ type: 'PICK_PARTS', playerId: pid, partIds }));
+  }
   const out = [{ type: 'PASS_TURN', playerId: pid }];
+  for (const t of publishable(p)) out.push({ type: 'PUBLISH_RESEARCH', playerId: pid, researchType: t });
   for (const w of playerWorkers(s, pid)) {
     if (!workerAvailable(s, w)) continue;
     for (const actionId of Object.keys(s.config.actions)) {
@@ -973,8 +1179,6 @@ function expandChoices(s, p, actionId, c, dedupe) {
   const out = [];
   if (actionId === 'research') {
     for (const id of c.researchCardId.values) out.push({ researchCardId: id });
-  } else if (actionId === 'publish') {
-    for (const t of c.researchType.values) out.push({ researchType: t });
   } else if (actionId === 'specimens') {
     const v = c.variantIds.values;
     const rec = (start, acc) => {
@@ -1035,10 +1239,13 @@ function publicPlayer(s, p) {
     id: p.id, name: p.name, seat: p.seat, money: p.money,
     loose: clone(p.loose), body: clone(p.body), bodyComplete: bodyComplete(p),
     research: [...p.research], published: [...p.published], igorsHired: p.igorsHired,
-    nextIgorCost: p.igorsHired < s.config.maxIgors ? nextIgorCost(s, p) : null,
+    nextIgorCost: igorCount(s, p) < s.config.maxIgors ? nextIgorCost(s, p) : null,
     passed: p.passed,
     effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, researchCount(s, p.id, t)])),
     assembleCapacity: assembleCapacity(s, p.id),
+    controlAttempts: controlAttempts(s, p.id),
+    controlChance: estimateControl(s, p.id),
+    garrisoned: garrisoned(s, p.id),
     resurrectionOdds: estimateResurrection(s, p.id),
     workers: playerWorkers(s, p.id).map((w) => ({ ...clone(w), availableNow: (s.phase === 'day' || s.phase === 'night') ? workerAvailable(s, w) : false })),
   };
@@ -1064,6 +1271,13 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     creatures: s.creatureOrder.map((id) => clone(s.creatures[id])),
     stableTransitions: [...s.stableTransitions],
     commitment: s.commitment ? { order: [...s.commitment.order], decided: s.commitment.order.filter((pid) => pid in s.commitment.choices) } : null,
+    pendingPick: s.pendingPick ? clone(s.pendingPick) : null,
+    control: s.control ? {
+      creatorId: s.control.creatorId, creatureId: s.control.creatureId, chain: [...s.control.chain], position: s.control.position,
+      deciderId: s.control.chain[s.control.position] || null, decisions: clone(s.control.record.controlDecisions),
+      // Players after the current decider who could still subdue this monster.
+      upcoming: s.control.chain.slice(s.control.position + 1).filter((pid) => canSubdue(s, pid)),
+    } : null,
     resurrections: clone(s.resurrections),
     commandCount: s.commandLog.length,
     result: s.result ? clone(s.result) : null,

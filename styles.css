@@ -2,7 +2,7 @@
 :root {
   --bg: #efe6d2; --bg2: #e4d8bd; --panel: #fbf6ea; --ink: #2a2118; --muted: #74664f; --line: #cdbd9c;
   --accent: #8e2a2a; --accent2: #a8781e; --good: #2f7a43; --bad: #a33a2a; --chip: #ede2c9;
-  --p0: #b8322f; --p1: #1f7f8a; --p2: #b07d12; --p3: #6d4fb0; --p4: #3f8a2e;
+  --p0: #b8322f; --p1: #1f7f8a; --p2: #b07d12; --p3: #6d4fb0; --p4: #3f8a2e; --p5: #b3477d;
   --shadow: 0 1px 2px rgba(60, 40, 10, .15), 0 4px 14px rgba(60, 40, 10, .08);
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -11,7 +11,7 @@
 body.night {
   --bg: #12101a; --bg2: #1b1826; --panel: #1f1c2b; --ink: #ebe4d6; --muted: #a49cb3; --line: #383349;
   --accent: #e06a5a; --accent2: #e9c46a; --good: #6fcf8c; --bad: #ff8a7a; --chip: #2b2739;
-  --p0: #ff7b70; --p1: #54d1d9; --p2: #f0c454; --p3: #b79bff; --p4: #8ad86e;
+  --p0: #ff7b70; --p1: #54d1d9; --p2: #f0c454; --p3: #b79bff; --p4: #8ad86e; --p5: #f08cc0;
   --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 6px 20px rgba(0, 0, 0, .35);
   color-scheme: dark;
 }
@@ -37,10 +37,10 @@ pre { max-height: 300px; overflow: auto; background: var(--bg2); padding: .5em; 
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); }
 
 /* player colours */
-.pc-0 { color: var(--p0); } .pc-1 { color: var(--p1); } .pc-2 { color: var(--p2); } .pc-3 { color: var(--p3); } .pc-4 { color: var(--p4); }
+.pc-0 { color: var(--p0); } .pc-1 { color: var(--p1); } .pc-2 { color: var(--p2); } .pc-3 { color: var(--p3); } .pc-4 { color: var(--p4); } .pc-5 { color: var(--p5); }
 .pc { font-weight: 700; }
-.pc-bg-0 { background: var(--p0); } .pc-bg-1 { background: var(--p1); } .pc-bg-2 { background: var(--p2); } .pc-bg-3 { background: var(--p3); } .pc-bg-4 { background: var(--p4); }
-.seat-0 { --pcol: var(--p0); } .seat-1 { --pcol: var(--p1); } .seat-2 { --pcol: var(--p2); } .seat-3 { --pcol: var(--p3); } .seat-4 { --pcol: var(--p4); }
+.pc-bg-0 { background: var(--p0); } .pc-bg-1 { background: var(--p1); } .pc-bg-2 { background: var(--p2); } .pc-bg-3 { background: var(--p3); } .pc-bg-4 { background: var(--p4); } .pc-bg-5 { background: var(--p5); }
+.seat-0 { --pcol: var(--p0); } .seat-1 { --pcol: var(--p1); } .seat-2 { --pcol: var(--p2); } .seat-3 { --pcol: var(--p3); } .seat-4 { --pcol: var(--p4); } .seat-5 { --pcol: var(--p5); }
 
 /* menu */
 .menu-screen { max-width: 980px; margin: 0 auto; padding: 32px 16px; }
@@ -137,7 +137,7 @@ pre { max-height: 300px; overflow: auto; background: var(--bg2); padding: .5em; 
 .o-stable { color: var(--good); font-weight: 700; } .o-unleash { color: var(--bad); font-weight: 700; } .o-fail { color: var(--muted); }
 
 /* overlays */
-.privacy { position: fixed; inset: 0; z-index: 50; background: #0c0a10; color: #ebe4d6; display: grid; place-items: center; padding: 16px; overflow: auto; --ink: #ebe4d6; --muted: #a49cb3; --line: #383349; --chip: #2b2739; --panel: #1f1c2b; --bg2: #1b1826; --good: #6fcf8c; --bad: #ff8a7a; --p0: #ff7b70; --p1: #54d1d9; --p2: #f0c454; --p3: #b79bff; --p4: #8ad86e; --accent: #c2453c; }
+.privacy { position: fixed; inset: 0; z-index: 50; background: #0c0a10; color: #ebe4d6; display: grid; place-items: center; padding: 16px; overflow: auto; --ink: #ebe4d6; --muted: #a49cb3; --line: #383349; --chip: #2b2739; --panel: #1f1c2b; --bg2: #1b1826; --good: #6fcf8c; --bad: #ff8a7a; --p0: #ff7b70; --p1: #54d1d9; --p2: #f0c454; --p3: #b79bff; --p4: #8ad86e; --p5: #f08cc0; --accent: #c2453c; }
 .privacy-card { max-width: 520px; width: 100%; text-align: center; display: grid; gap: 14px; justify-items: center; }
 .privacy.wide .privacy-card { max-width: 640px; }
 .privacy .body-grid { width: 100%; }
@@ -170,6 +170,7 @@ pre { max-height: 300px; overflow: auto; background: var(--bg2); padding: .5em; 
 .attr ul { margin: 0; padding-left: 1.1em; font-size: 12px; }
 .outcome { font-family: var(--serif); font-size: 1.15rem; font-weight: 700; margin: 8px 0 0; }
 .outcome.stable { color: var(--good); } .outcome.unleash { color: var(--bad); } .outcome.fail { color: var(--muted); }
+.outcome.minor { font-family: inherit; font-size: 0.95rem; font-weight: 400; color: var(--muted); margin-top: 4px; }
 .reveal { font-size: 14px; }
 .headline { font-family: var(--serif); font-size: 1.3rem; }
 .results { width: 100%; border-collapse: collapse; margin: 10px 0; }
