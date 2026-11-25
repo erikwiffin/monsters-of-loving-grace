@@ -25,7 +25,7 @@ A player cannot acquire a research type they have already personally discovered.
 
 ## Publishing
 
-The publish action (day, Scientist only) makes one research type the player has personally discovered permanently available to all players, and pays the publisher 2 money. The publisher keeps personal discovery credit. Every publication is recorded publicly with the publisher, the type and the round.
+**Ruling: publishing is a free action.** During their own day or night turn, before placing a worker or passing, a player may publish any number of research types they have personally discovered, using `PUBLISH_RESEARCH` (spec 011). Publishing needs no worker, costs nothing, pays nothing immediately and does not end the turn. It makes the type permanently available to all players. The publisher keeps personal discovery credit. Every publication is recorded publicly with the publisher, the type and the round.
 
 **Ruling:** a player may publish any type they have personally discovered and have not already published themselves, *even if another player has already published that type*. Each player may publish a given type at most once.
 
@@ -52,4 +52,4 @@ Effective research counts are public, since they derive from public discoveries 
 
 ## Lecture
 
-**Ruling:** lecture income is 1 + the number of types this player has published, capped at 4 total. See spec 022.
+**Ruling:** lecture income is 1, plus 1 for each discovery this player has published, with no cap. See spec 022. Publishing pays off through lectures, so sharing research is worth more over time.

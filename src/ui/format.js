@@ -30,8 +30,8 @@ export function actionText(id, def, cfg) {
     case 'specimens': return `Pay ${def.cost}: choose any ${def.count} named body parts.`;
     case 'hire': return `Pay ${cfg.igorCosts.join(' / ')}: hire an Igor (works from next round, max ${cfg.maxIgors}).`;
     case 'charity': return `Pay ${def.cost}: suspicion −${def.reduction}.`;
-    case 'lecture': return `Gain ${def.base} + types you have published (max ${def.cap}).`;
-    case 'publish': return `Publish a discovery for everyone; gain ${def.gain}.`;
+    case 'lecture': return `Gain ${def.base} + 1 per discovery you have published${def.cap == null ? '' : ` (max ${def.cap})`}.`;
+    case 'garrison': return 'Lets you subdue other players\' monsters this round.';
     case 'graves': return `Gain ${def.parts} random parts. d6: 1–3 → +1 suspicion.`;
     case 'morgue': return `Gain ${def.parts} random parts. d6: 1–2 → +2, 3–4 → +1 suspicion.`;
     case 'assemble': return `Install ${def.max} loose parts into empty slots (+1 per Advanced Anatomy).`;
@@ -50,7 +50,7 @@ export function workerLabel(w) {
 const REASONS = {
   medicine: 'medicine', research: 'research', specimens: 'specimens', hire: 'hiring', charity: 'charity',
   lecture: 'lecture', publish: 'publication', graves: 'grave robbing', morgue: 'morgue raid', conceal: 'covering tracks',
-  failed_resurrection: 'failed resurrection', monster_not_subdued: 'monster not subdued',
+  failed_resurrection: 'failed resurrection', monster_not_subdued: 'monster not subdued', creature_created: 'a Creature walks',
 };
 
 /** One-line description of a public event, or null to omit it from the log. */
@@ -84,7 +84,7 @@ export function describeEvent(e, ctx) {
     case 'CREATURE_STABILIZED': return `${n(e.playerId)}'s Creature lives — and is <b>${e.disposition.replace(/_/g, ' ')}</b>!`;
     case 'MONSTER_CREATED': return `${n(e.playerId)}'s Creature lives — but it is a <b class="danger">monster</b>! Who will subdue it?`;
     case 'SUBDUE_DECLINED': return `${n(e.playerId)} does not subdue the monster.`;
-    case 'CONTROL_SKIPPED': return `${n(e.playerId)} has no control attempts left.`;
+    case 'CONTROL_SKIPPED': return e.reason === 'not_garrisoned' ? `${n(e.playerId)} has no one in the garrison and cannot subdue it.` : `${n(e.playerId)} has no control attempts left.`;
     case 'MONSTER_SUBDUED': return `${n(e.playerId)} subdues and destroys the monster (${e.attemptsLeft} control attempt${e.attemptsLeft === 1 ? '' : 's'} left), salvaging ${e.salvagedParts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
     case 'CREATURE_UNLEASHED': return `${n(e.playerId)}'s monster is <b class="danger">UNLEASHED</b>!`;
     case 'DAWN_CHECK': return e.stableTransitions.length ? `${e.stableTransitions.length} Creature(s) stabilized this round.` : null;

@@ -28,7 +28,7 @@ Two catastrophes end the game immediately, in whatever phase they happen. No fur
 - **The mob.** When suspicion reaches the threshold (10), the villagers form a mob and arrest every scientist. The Inquisitor wins if that card was dealt to a player.
 - **An unleashed monster.** The Unleasher wins if that card was dealt to a player.
 
-**Ruling:** if the mob forms because a player declined to subdue a monster, the mob cannot stop it. The monster is unleashed instead, and the game ends as an unleashing, not a mob.
+**Ruling:** if the mob forms while a monster awaits subduing, the mob cannot stop it. The monster is unleashed instead, and the game ends as an unleashing, not a mob.
 
 In either case every other player loses, including anyone who already stabilized a Creature that round. If the matching antagonist is the unseen card, or otherwise not dealt, everyone loses together. Neither antagonist wins from the other's catastrophe.
 
@@ -49,12 +49,15 @@ When the game ends for any reason, every objective, including the unseen card, i
 
 Suspicion is one shared integer meter from 0 to 10, starting at 0. It is shown as a plain meter, with its current and maximum values and no named or visually distinct bands. Every change is public, attributed to the responsible player and reason, logged, and clamped to 0–10. Every increase immediately checks the mob threshold.
 
-Only four things raise suspicion:
+Only five things raise suspicion:
 
 - discovered grave robbing (graves action);
 - discovered morgue theft (morgue action);
-- a failed resurrection, meaning a failed Vitality roll;
+- a failed resurrection, meaning a failed Vitality roll (+1);
+- a living Creature, stable or monster (+1 when Vitality succeeds);
 - declining to subdue a monster when able to (+2 per player who declines).
+
+**Ruling:** if a stable Creature's +1 forms the mob, the mob wins for the Inquisitor at once, before dawn. If a monster's +1 forms it, the monster is unleashed instead (spec 025).
 
 Only two things lower it: charity (−2) and covering tracks (−1). Specs 022 and 025 give the details. Suspicion never rises automatically, at dawn or over time, and dawn does not change it.
 

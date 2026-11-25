@@ -2,8 +2,8 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.4.0';
-export const SCHEMA_VERSION = 2;
+export const ENGINE_VERSION = '0.5.0';
+export const SCHEMA_VERSION = 3;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
 export const ATTRIBUTES = ['vitality', 'humanity'];
@@ -47,6 +47,8 @@ export const DEFAULT_CONFIG = {
     thresholds: { vitality: 20, humanity: 20 },
     failedVitalityRefund: 3,
     failedVitalitySuspicion: 1,
+    // Suspicion added whenever a body passes Vitality (stable Creature or monster).
+    creatureSuspicion: 1,
   },
   // Subduing a monster whose Humanity failed (spec 025).
   control: {
@@ -61,8 +63,9 @@ export const DEFAULT_CONFIG = {
     specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: 2, igor: true, cost: 2, count: 2 },
     hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: 1, igor: false },
     charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: 1, igor: true, cost: 3, reduction: 2 },
-    lecture: { phase: 'day', name: 'Give a lecture', location: 'Scientific society', capacity: 1, igor: false, base: 1, cap: 4 },
-    publish: { phase: 'day', name: 'Publish a paper', location: 'Scientific journal', capacity: 1, igor: false, gain: 2 },
+    // cap: null means no cap on lecture income.
+    lecture: { phase: 'day', name: 'Give a lecture', location: 'Scientific society', capacity: 1, igor: false, base: 1, cap: null },
+    garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: 2, igor: true },
     graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: 2, igor: true, parts: 2, suspicionTable: [1, 1, 1, 0, 0, 0] },
     morgue: { phase: 'night', name: 'Raid the morgue', location: 'Morgue', capacity: 1, igor: true, parts: 3, suspicionTable: [2, 2, 1, 1, 0, 0] },
     assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: 2 },

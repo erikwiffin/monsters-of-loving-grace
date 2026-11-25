@@ -14,6 +14,7 @@ Day and night follow the same procedure. Starting with the first player and goin
 - A player with no legal placement at the moment is skipped automatically; they don't have to pass. If another player's action later makes one of their placements legal, they get another turn.
 - The phase ends automatically when nobody who hasn't passed has a legal placement.
 - Passing is always allowed when it is your turn.
+- Before placing or passing, the active player may publish any of their discoveries as a free action (spec 023). Publishing does not end the turn.
 
 At the start of night, everyone's pass status resets and the turn returns to the first player.
 

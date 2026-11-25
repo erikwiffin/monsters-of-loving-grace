@@ -4,7 +4,7 @@ Every committed action that a player would perform at the physical table is a se
 
 ## What is and isn't a command
 
-Commands are player decisions: placing a worker with all of its choices, passing, committing to or declining a resurrection attempt, and choosing whether to subdue a monster. Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
+Commands are player decisions: placing a worker with all of its choices, passing, publishing research, committing to or declining a resurrection attempt, and choosing whether to subdue a monster. Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
 
 Dice outcomes, suspicion changes, resource grants, research refills, phase transitions, resurrection results, victory and defeat are never commands. The engine resolves them automatically.
 
@@ -13,16 +13,16 @@ Dice outcomes, suspicion changes, resource grants, research refills, phase trans
 Every command has a `type` and the acting `playerId`. It may also carry an optional `seq`, described below. Unknown command types and unknown fields are rejected.
 
 - `PASS_TURN` gives up all of the player's remaining placements in the current day or night phase. Passing is irrevocable for that phase.
+- `PUBLISH_RESEARCH` with a `researchType` is legal for the active player on their day or night turn, for a type they have discovered and not yet published (spec 023). The player keeps the turn.
 - `COMMIT_RESURRECTION` with `attempt: true | false` is legal only for the eligible player currently being prompted during the commitment phase.
 - `SUBDUE_MONSTER` with `subdue: true | false` is legal only for the player currently deciding in a monster's control chain during resolution (spec 025).
 - `PLACE_MEEPLE` names a `workerId`, an `actionId` and a `choices` object. `choices` may be omitted for actions that need no choices. The choices required by each action are:
 
 | Action | Choices |
 |---|---|
-| medicine, hire, charity, lecture, graves, morgue, conceal | none (`{}`) |
+| medicine, hire, charity, lecture, garrison, graves, morgue, conceal | none (`{}`) |
 | research | `researchCardId`: a market card |
 | specimens | `variantIds`: exactly two part variant IDs; duplicates allowed |
-| publish | `researchType`: a research type ID |
 | assemble | `partIds`: one or more unique loose part instance IDs, up to the player's assembly capacity |
 | experiment | `partIds`: exactly two unique loose part instance IDs; `researchCardId`: a market card |
 
@@ -61,6 +61,7 @@ A command may include `seq`, equal to the number of commands accepted so far. If
 `getLegalCommands(state, playerId)` returns nothing unless that player is the one to act. Otherwise it lists every legal command template:
 
 - `PASS_TURN`, which is always legal in day or night;
+- one `PUBLISH_RESEARCH` per type the player may publish, in day or night;
 - one entry per available worker and legal action;
 - both commitment options during the commitment phase;
 - both subdue options for the player deciding in a control chain.

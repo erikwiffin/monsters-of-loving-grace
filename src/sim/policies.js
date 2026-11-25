@@ -34,9 +34,22 @@ function effectValue(e) {
   return 0;
 }
 
-function variantValue(cfg, variantId) {
-  return cfg.partVariants[variantId].effects.reduce((a, e) => a + effectValue(e) * (e.attribute === 'vitality' ? 1 : 1.5), 0);
+// The Unleasher wants a body that lives but lacks Humanity.
+function variantValue(cfg, variantId, objective) {
+  const humanityWeight = objective === 'unleasher' ? -1.5 : 1.5;
+  return cfg.partVariants[variantId].effects.reduce((a, e) => a + effectValue(e) * (e.attribute === 'vitality' ? 1 : humanityWeight), 0);
 }
+
+// Research types each objective keeps to itself rather than publishing.
+const NO_PUBLISH = {
+  prometheus: ['philosophy'],
+  visionary: [],
+  inquisitor: ['discretion', 'philosophy'],
+  unleasher: ['philosophy', 'neurology'],
+};
+const UNLEASHER_MAX_STABLE = 0.05;
+const VISIONARY_MIN_RIVALS = 3;
+const GARRISON_ALERT_PARTS = 4;
 
 /**
  * A simple greedy strategy: earn money, buy useful research, gather the best
@@ -55,8 +68,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
         // A monster is loose in the control chain (spec 025). Subduing costs
         // one control attempt; declining adds suspicion.
         const k = view.control;
-        const attemptsOf = (pid) => view.players.find((p) => p.id === pid).controlAttempts;
-        const last = !k.chain.slice(k.position + 1).some((pid) => attemptsOf(pid) > 0);
+        const last = k.upcoming.length === 0;
         const declineBringsMob = view.suspicion + cfg.control.declineSuspicion >= view.suspicionMax;
         let doSubdue;
         if (objective === 'unleasher') doSubdue = false;
@@ -81,11 +93,19 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
           attempt = safeEnough;
         } else if (objective === 'visionary') {
           // A lone Creature loses for everyone; only try alongside a rival body.
-          const rivalBodies = view.players.some((p) => p.id !== me.id && p.bodyComplete);
-          attempt = rivalBodies && safeEnough;
+          // Commitments are secret, so it waits until enough rivals are ready
+          // that at least one is likely to attempt alongside it.
+          const rivalBodies = view.players.filter((p) => p.id !== me.id && p.bodyComplete).length;
+          attempt = rivalBodies >= Math.min(VISIONARY_MIN_RIVALS, view.players.length - 1) && safeEnough;
         } else if (objective === 'unleasher') {
-          // Wants a monster to escape; a stable Creature loses.
-          attempt = odds.pMonster > odds.pStable;
+          // Wants a monster to escape; a stable Creature loses for everyone.
+          // With no rival garrisoned, nobody else can subdue its monster, so
+          // a monster is a win. Otherwise only attempt when stability is
+          // very unlikely.
+          const rivalGuard = view.players.some((p) => p.id !== me.id && p.garrisoned && p.controlAttempts > 0);
+          attempt = rivalGuard
+            ? odds.pMonster > odds.pStable * 4 && odds.pStable <= UNLEASHER_MAX_STABLE
+            : odds.pMonster > odds.pStable;
         } else {
           // Inquisitor: only a failed Vitality helps (+1 suspicion), and only
           // when that failure would bring the mob.
@@ -93,6 +113,13 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
         }
         return legal.find((c) => c.attempt === attempt) || legal[0];
       }
+      // Publishing is free and keeps the turn (spec 023): share whatever
+      // helps this objective before placing a worker.
+      const pub = legal.find((c) => c.type === 'PUBLISH_RESEARCH' && !(NO_PUBLISH[objective] || []).includes(c.researchType));
+      if (pub) return pub;
+      const installed = (p) => Object.values(p.body).filter(Boolean).length;
+      // A body with four or more parts can be completed tonight.
+      const rivalsNearlyReady = view.players.filter((p) => p.id !== me.id && installed(p) >= GARRISON_ALERT_PARTS).length;
       const open = {};
       for (const [type, def] of Object.entries(cfg.partTypes)) open[type] = def.slots.filter((sl) => me.body[sl] === null).length;
       const needed = Object.values(open).reduce((a, b) => a + b, 0);
@@ -125,21 +152,28 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
             let v = 0;
             for (const vid of c.choices.variantIds) {
               const t = cfg.partVariants[vid].type;
-              if (left[t] > 0) { left[t]--; v += 2 + variantValue(cfg, vid) * 0.4; } else v -= 1;
+              if (left[t] > 0) { left[t]--; v += 2 + variantValue(cfg, vid, objective) * 0.4; } else v -= 1;
             }
             return looseFits >= needed ? v - 4 : v;
           }
           case 'hire': return view.round <= 5 ? 3.5 : 1;
           case 'charity': return wantsSuspicion ? -1 : susp * 6 - 1;
           case 'lecture': return 1 + me.published.length;
-          case 'publish': return objective === 'visionary' ? 3.5 : 2;
+          case 'garrison': {
+            // A garrisoned worker lets its owner subdue rivals' monsters; for
+            // the Unleasher, filling the space keeps others from doing so.
+            if (!rivalsNearlyReady) return 0;
+            if (objective === 'unleasher') return 3.5;
+            if (me.garrisoned || me.controlAttempts === 0) return 0;
+            return objective === 'inquisitor' ? 2.5 : 4.5;
+          }
           case 'graves': case 'morgue': {
             if (wantsSuspicion) return 4;
             if (looseFits >= needed) return 0.5 - susp * 3;
             return (a === 'morgue' ? 3.5 : 3) - susp * 4;
           }
           case 'assemble': {
-            return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId) * 0.5 + 1, 0);
+            return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0);
           }
           case 'conceal': return wantsSuspicion ? -1 : susp * 6 - 0.5;
           default: return 0.5;

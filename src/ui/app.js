@@ -210,7 +210,7 @@ function playerPanel(view, p) {
     <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${aiKind(p.id) ? `<span class="badge ai" title="${esc(AI_KINDS[aiKind(p.id)])}">AI</span>` : ''}${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
     <div class="row"><span class="lbl">Workers</span>${workers}${p.nextIgorCost != null ? `<span class="muted small">next Igor ${p.nextIgorCost}</span>` : ''}</div>
     <div class="row"><span class="lbl">Research</span>${research || '<span class="muted">none</span>'}</div>
-    <div class="row"><span class="lbl">Control</span>${p.controlAttempts} attempt${p.controlAttempts === 1 ? '' : 's'} left</div>
+    <div class="row"><span class="lbl">Control</span>${p.controlAttempts} attempt${p.controlAttempts === 1 ? '' : 's'} left${p.garrisoned ? ' · <b>garrisoned</b>' : ''}</div>
     ${bodyDiagram(cfg, p)}
     ${oddsLine(p.resurrectionOdds)}
     <div class="row"><span class="lbl">Loose</span>${looseHtml}</div>
@@ -294,7 +294,7 @@ function turnBar(view) {
     <span class="who"><span class="pc pc-${p.seat}">${esc(p.name)}</span>'s turn <small>(${view.phase === 'day' ? '☀ day' : '☾ night'})</small></span>
     <span class="wsels">Worker: ${chips}</span>
     <span class="spacer"></span>
-    ${aiKind(pid) ? `<span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : `<button data-act="peek" class="ghost">View my objective</button>
+    ${aiKind(pid) ? `<span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : `${p.research.some((t) => !p.published.includes(t)) ? '<button data-act="publish-open" class="ghost">Publish…</button>' : ''}<button data-act="peek" class="ghost">View my objective</button>
     <button data-act="pass" class="ghost danger-outline">Pass ${view.phase}</button>`}
   </div>`;
 }
@@ -401,13 +401,24 @@ function subdueFlow() {
   const c = ctx();
   const me = view.players.find((x) => x.id === view.activePlayerId);
   const own = k.creatorId === me.id;
-  const later = k.chain.slice(k.position + 1).filter((pid) => view.players.find((x) => x.id === pid).controlAttempts > 0);
+  const later = k.upcoming;
   const inc = view.config.control.declineSuspicion;
   return modal('⚡ A monster is loose',
     `<p>${own ? 'Your' : `<span class="pc pc-${c.seat(k.creatorId)}">${esc(c.name(k.creatorId))}</span>'s`} Creature lives, but its Humanity failed.</p>
     <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Subduing spends one, destroys the monster and gives you ${view.config.control.subdueSalvage} of its parts at random.</p>
     <p class="small muted">If you don't, suspicion rises by ${inc} (now ${view.suspicion}/${view.suspicionMax}) and ${later.length ? `the monster passes to ${later.map((pid) => esc(c.name(pid))).join(', then ')}` : '<b>nobody else can stop it: it will be unleashed</b>'}. If the mob forms, it cannot stop the monster either.</p>`,
     '<button class="big" data-act="subdue" data-v="1">Subdue it</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>');
+}
+
+// Publishing is a free action on your own turn (spec 023).
+function publishModal() {
+  const s = ui.state;
+  const cfg = s.config;
+  const opts = E.getLegalCommands(s, s.activePlayerId).filter((c) => c.type === 'PUBLISH_RESEARCH');
+  const p = E.getPlayer(s, s.activePlayerId);
+  const body = `<p>Share a discovery with every player. It costs nothing and doesn't use your turn. Each discovery you publish adds 1 to your lecture income (now ${cfg.actions.lecture.base + p.published.length}).</p>
+    <div class="choice-row">${opts.map((c) => `<button data-act="publish" data-id="${c.researchType}" title="${esc(cfg.research[c.researchType].text)}">${esc(cfg.research[c.researchType].name)}</button>`).join('')}</div>`;
+  return modal('Publish a discovery', body, '<button data-act="close" class="ghost">Cancel</button>');
 }
 
 function reportOverlay(rep) {
@@ -433,7 +444,7 @@ function reportOverlay(rep) {
     } else if (e.type === 'SUBDUE_DECLINED') {
       blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} does not subdue it.</p>`);
     } else if (e.type === 'CONTROL_SKIPPED') {
-      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} has no control attempts left.</p>`);
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} ${e.reason === 'not_garrisoned' ? 'has no one in the garrison' : 'has no control attempts left'}.</p>`);
     } else if (e.type === 'MONSTER_SUBDUED') {
       blocks.push(`<p class="outcome stable">${esc(c.name(e.playerId))} subdues and destroys the monster, salvaging ${e.salvagedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_UNLEASHED') {
@@ -488,10 +499,6 @@ function choiceModal() {
     case 'research': body += `<div class="opts">${marketOptions('card')}</div>`; break;
     case 'experiment': body += `<h3>Spend ${def.partCost} parts</h3><div class="opts">${looseOptions(false)}</div><h3>Take a card</h3><div class="opts">${marketOptions('card')}</div>`; break;
     case 'assemble': body += `<p class="small">Choose up to ${E.assembleCapacity(s, p.id)} parts for empty slots.</p><div class="opts">${looseOptions(true)}</div>`; break;
-    case 'publish': body += `<div class="opts">${p.research.map((t) => {
-      const done = p.published.includes(t);
-      return `<label class="opt ${done ? 'disabled' : ''}"><input type="radio" name="rtype" value="${t}" ${done ? 'disabled' : ''}> <b>${esc(cfg.research[t].name)}</b>${done ? ' <span class="muted">(you already published this)</span>' : ''}</label>`;
-    }).join('')}</div>`; break;
     case 'specimens': {
       const opts = Object.entries(cfg.partTypes).map(([t, td]) => `<optgroup label="${esc(td.name)}">${Object.entries(cfg.partVariants).filter(([, v]) => v.type === t).map(([id, v]) => `<option value="${id}">${esc(v.name)} — ${esc(v.effects.length ? v.effects.map(effectText).join(', ') : 'no effect')}</option>`).join('')}</optgroup>`).join('');
       body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="variant${i}">${opts}</select></label>`).join('');
@@ -513,7 +520,6 @@ function collectChoices() {
     case 'research': return { researchCardId: card() };
     case 'experiment': return { partIds: checkedParts(), researchCardId: card() };
     case 'assemble': return { partIds: checkedParts() };
-    case 'publish': return { researchType: (q('.modal input[name=rtype]:checked') || {}).value };
     case 'specimens': return { variantIds: qa('.modal select[name^=variant]').map((x) => x.value) };
     default: return undefined;
   }
@@ -614,7 +620,7 @@ function render() {
     if (forced) html += forced;
     else if (ui.modal) {
       const k = ui.modal.kind;
-      html += k === 'choice' ? choiceModal() : k === 'peek' ? peekOverlay() : k === 'confirm' ? confirmOverlay() : k === 'rules' ? rulesOverlay() : k === 'debug' ? debugOverlay() : '';
+      html += k === 'choice' ? choiceModal() : k === 'publish' ? publishModal() : k === 'peek' ? peekOverlay() : k === 'confirm' ? confirmOverlay() : k === 'rules' ? rulesOverlay() : k === 'debug' ? debugOverlay() : '';
     }
   }
   if (ui.toast) html += `<div class="toast ${ui.toast.kind}" role="status">${esc(ui.toast.msg)}</div>`;
@@ -728,6 +734,11 @@ const handlers = {
     render();
   },
   'commit-done'() { ui.commit = null; render(); },
+  'publish-open'() { ui.modal = { kind: 'publish' }; render(); },
+  publish(el) {
+    if (act({ type: 'PUBLISH_RESEARCH', playerId: ui.state.activePlayerId, researchType: el.dataset.id })) ui.modal = null;
+    render();
+  },
   subdue(el) {
     const s = ui.state;
     act({ type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: el.dataset.v === '1' });

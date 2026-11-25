@@ -44,6 +44,9 @@ function validateConfig(cfg) {
   for (const attr of ATTRIBUTES) {
     if (!Number.isInteger(cfg.resurrection.thresholds[attr])) throw new Error(`resurrection threshold for ${attr} must be an integer`);
   }
+  for (const k of ['failedVitalitySuspicion', 'creatureSuspicion']) {
+    if (!Number.isInteger(cfg.resurrection[k]) || cfg.resurrection[k] < 0) throw new Error(`resurrection.${k} must be a non-negative integer`);
+  }
   for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSalvage']) {
     if (!Number.isInteger(cfg.control[k]) || cfg.control[k] < 0) throw new Error(`control.${k} must be a non-negative integer`);
   }
@@ -339,30 +342,17 @@ export const HANDLERS = {
     choiceKeys: [],
     prereq: () => null,
     apply(s, p, w, def) {
-      // Ruling: 1 + research types this player has published, capped at 4 total.
-      changeMoney(s, p, Math.min(def.cap, def.base + p.published.length), 'lecture');
+      // 1 + one per discovery this player has published (no cap by default).
+      const pay = def.base + p.published.length;
+      changeMoney(s, p, def.cap == null ? pay : Math.min(def.cap, pay), 'lecture');
     },
   },
-  publish: {
-    choiceKeys: ['researchType'],
-    prereq(s, p) {
-      return p.research.some((t) => !p.published.includes(t)) ? null : err('NOTHING_TO_PUBLISH', 'You have no unpublished discoveries.');
-    },
-    checkChoices(s, p, w, def, c) {
-      const t = c.researchType;
-      if (typeof t !== 'string' || !s.config.research[t]) return err('INVALID_TARGET', `Unknown research type ${t}.`);
-      if (!p.research.includes(t)) return err('NOT_DISCOVERED', `You have not discovered ${t}.`);
-      if (p.published.includes(t)) return err('ALREADY_PUBLISHED', `You already published ${t}.`);
-      return null;
-    },
-    constraints: (s, p) => ({ researchType: { type: 'enum', values: p.research.filter((t) => !p.published.includes(t)) } }),
-    apply(s, p, w, def, c) {
-      p.published.push(c.researchType);
-      p.published.sort();
-      s.publications.push({ playerId: p.id, type: c.researchType, round: s.round });
-      emit(s, 'RESEARCH_PUBLISHED', { playerId: p.id, researchType: c.researchType });
-      changeMoney(s, p, def.gain, 'publish');
-    },
+  garrison: {
+    // No effect of its own: a garrisoned worker lets its owner subdue other
+    // players' monsters during this round's resolution (spec 025).
+    choiceKeys: [],
+    prereq: () => null,
+    apply() {},
   },
   graves: {
     choiceKeys: [],
@@ -436,6 +426,22 @@ export const HANDLERS = {
     apply: (s, p, w, def) => changeSuspicion(s, -def.reduction, 'conceal', p.id),
   },
 };
+
+function publishError(s, p, t) {
+  if (typeof t !== 'string' || !s.config.research[t]) return err('INVALID_TARGET', `Unknown research type ${t}.`);
+  if (!p.research.includes(t)) return err('NOT_DISCOVERED', `You have not discovered ${t}.`);
+  if (p.published.includes(t)) return err('ALREADY_PUBLISHED', `You already published ${t}.`);
+  return null;
+}
+
+function publishable(p) {
+  return p.research.filter((t) => !p.published.includes(t));
+}
+
+/** Whether a player has a worker in the garrison this round. */
+export function garrisoned(s, pid) {
+  return (s.occupancy.day.garrison || []).some((wid) => s.workers[wid] && s.workers[wid].ownerId === pid);
+}
 
 /** Prerequisite check for placing a worker on an action, ignoring choices. */
 function placementError(s, p, w, actionId) {
@@ -579,13 +585,20 @@ function startCommitment(s) {
   s.commitment = { order: eligible, choices: {}, resolved: 0 };
 }
 
+/** Whether a player may subdue the current monster: an attempt left, and a garrisoned worker unless they created it. */
+function canSubdue(s, pid) {
+  return controlAttempts(s, pid) > 0 && (pid === s.control.creatorId || garrisoned(s, pid));
+}
+
 /** The next player in a control chain who could subdue the monster, skipping (and logging) those with no attempts left. */
 function nextController(s) {
   const k = s.control;
   while (k.position < k.chain.length) {
     const pid = k.chain[k.position];
-    if (controlAttempts(s, pid) > 0) return pid;
-    emit(s, 'CONTROL_SKIPPED', { playerId: pid, creatureId: k.creatureId, reason: 'no_control_attempts' });
+    const reason = controlAttempts(s, pid) <= 0 ? 'no_control_attempts'
+      : pid !== k.creatorId && !garrisoned(s, pid) ? 'not_garrisoned' : null;
+    if (!reason) return pid;
+    emit(s, 'CONTROL_SKIPPED', { playerId: pid, creatureId: k.creatureId, reason });
     k.position += 1;
   }
   return null;
@@ -755,6 +768,8 @@ function resurrect(s, pid) {
     record.creatureId = cid;
     s.resurrections.push(record);
     emit(s, 'CREATURE_STABILIZED', { playerId: pid, creatureId: cid, disposition: 'humane' });
+    // The village notices a new life; a mob formed now arrests everyone before dawn.
+    changeSuspicion(s, s.config.resurrection.creatureSuspicion, 'creature_created', pid);
     return;
   }
   // A monster: the control chain starts with its creator and runs clockwise.
@@ -766,6 +781,12 @@ function resurrect(s, pid) {
   const chain = Array.from({ length: n }, (_, i) => s.players[(p.seat + i) % n].id);
   s.control = { creatorId: pid, creatureId: cid, parts: clone(consumed), chain, position: 0, record };
   emit(s, 'MONSTER_CREATED', { playerId: pid, creatureId: cid, chain: [...chain] });
+  changeSuspicion(s, s.config.resurrection.creatureSuspicion, 'creature_created', pid, mobCannotStopMonster);
+}
+
+function mobCannotStopMonster(s) {
+  emit(s, 'MOB_FORMED', { suspicion: s.suspicion, overwhelmed: true });
+  unleash(s, 'mob_overwhelmed');
 }
 
 function subdue(s, pid) {
@@ -795,10 +816,7 @@ function declineSubdue(s, pid) {
   k.position += 1;
   emit(s, 'SUBDUE_DECLINED', { playerId: pid, creatureId: k.creatureId });
   // The mob cannot stop a monster: if it forms now, the monster is unleashed.
-  changeSuspicion(s, s.config.control.declineSuspicion, 'monster_not_subdued', pid, (st) => {
-    emit(st, 'MOB_FORMED', { suspicion: st.suspicion, overwhelmed: true });
-    unleash(st, 'mob_overwhelmed');
-  });
+  changeSuspicion(s, s.config.control.declineSuspicion, 'monster_not_subdued', pid, mobCannotStopMonster);
 }
 
 function unleash(s, cause) {
@@ -888,6 +906,7 @@ const COMMAND_FIELDS = {
   PASS_TURN: { required: ['type', 'playerId'], optional: ['seq'] },
   COMMIT_RESURRECTION: { required: ['type', 'playerId', 'attempt'], optional: ['seq'] },
   SUBDUE_MONSTER: { required: ['type', 'playerId', 'subdue'], optional: ['seq'] },
+  PUBLISH_RESEARCH: { required: ['type', 'playerId', 'researchType'], optional: ['seq'] },
 };
 
 export const COMMAND_TYPES = Object.keys(COMMAND_FIELDS);
@@ -919,8 +938,9 @@ export function validateCommand(s, cmd) {
     if (typeof cmd.subdue !== 'boolean') return err('INVALID_CHOICE', 'subdue must be a boolean.');
     return null;
   }
-  if (s.phase !== 'day' && s.phase !== 'night') return err('WRONG_PHASE', 'Workers can only be placed by day or night.');
+  if (s.phase !== 'day' && s.phase !== 'night') return err('WRONG_PHASE', cmd.type === 'PUBLISH_RESEARCH' ? 'You can only publish on your day or night turn.' : 'Workers can only be placed by day or night.');
   if (cmd.type === 'PASS_TURN') return null;
+  if (cmd.type === 'PUBLISH_RESEARCH') return publishError(s, p, cmd.researchType);
 
   if (typeof cmd.workerId !== 'string') return err('INVALID_COMMAND', 'workerId must be a string.');
   if (typeof cmd.actionId !== 'string' || !s.config.actions[cmd.actionId]) return err('UNKNOWN_ACTION', `Unknown action ${cmd.actionId}.`);
@@ -957,6 +977,12 @@ function applyCommand(s, cmd) {
     s.commitment.choices[p.id] = cmd.attempt;
     emit(s, 'COMMITMENT_LOCKED', { playerId: p.id });
     emit(s, 'COMMITMENT_RECORDED', { playerId: p.id, attempt: cmd.attempt }, [p.id]);
+  } else if (cmd.type === 'PUBLISH_RESEARCH') {
+    // A free action: the player keeps their turn.
+    p.published.push(cmd.researchType);
+    p.published.sort();
+    s.publications.push({ playerId: p.id, type: cmd.researchType, round: s.round });
+    emit(s, 'RESEARCH_PUBLISHED', { playerId: p.id, researchType: cmd.researchType });
   } else if (cmd.type === 'SUBDUE_MONSTER') {
     if (cmd.subdue) subdue(s, p.id);
     else declineSubdue(s, p.id);
@@ -1008,6 +1034,7 @@ export function getLegalCommands(s, pid) {
   }
   const p = getPlayer(s, pid);
   const out = [{ type: 'PASS_TURN', playerId: pid }];
+  for (const t of publishable(p)) out.push({ type: 'PUBLISH_RESEARCH', playerId: pid, researchType: t });
   for (const w of playerWorkers(s, pid)) {
     if (!workerAvailable(s, w)) continue;
     for (const actionId of Object.keys(s.config.actions)) {
@@ -1065,8 +1092,6 @@ function expandChoices(s, p, actionId, c, dedupe) {
   const out = [];
   if (actionId === 'research') {
     for (const id of c.researchCardId.values) out.push({ researchCardId: id });
-  } else if (actionId === 'publish') {
-    for (const t of c.researchType.values) out.push({ researchType: t });
   } else if (actionId === 'specimens') {
     const v = c.variantIds.values;
     const rec = (start, acc) => {
@@ -1132,6 +1157,7 @@ function publicPlayer(s, p) {
     effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, researchCount(s, p.id, t)])),
     assembleCapacity: assembleCapacity(s, p.id),
     controlAttempts: controlAttempts(s, p.id),
+    garrisoned: garrisoned(s, p.id),
     resurrectionOdds: estimateResurrection(s, p.id),
     workers: playerWorkers(s, p.id).map((w) => ({ ...clone(w), availableNow: (s.phase === 'day' || s.phase === 'night') ? workerAvailable(s, w) : false })),
   };
@@ -1160,6 +1186,8 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     control: s.control ? {
       creatorId: s.control.creatorId, creatureId: s.control.creatureId, chain: [...s.control.chain], position: s.control.position,
       deciderId: s.control.chain[s.control.position] || null, decisions: clone(s.control.record.controlDecisions),
+      // Players after the current decider who could still subdue this monster.
+      upcoming: s.control.chain.slice(s.control.position + 1).filter((pid) => canSubdue(s, pid)),
     } : null,
     resurrections: clone(s.resurrections),
     commandCount: s.commandLog.length,

@@ -184,26 +184,27 @@ test('specimens, assemble limits and Advanced Anatomy', () => {
   assert.equal(p().loose.length, 1);
 });
 
-test('lecture pays 1 + own published types (cap 4); publish may repeat another player\'s type', () => {
+test('lecture pays 1 + each own publication, uncapped; publishing is free and keeps the turn', () => {
   let s = createGame({ playerCount: 3 }, 'lecture');
   const pid = s.activePlayerId;
   const other = s.players.find((p) => p.id !== pid).id;
   const p = s.players.find((x) => x.id === pid);
-  p.research = ['anatomy', 'galvanism', 'medicine', 'neurology'];
-  p.published = ['anatomy', 'galvanism'];
-  s.publications.push({ playerId: pid, type: 'anatomy', round: 1 }, { playerId: pid, type: 'galvanism', round: 1 });
+  p.research = ['anatomy', 'discretion', 'galvanism', 'medicine', 'neurology', 'philosophy'];
+  p.published = ['anatomy', 'discretion', 'galvanism', 'neurology', 'philosophy'];
   s.publications.push({ playerId: other, type: 'medicine', round: 1 });
   const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'lecture' });
-  assert.equal(r.state.players.find((x) => x.id === pid).money, 3 + 3);
-  p.published.push('neurology');
-  p.published.push('medicine');
-  const r2 = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'lecture' });
-  assert.equal(r2.state.players.find((x) => x.id === pid).money, 3 + 4);
-  p.published = ['anatomy', 'galvanism'];
-  const r3 = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'publish', choices: { researchType: 'medicine' } });
-  assert.equal(r3.ok, true);
-  assert.equal(r3.state.publications.filter((x) => x.type === 'medicine').length, 2);
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'publish', choices: { researchType: 'anatomy' } }).error.code, 'ALREADY_PUBLISHED');
+  assert.equal(r.state.players.find((x) => x.id === pid).money, 3 + 6, 'no cap of 4');
+  assert.ok(!('publish' in s.config.actions), 'publishing is not a worker action');
+  // Publishing: free, may repeat another player's type, keeps the turn.
+  assert.deepEqual(getLegalCommands(s, pid).filter((c) => c.type === 'PUBLISH_RESEARCH').map((c) => c.researchType), ['medicine']);
+  const s2 = ok(s, { type: 'PUBLISH_RESEARCH', playerId: pid, researchType: 'medicine' });
+  assert.equal(s2.activePlayerId, pid);
+  assert.equal(s2.players.find((x) => x.id === pid).money, 3);
+  assert.equal(s2.publications.filter((x) => x.type === 'medicine').length, 2);
+  assert.equal(dispatch(s2, { type: 'PUBLISH_RESEARCH', playerId: pid, researchType: 'medicine' }).error.code, 'ALREADY_PUBLISHED');
+  assert.equal(dispatch(s2, { type: 'PUBLISH_RESEARCH', playerId: other, researchType: 'medicine' }).error.code, 'NOT_YOUR_TURN');
+  const r2 = dispatch(s2, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'lecture' });
+  assert.equal(r2.state.players.find((x) => x.id === pid).money, 3 + 7);
 });
 
 test('research and experiment acquire market cards and refill', () => {
@@ -492,7 +493,8 @@ test('saves made under different default rules still load and keep their rules',
 // Control attempts and monsters (spec 025)
 // ---------------------------------------------------------------------------
 
-const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 } } };
+const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 }, creatureSuspicion: 0 } };
+const garrison = (st, ...pids) => { st.occupancy.day.garrison = pids.map(sci); };
 const player = (s, pid) => s.players.find((p) => p.id === pid);
 
 test('defaults: thresholds 20, suspicion track 10, three control attempts each', () => {
@@ -522,7 +524,7 @@ test('creator may subdue their own monster: destroyed, 3 parts salvaged, no susp
 });
 
 test('the chain runs clockwise from the creator; each decline adds 2 suspicion; the subduer takes the parts', () => {
-  let s = resurrectionGame(MONSTER, (st) => fullBody(st, 'p2'));
+  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p2'); garrison(st, 'p1', 'p3'); });
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
   s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
   assert.equal(s.suspicion, 2);
@@ -544,6 +546,7 @@ test('the chain runs clockwise from the creator; each decline adds 2 suspicion; 
 test('players with no control attempts are skipped without suspicion', () => {
   let s = resurrectionGame(MONSTER, (st) => {
     fullBody(st, 'p2');
+    garrison(st, 'p1', 'p3');
     st.players.find((p) => p.id === 'p3').controlAttemptsUsed = 3;
   });
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
@@ -569,6 +572,7 @@ test('if a decline brings the mob, the monster is unleashed: the Unleasher wins,
   let s = resurrectionGame({ ...MONSTER, suspicionMax: 3 }, (st) => {
     st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
     fullBody(st, 'p2');
+    garrison(st, 'p1', 'p3');
   });
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
   s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
@@ -581,7 +585,7 @@ test('if a decline brings the mob, the monster is unleashed: the Unleasher wins,
 });
 
 test('resolution continues with the next commitment after a monster is subdued', () => {
-  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p1'); fullBody(st, 'p2'); });
+  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p1'); fullBody(st, 'p2'); garrison(st, 'p1', 'p2'); });
   const order = s.commitment.order;
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
@@ -615,6 +619,7 @@ test('heuristic: the Inquisitor subdues rather than let a decline bring the mob'
     let s = resurrectionGame({ ...MONSTER, suspicionMax }, (st) => {
       st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
       fullBody(st, 'p2');
+      garrison(st, 'p1', 'p3');
     });
     s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
     assert.equal(s.activePlayerId, 'p2');
@@ -629,6 +634,7 @@ test('heuristic: non-Unleashers subdue when last in the chain; Unleashers never 
     let s = resurrectionGame(MONSTER, (st) => {
       st.objectives = { p1: objective, p2: 'prometheus', p3: 'prometheus' };
       fullBody(st, 'p2');
+      garrison(st, 'p1', 'p3');
     });
     s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
     s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
@@ -637,5 +643,57 @@ test('heuristic: non-Unleashers subdue when last in the chain; Unleashers never 
     const view = getPlayerView(s, 'p1');
     const cmd = heuristicPolicy('h').decide({ playerId: 'p1', view, legal: enumerateLegalCommands(s, 'p1') });
     assert.equal(cmd.subdue, objective !== 'unleasher', objective);
+  }
+});
+
+test('only garrisoned players may subdue others\' monsters; the creator needs no garrison', () => {
+  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p2'); garrison(st, 'p1'); });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  assert.equal(s.activePlayerId, 'p2', 'the creator decides without a garrison worker');
+  assert.deepEqual(getPublicView(s).control.upcoming, ['p1']);
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+  assert.equal(s.activePlayerId, 'p1', 'p3 has nobody in the garrison and is skipped');
+  assert.ok(s.events.some((e) => e.type === 'CONTROL_SKIPPED' && e.playerId === 'p3' && e.reason === 'not_garrisoned'));
+  assert.equal(s.suspicion, 2, 'the skipped player adds no suspicion');
+});
+
+test('garrison is a day action, Igor-permitted, capacity 2, and lasts until dawn', () => {
+  const g = createGame({}, 'garrison').config.actions.garrison;
+  assert.deepEqual([g.phase, g.igor, g.capacity], ['day', true, 2]);
+  let s = createGame({ playerCount: 3 }, 'garrison2');
+  const pid = s.activePlayerId;
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'garrison' });
+  assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, true);
+  s = passAllUntil(s, (x) => x.round === 2);
+  assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, false);
+});
+
+test('a living Creature adds suspicion; at the threshold a stable Creature brings the mob, a monster is unleashed', () => {
+  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => fullBody(st, 'p2'));
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  assert.equal(s.suspicionHistory.at(-1).reason, 'creature_created');
+  assert.equal(s.suspicion, 1);
+  let m = resurrectionGame({ suspicionMax: 1, resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
+    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
+    fullBody(st, 'p2');
+  });
+  m = ok(m, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  assert.equal(m.result.reason, 'mob');
+  assert.deepEqual(m.result.winners, ['p1'], 'the mob arrests everyone before dawn');
+  let u = resurrectionGame({ suspicionMax: 1, resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => {
+    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
+    fullBody(st, 'p2');
+  });
+  u = ok(u, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  assert.equal(u.result.reason, 'unleashed');
+  assert.deepEqual(u.result.winners, ['p3']);
+});
+
+test('batch aggregate reports win rate per dealt role', () => {
+  const { aggregate } = runBatch({ games: 5, policies: 'heuristic', seedPrefix: 'roles', includeCommands: false });
+  const dealt = Object.values(aggregate.dealtByObjective).reduce((a, b) => a + b, 0);
+  assert.equal(dealt, 5 * 5);
+  for (const [o, rate] of Object.entries(aggregate.winRateByObjective)) {
+    assert.equal(rate, Math.round(1000 * (aggregate.winsByObjective[o] || 0) / aggregate.dealtByObjective[o]) / 1000);
   }
 });

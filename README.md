@@ -48,7 +48,7 @@ The in-game **Rules** button shows the same summary.
 
   | Phase | Actions |
   |---|---|
-  | Day | medicine, research, specimens, hire, charity, lecture, publish |
+  | Day | medicine, research, specimens, hire, charity, lecture, garrison |
   | Night | graves, morgue, assemble, experiment, conceal |
 
   Each action space shows its cost and effect.
@@ -56,15 +56,15 @@ The in-game **Rules** button shows the same summary.
   - Roll d20 each for Vitality (needs 20+) and Humanity (20+). Installed parts and research add dice, fixed modifiers or threshold changes.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
   - Vitality and Humanity succeed → a stable Creature.
-  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to subdue it, which destroys it and gives the subduer 3 of its parts at random. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
-- **Suspicion** comes only from graves, the morgue, failed resurrections and monsters left unsubdued. Charity lowers it by 2 and covering tracks by 1.
+  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to subdue it — everyone except the creator needs a worker in the garrison that round — which destroys it and gives the subduer 3 of its parts at random. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
+- **Suspicion** comes only from graves, the morgue, failed resurrections, living Creatures (+1 each) and monsters left unsubdued. Charity lowers it by 2 and covering tracks by 1.
 
 ### Designer rulings (clarifications to spec v0.3)
 
 These rulings resolve ambiguities in the spec and are implemented in the engine:
 
-1. **Lecture** pays `1 + number of research types this player has published`, capped at 4 in total.
-2. **Publishing** is allowed for any type the player personally discovered and has not yet published themselves, even if another player already published it. Each player publishes a type at most once.
+1. **Lecture** pays `1 + number of discoveries this player has published`, with no cap.
+2. **Publishing** is a free action on your own day or night turn: no worker, no cost, no immediate payment, and your turn continues. It is allowed for any type the player personally discovered and has not yet published themselves, even if another player already published it. Each player publishes a type at most once.
 3. **Research copies stack.** A player's effective copies of a type are 1 for their own discovery, plus 1 for each publication of that type by *another* player. Every copy applies its effect:
    - Galvanic Mastery adds 1d6 per copy; Moral Philosophy adds +5 per copy.
    - Medical Expertise adds +1 money per copy; Advanced Anatomy adds +1 assembly slot per copy.
@@ -149,16 +149,16 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 | Command | Fields |
 |---|---|
 | `PASS_TURN` | — (gives up all remaining placements this day/night) |
+| `PUBLISH_RESEARCH` | `researchType` — a type you discovered and haven't published; free, on your day/night turn, keeps the turn |
 | `COMMIT_RESURRECTION` | `attempt: boolean` — only for the prompted eligible player |
 | `SUBDUE_MONSTER` | `subdue: boolean` — only for the player currently deciding in a monster's control chain |
 | `PLACE_MEEPLE` | `workerId`, `actionId`, `choices` (below) |
 
 | `actionId` | `choices` |
 |---|---|
-| `medicine`, `hire`, `charity`, `lecture`, `graves`, `morgue`, `conceal` | `{}` (or omitted) |
+| `medicine`, `hire`, `charity`, `lecture`, `garrison`, `graves`, `morgue`, `conceal` | `{}` (or omitted) |
 | `research` | `{ researchCardId: 'card-17' }`: a market card whose type you have not discovered |
 | `specimens` | `{ variantIds: ['robust_chest', 'poet_brain'] }`: exactly 2 variant IDs, duplicates allowed |
-| `publish` | `{ researchType: 'anatomy' }` |
 | `assemble` | `{ partIds: ['part-12', 'part-18'] }`: 1 to capacity unique loose part instances, each needing an empty matching slot |
 | `experiment` | `{ partIds: ['part-3', 'part-9'], researchCardId: 'card-4' }`: exactly 2 loose parts |
 
