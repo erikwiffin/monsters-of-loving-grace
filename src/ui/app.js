@@ -31,6 +31,8 @@ const ui = {
 };
 
 const AI_KINDS = { heuristic: 'AI — heuristic', random: 'AI — random' };
+const DEFAULT_SEAT_KIND = 'heuristic';
+const seatPlaceholder = (kind, i) => `${kind === 'human' ? 'Scientist' : 'Automaton'} ${i + 1}`;
 const aiKind = (pid) => (ui.meta && ui.meta.ai && ui.meta.ai[pid]) || null;
 const humanIds = () => ui.state.players.filter((p) => !aiKind(p.id)).map((p) => p.id);
 
@@ -583,8 +585,10 @@ function debugOverlay() {
 function renderMenu() {
   const save = readSave();
   const n = ui.menuCount || 5;
-  const kindOpts = (i) => [['human', 'Human'], ...Object.entries(AI_KINDS)].map(([k, label]) => `<option value="${k}" ${((ui.menuKinds || [])[i] || 'human') === k ? 'selected' : ''}>${label}</option>`).join('');
-  const names = Array.from({ length: n }, (_, i) => `<div class="prow"><label>Player ${i + 1} <input name="pname" maxlength="24" value="${esc((ui.menuNames || [])[i] || '')}" placeholder="Scientist ${i + 1}"></label><label>Played by <select name="pkind">${kindOpts(i)}</select></label></div>`).join('');
+  // Seats default to AI; naming a seat makes it human (see the input listener).
+  const kindOf = (i) => (ui.menuKinds || [])[i] || DEFAULT_SEAT_KIND;
+  const kindOpts = (i) => [['human', 'Human'], ...Object.entries(AI_KINDS)].map(([k, label]) => `<option value="${k}" ${kindOf(i) === k ? 'selected' : ''}>${label}</option>`).join('');
+  const names = Array.from({ length: n }, (_, i) => `<div class="prow"><label>Player ${i + 1} <input name="pname" maxlength="24" value="${esc((ui.menuNames || [])[i] || '')}" ${((ui.menuNames || [])[i] || '').trim() ? 'data-named="1"' : ''} placeholder="${seatPlaceholder(kindOf(i), i)}"></label><label>Played by <select name="pkind">${kindOpts(i)}</select></label></div>`).join('');
   return `<div class="menu-screen">
     <div class="title"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–6 players.</p></div>
     <div class="menu-grid">
@@ -828,11 +832,30 @@ root.addEventListener('change', (ev) => {
     ui.menuKinds = [...root.querySelectorAll('select[name=pkind]')].map((x) => x.value);
     ui.menuCount = Number(ev.target.value);
     render();
+  } else if (ev.target.name === 'pkind') {
+    const input = ev.target.closest('.prow')?.querySelector('input[name=pname]');
+    const i = [...root.querySelectorAll('select[name=pkind]')].indexOf(ev.target);
+    if (input) input.placeholder = seatPlaceholder(ev.target.value, i);
   } else if (ev.target.id === 'debug') {
     ui.debug = ev.target.checked;
     writeDebugFlag(ui.debug);
     render();
   }
+});
+
+// Giving an AI seat a name switches it to Human. Only the first character
+// typed into an empty name does this, so a named seat can still be set to AI.
+root.addEventListener('input', (ev) => {
+  if (ev.target.name !== 'pname') return;
+  const named = ev.target.value.trim() !== '';
+  if (named && !ev.target.dataset.named) {
+    const sel = ev.target.closest('.prow')?.querySelector('select[name=pkind]');
+    if (sel && sel.value !== 'human') {
+      sel.value = 'human';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+  if (named) ev.target.dataset.named = '1'; else delete ev.target.dataset.named;
 });
 
 document.addEventListener('keydown', (ev) => {
