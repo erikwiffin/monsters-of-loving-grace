@@ -56,7 +56,7 @@ The in-game **Rules** button shows the same summary.
   - Roll d20 each for Vitality (needs 20+) and Humanity (20+). Installed parts and research add dice, fixed modifiers or threshold changes.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
   - Vitality and Humanity succeed → a stable Creature.
-  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to subdue it — everyone except the creator needs an Igor in the garrison that round — which destroys it, gives the subduer 3 of its parts at random and adds 1 suspicion. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
+  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to try to subdue it — everyone except the creator needs an Igor in the garrison that round. A try rolls d20 + control research (Mesmerism +1d6, Restraining Apparatus +4 per copy) and needs 20+. Success destroys the monster, gives the subduer 3 of its parts at random and adds 1 suspicion; failure adds nothing and the monster passes on. Each player who could try but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
 - **Suspicion** comes only from graves, the morgue, failed resurrections, subdued monsters (+1) and monsters left unsubdued (+2 per decline). Only charity lowers it (by 2).
 
 ### Designer rulings (clarifications to spec v0.3)

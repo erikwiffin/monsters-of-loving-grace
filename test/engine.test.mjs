@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import {
   createGame, dispatch, getLegalCommands, enumerateLegalCommands, getPlayerView, getPublicView,
-  serialize, deserialize, replay, getReplayRecord, researchCount, estimateResurrection, controlAttempts,
+  serialize, deserialize, replay, getReplayRecord, researchCount, estimateResurrection, estimateControl, controlAttempts,
 } from '../src/engine/index.js';
 import { heuristicPolicy } from '../src/sim/policies.js';
 import { runGame, runBatch } from '../src/sim/runner.js';
@@ -55,7 +55,7 @@ test('setup follows section 3', () => {
       assert.deepEqual(p.research, []);
     }
     assert.equal(s.market.length, 4);
-    assert.equal(s.deck.length, 16, '5 research types x 4 copies, minus the market');
+    assert.equal(s.deck.length, 24, '7 research types x 4 copies, minus the market');
     assert.equal(s.suspicion, 0);
     assert.equal(s.phase, 'day');
     assert.equal(s.activePlayerId, s.players[s.firstPlayerIndex].id);
@@ -259,7 +259,7 @@ test('research and experiment acquire market cards and refill', () => {
   assert.deepEqual(p.research, [card.type]);
   assert.equal(p.money, 8);
   assert.equal(s.market.length, 4);
-  assert.equal(s.deck.length, 15);
+  assert.equal(s.deck.length, 23);
   const dupe = s.market.find((c) => c.type === card.type);
   if (dupe) {
     assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: s.activePlayerId, workerId: sci(s.activePlayerId), actionId: 'research', choices: { researchCardId: 'card-999' } }).ok, false);
@@ -536,7 +536,8 @@ test('saves made under different default rules still load and keep their rules',
 // Control attempts and monsters (spec 025)
 // ---------------------------------------------------------------------------
 
-const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 } } };
+// Monsters every time, and control rolls that always succeed (see the control-roll tests).
+const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 } }, control: { threshold: -100 } };
 const garrison = (st, ...pids) => { st.occupancy.day.garrison = pids.map(sci); };
 const player = (s, pid) => s.players.find((p) => p.id === pid);
 
@@ -581,7 +582,7 @@ test('the chain runs clockwise from the creator; each decline adds 2 suspicion; 
   assert.equal(player(s, 'p2').loose.length, 0);
   assert.equal(controlAttempts(s, 'p1'), 2);
   assert.equal(controlAttempts(s, 'p2'), 3);
-  assert.deepEqual(s.resurrections[0].controlDecisions, [
+  assert.deepEqual(s.resurrections[0].controlDecisions.map(({ playerId, subdue }) => ({ playerId, subdue })), [
     { playerId: 'p2', subdue: false }, { playerId: 'p3', subdue: false }, { playerId: 'p1', subdue: true },
   ]);
   assert.equal(s.result, null);
@@ -749,4 +750,42 @@ test('batch aggregate reports win rate per dealt role', () => {
   for (const [o, rate] of Object.entries(aggregate.winRateByObjective)) {
     assert.equal(rate, Math.round(1000 * (aggregate.winsByObjective[o] || 0) / aggregate.dealtByObjective[o]) / 1000);
   }
+});
+
+test('a control attempt rolls d20 + research against 20; a failed roll spends the attempt, adds no suspicion and passes the monster on', () => {
+  let s = resurrectionGame({ ...MONSTER, control: { threshold: 100 } }, (st) => { fullBody(st, 'p2'); garrison(st, 'p1', 'p3'); });
+  s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  const r = dispatch(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
+  s = r.state;
+  const roll = r.events.find((e) => e.type === 'CONTROL_ROLLED');
+  assert.equal(roll.success, false);
+  assert.equal(roll.dice[0].die, 20);
+  assert.equal(controlAttempts(s, 'p2'), 2, 'the attempt is spent');
+  assert.equal(s.suspicion, 0, 'a failed roll adds no suspicion');
+  assert.equal(s.activePlayerId, 'p3');
+  assert.equal(s.creatures[s.control.creatureId].status, 'monster');
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
+  assert.equal(s.suspicion, 2, 'declining to try still adds 2');
+});
+
+test('control research: Mesmerism adds 1d6 and Restraining Apparatus +4 per effective copy', () => {
+  const s = createGame({ playerCount: 3 }, 'control-odds');
+  assert.ok(Math.abs(estimateControl(s, 'p1') - 0.05) < 1e-9, 'a bare d20 succeeds only on 20');
+  player(s, 'p1').research = ['mesmerism', 'restraint'];
+  // d20 + d6 >= 16 has probability 51/120.
+  assert.ok(Math.abs(estimateControl(s, 'p1') - 51 / 120) < 1e-9);
+  s.publications.push({ playerId: 'p1', type: 'restraint', round: 1 });
+  // p2 gets one copy of Restraining Apparatus through the publication: d20 >= 16.
+  assert.ok(Math.abs(estimateControl(s, 'p2') - 0.25) < 1e-9);
+  let t = resurrectionGame({ ...MONSTER, control: { threshold: 20 } }, (st) => {
+    fullBody(st, 'p2');
+    st.players.find((p) => p.id === 'p2').research = ['mesmerism', 'restraint'];
+  });
+  t = ok(t, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  const r = dispatch(t, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
+  const roll = r.events.find((e) => e.type === 'CONTROL_ROLLED');
+  assert.deepEqual(roll.dice.map((d) => d.source.kind === 'base' ? 'base' : d.source.researchType), ['base', 'mesmerism']);
+  assert.deepEqual(roll.fixed.map((f) => f.amount), [4]);
+  assert.equal(roll.score, roll.dice.reduce((a, d) => a + d.value, 0) + 4);
+  assert.equal(roll.success, roll.score >= 20);
 });

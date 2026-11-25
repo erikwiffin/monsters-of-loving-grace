@@ -45,7 +45,7 @@ const NO_PUBLISH = {
   prometheus: ['philosophy'],
   visionary: [],
   inquisitor: ['discretion', 'philosophy'],
-  unleasher: ['philosophy', 'neurology'],
+  unleasher: ['philosophy', 'neurology', 'mesmerism', 'restraint'],
 };
 const UNLEASHER_MAX_STABLE = 0.05;
 const VISIONARY_MIN_RIVALS = 3;
@@ -97,7 +97,9 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
         // monster is a setback rather than a catastrophe.
         const odds = me.resurrectionOdds;
         const late = view.round >= 12;
-        const safeEnough = me.controlAttempts > 0
+        // Its own monster is only a setback if it can probably subdue it.
+        const canControl = me.controlAttempts > 0 && me.controlChance >= 0.5;
+        const safeEnough = canControl
           ? odds.pStable >= (late ? 0.1 : 0.2)
           : odds.pStable >= odds.pMonster * 1.2 || (late && odds.pStable >= odds.pMonster * 0.6);
         let attempt;
@@ -115,10 +117,13 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
           // With no rival garrisoned, nobody else can subdue its monster, so
           // a monster is a win. Otherwise only attempt when stability is
           // very unlikely.
-          const rivalGuard = view.players.some((p) => p.id !== me.id && p.garrisoned && p.controlAttempts > 0);
-          attempt = rivalGuard
-            ? odds.pMonster > odds.pStable * 4 && odds.pStable <= UNLEASHER_MAX_STABLE
-            : odds.pMonster > odds.pStable;
+          // Chance that every garrisoned rival fails their control roll.
+          const pEscape = view.players
+            .filter((p) => p.id !== me.id && p.garrisoned && p.controlAttempts > 0)
+            .reduce((a, p) => a * (1 - p.controlChance), 1);
+          attempt = pEscape >= 0.5
+            ? odds.pMonster * pEscape > odds.pStable
+            : odds.pMonster > odds.pStable * 4 && odds.pStable <= UNLEASHER_MAX_STABLE;
         } else {
           // Inquisitor: only a failed Vitality helps (+1 suspicion), and only
           // when that failure would bring the mob.
@@ -158,10 +163,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
           case 'research': case 'experiment': {
             const card = view.market.find((k) => k.id === c.choices.researchCardId);
             const want = (objective === 'unleasher'
-              ? { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 }
+              ? { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, mesmerism: 0.5, restraint: 0.5, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 }
               : objective === 'inquisitor'
-                ? { galvanism: 0.5, neurology: 1, philosophy: 1, medicine: 3, discretion: 0 }
-                : { galvanism: 4, neurology: 4.5, philosophy: 4.5, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 })[card.type] || 1;
+                ? { galvanism: 0.5, neurology: 1, philosophy: 1, mesmerism: 1.5, restraint: 1.5, medicine: 3, discretion: 0 }
+                : { galvanism: 4, neurology: 3.5, philosophy: 4.5, mesmerism: 4, restraint: 4, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 })[card.type] || 1;
             if (a === 'experiment') {
               const fitsLost = c.choices.partIds.filter((id) => { const x = me.loose.find((y) => y.id === id); return open[x.type] > 0; }).length;
               return want - fitsLost * 1.5 + 0.5;

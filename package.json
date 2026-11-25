@@ -1,6 +1,6 @@
 {
   "name": "monsters-of-loving-grace",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Browser prototype and headless rules engine for the Monsters of Loving Grace board game.",
   "type": "module",

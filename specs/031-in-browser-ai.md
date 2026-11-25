@@ -33,4 +33,4 @@ So a human always sees reports before play continues. When at least one seat is 
 
 ## Strength
 
-The built-in policies are simple. They exist for playtesting and casual opponents, not as a tuned challenge. The heuristic in particular accepts resurrection risks readily (spec 014).
+The built-in policies are simple. They exist for playtesting and casual opponents, not as a tuned challenge. 

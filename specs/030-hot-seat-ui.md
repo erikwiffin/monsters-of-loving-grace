@@ -46,11 +46,11 @@ Nothing is sent until the player confirms. After a morgue raid, a dialog shows t
 
 ## Reports and game over
 
-After resolution, a resurrection report shows the revealed commitments and, for every attempt, each attribute's dice, sources, modifiers, threshold, score and outcome. It stays until dismissed. When a monster is created, the report appears before the control chain begins, and again after each decision that produced new events, so it also shows every subdue, decline, skip and suspicion change.
+After resolution, a resurrection report shows the revealed commitments and, for every attempt, each attribute's dice, sources, modifiers, threshold, score and outcome. It stays until dismissed. When a monster is created, the report appears before the control chain begins, and again after each decision that produced new events, so it also shows every control roll with its dice and modifiers, every decline, skip and suspicion change. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
 
 ## Subduing monsters
 
-Subduing is a public decision, so there is no pass-the-device screen. While a human player is deciding in a control chain (spec 025), a dialog over the board names the monster's creator and shows the player's remaining control attempts, what subduing gives them, the suspicion a decline adds, and who comes next in the chain, or that nobody else can stop the monster. It offers Subdue it and Let it pass. Every player panel shows that player's remaining control attempts, and the turn bar names who is deciding. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
+Subduing is a public decision, so there is no pass-the-device screen. While a human player is deciding in a control chain (spec 025), a dialog over the board names the monster's creator and shows the player's remaining control attempts, their exact chance of a successful control roll, what a success gives them, the suspicion a decline adds, and who comes next in the chain, or that nobody else can stop the monster. It offers Try to subdue and Let it pass. Every player panel shows that player's remaining control attempts and control chance, and the turn bar names who is deciding.
 
 ## Game controls
 

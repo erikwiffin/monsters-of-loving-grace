@@ -13,7 +13,7 @@ The public API is exported from `src/engine/index.js`. Function names may change
 - produce a filtered observation for one player, and a public-only view;
 - dispatch a command, returning the new state and the events it caused, or a structured error;
 - serialize, deserialize and replay games;
-- compute exact resurrection odds for a player's current body, without consuming randomness.
+- compute exact resurrection odds for a player's current body, and control-roll odds, without consuming randomness.
 
 ## Determinism and randomness
 
@@ -23,7 +23,7 @@ Randomness is consumed in a fixed, documented order, so replays are stable:
 
 - At setup: choose the starting player, then shuffle the objective deck, then shuffle the research deck.
 - Graves and morgue: draw all random parts first, then roll the discovery die.
-- Resurrection: see spec 025.
+- Resurrection and control rolls: see spec 025.
 
 Random draws use unbiased rejection sampling, and shuffles use Fisher–Yates.
 
@@ -39,7 +39,7 @@ Every balance constant and catalogue lives in one default configuration (`src/en
 
 `createGame(overrides, seed)` deep-merges overrides into the defaults. Nested objects merge, and arrays replace. The resolved configuration is copied into the game state, so a game, and its replay, carries its own rules. This lets controlled experiments change balance without touching engine code. Invalid configurations are rejected at creation, for example a player count outside 3–6, unknown part types, unsupported dice, or an action with no rules handler.
 
-Card and part effects are data, not code. A resurrection effect is a record naming an attribute (vitality or humanity) and one of three operations: an additional signed die (d4, d6, d8, d10, d12 or d20), a signed fixed modifier, or a threshold adjustment. Research cards may also carry non-resurrection effect kinds: medicine bonus, suspicion reduction and extra control attempts. There is deliberately no general scripting language. New effects should be expressible by editing the data catalogues, and the effect system should stay easy to extend with other dice mechanics.
+Card and part effects are data, not code. A resurrection effect is a record naming an attribute (vitality or humanity) and one of three operations: an additional signed die (d4, d6, d8, d10, d12 or d20), a signed fixed modifier, or a threshold adjustment. Research cards may also carry non-resurrection effect kinds: medicine bonus, suspicion reduction, extra control attempts, and control-roll modifiers (a signed die or a fixed modifier). There is deliberately no general scripting language. New effects should be expressible by editing the data catalogues, and the effect system should stay easy to extend with other dice mechanics.
 
 ## Versioning
 

@@ -9,23 +9,7 @@ A policy is anything that, given `{ playerId, view, legal }`, returns a command.
 Two built-in policies ship in `src/sim/policies.js`. Each has its own seeded randomness, separate from the engine's RNG.
 
 - **random** chooses uniformly among legal non-pass commands, and passes only occasionally, about 10% of the time.
-- **heuristic** is a simple greedy player:
-  - It earns money when short, and gathers and assembles good parts. From a morgue raid it keeps the part that best fits its body.
-  - It values research according to its objective. The Unleasher wants galvanism and avoids safety research (neurology, philosophy). The Inquisitor avoids galvanism and Discreet Methods. Everyone else values safety research and galvanism.
-  - It manages suspicion unless it is the Inquisitor.
-  - It publishes every discovery it may, at once, except types its objective keeps back: Prometheus keeps philosophy, the Inquisitor keeps philosophy and Discreet Methods, and the Unleasher keeps philosophy and neurology.
-  - It garrisons an Igor (spec 022) when a rival's installed parts plus fitting loose parts reach five: Prometheus and the Visionary readily, the Inquisitor less so, never twice or without attempts left. The Unleasher does too, to keep others out.
-  - The Unleasher values body parts that lower Humanity, and avoids those that raise it.
-  - It decides on resurrection using the engine's exact odds, remembering that any stable Creature ends the game (spec 020). With a control attempt left (to subdue its own monster), the stable chance must reach 20%, or 10% from round 12. Without one, it must clearly exceed the monster chance, accepting more risk from round 12.
-    - **Prometheus** attempts under that odds rule.
-    - **Visionary** attempts under the same odds rule, but only when at least three rivals (or every rival, with fewer players) have complete bodies. Commitments are secret, and a lone stable Creature loses for everyone.
-    - **Unleasher** attempts when no rival with attempts left is garrisoned, since then its monster cannot be stopped, and the monster chance exceeds the stable chance. Otherwise it attempts only when the stable chance is at most 5% and the monster chance is at least four times it.
-    - **Inquisitor** attempts only when suspicion is one below the mob threshold and failure is more likely than not, since a failed Vitality roll would then bring the mob.
-  - It decides whether to subdue a monster (spec 025) by objective:
-    - **Unleasher** never subdues.
-    - **Inquisitor** subdues only when nobody later in the chain could, or when its decline would bring the mob and so unleash the monster. Otherwise it declines, adding suspicion.
-    - **Prometheus** subdues its own monster. It subdues another player's when it is the last in the chain, when a decline would bring the mob, or when it has more than one attempt left.
-    - **Visionary** always subdues.
+- **heuristic** is a simple scripted player that pursues its own objective using only its view and the engine's exact odds. Its strategy is not specified and may be tuned freely to keep playtests meaningful.
 
 ## Runner
 

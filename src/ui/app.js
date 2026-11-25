@@ -210,7 +210,7 @@ function playerPanel(view, p) {
     <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${aiKind(p.id) ? `<span class="badge ai" title="${esc(AI_KINDS[aiKind(p.id)])}">AI</span>` : ''}${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
     <div class="row"><span class="lbl">Workers</span>${workers}${p.nextIgorCost != null ? `<span class="muted small">next Igor ${p.nextIgorCost}</span>` : ''}</div>
     <div class="row"><span class="lbl">Research</span>${research || '<span class="muted">none</span>'}</div>
-    <div class="row"><span class="lbl">Control</span>${p.controlAttempts} attempt${p.controlAttempts === 1 ? '' : 's'} left${p.garrisoned ? ' · <b>garrisoned</b>' : ''}</div>
+    <div class="row"><span class="lbl">Control</span>${p.controlAttempts} attempt${p.controlAttempts === 1 ? '' : 's'} left · ${pct(p.controlChance)} per roll${p.garrisoned ? ' · <b>garrisoned</b>' : ''}</div>
     ${bodyDiagram(cfg, p)}
     ${oddsLine(p.resurrectionOdds)}
     <div class="row"><span class="lbl">Loose</span>${looseHtml}</div>
@@ -417,9 +417,9 @@ function subdueFlow() {
   const inc = view.config.control.declineSuspicion;
   return modal('⚡ A monster is loose',
     `<p>${own ? 'Your' : `<span class="pc pc-${c.seat(k.creatorId)}">${esc(c.name(k.creatorId))}</span>'s`} Creature lives, but its Humanity failed.</p>
-    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Subduing spends one, destroys the monster, gives you ${view.config.control.subdueSalvage} of its parts at random and adds ${view.config.control.subdueSuspicion} suspicion.</p>
+    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Trying spends one and rolls d20 + your control research: you need ${view.config.control.threshold}+, a <b>${pct(me.controlChance)}</b> chance. Success destroys the monster, gives you ${view.config.control.subdueSalvage} of its parts at random and adds ${view.config.control.subdueSuspicion} suspicion. Failure adds nothing and passes the monster on.</p>
     <p class="small muted">If you don't, suspicion rises by ${inc} (now ${view.suspicion}/${view.suspicionMax}) and ${later.length ? `the monster passes to ${later.map((pid) => esc(c.name(pid))).join(', then ')}` : '<b>nobody else can stop it: it will be unleashed</b>'}. If the mob forms, it cannot stop the monster either.</p>`,
-    '<button class="big" data-act="subdue" data-v="1">Subdue it</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>');
+    `<button class="big" data-act="subdue" data-v="1">Try to subdue (${pct(me.controlChance)})</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>`);
 }
 
 // Publishing is a free action on your own turn (spec 023).
@@ -457,6 +457,9 @@ function reportOverlay(rep) {
       blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} does not subdue it.</p>`);
     } else if (e.type === 'CONTROL_SKIPPED') {
       blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} ${e.reason === 'not_garrisoned' ? 'has no one in the garrison' : 'has no control attempts left'}.</p>`);
+    } else if (e.type === 'CONTROL_ROLLED') {
+      const parts = [...e.dice.map((d) => `${esc(sourceLabel(cfg, d.source))} d${d.die} → ${d.result}`), ...e.fixed.map((f) => `${esc(sourceLabel(cfg, f.source))} +${f.amount}`)].join(', ');
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} tries to subdue it: ${parts} = <b>${e.score}</b> vs ${e.threshold}+ ${e.success ? '✓' : '✗ — it breaks free'}</p>`);
     } else if (e.type === 'MONSTER_SUBDUED') {
       blocks.push(`<p class="outcome stable">${esc(c.name(e.playerId))} subdues and destroys the monster, salvaging ${e.salvagedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_UNLEASHED') {

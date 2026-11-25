@@ -48,6 +48,8 @@ function validateConfig(cfg) {
   for (const k of ['failedVitalitySuspicion']) {
     if (!Number.isInteger(cfg.resurrection[k]) || cfg.resurrection[k] < 0) throw new Error(`resurrection.${k} must be a non-negative integer`);
   }
+  if (!ALLOWED_DICE.includes(cfg.control.baseDie)) throw new Error('control.baseDie must be a supported die');
+  if (!Number.isInteger(cfg.control.threshold)) throw new Error('control.threshold must be an integer');
   for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSuspicion', 'subdueSalvage']) {
     if (!Number.isInteger(cfg.control[k]) || cfg.control[k] < 0) throw new Error(`control.${k} must be a non-negative integer`);
   }
@@ -56,7 +58,10 @@ function validateConfig(cfg) {
     for (const e of v.effects) validateEffect(e, `part variant ${id}`);
   }
   for (const [id, r] of Object.entries(cfg.research)) {
-    for (const e of r.effects) if (e.kind === 'resurrection') validateEffect(e, `research ${id}`);
+    for (const e of r.effects) {
+      if (e.kind === 'resurrection') validateEffect(e, `research ${id}`);
+      if (e.kind === 'control') validateEffect({ ...e, attribute: ATTRIBUTES[0] }, `research ${id}`);
+    }
   }
   for (const [id, a] of Object.entries(cfg.actions)) {
     if (!HANDLERS[id]) throw new Error(`action ${id} has no rules handler`);
@@ -808,10 +813,59 @@ function mobCannotStopMonster(s) {
   unleash(s, 'mob_overwhelmed');
 }
 
+/** Control-roll effects for a player: research in type order, one entry per effective copy. */
+function controlEffects(s, pid) {
+  const out = [];
+  for (const type of Object.keys(s.config.research).sort()) {
+    const copies = researchCount(s, pid, type);
+    for (let i = 0; i < copies; i++) for (const e of s.config.research[type].effects) if (e.kind === 'control') out.push({ e, source: { kind: 'research', researchType: type, copy: i + 1 } });
+  }
+  return out;
+}
+
+/** Exact chance that a player's control roll succeeds. Pure: consumes no RNG. */
+export function estimateControl(s, pid) {
+  const cc = s.config.control;
+  return successChance([{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, pid).map((x) => x.e)], cc.threshold);
+}
+
+function successChance(effects, threshold) {
+  let dist = new Map([[0, 1]]);
+  for (const e of effects) {
+    if (e.op === 'threshold') { threshold += e.amount; continue; }
+    const faces = e.op === 'die' ? Array.from({ length: e.die }, (_, i) => e.sign * (i + 1)) : [e.amount];
+    const next = new Map();
+    for (const [v, pr] of dist) for (const f of faces) next.set(v + f, (next.get(v + f) || 0) + pr / faces.length);
+    dist = next;
+  }
+  let success = 0;
+  for (const [v, pr] of dist) if (v >= threshold) success += pr;
+  return success;
+}
+
+function attemptControl(s, pid) {
+  const k = s.control;
+  const p = getPlayer(s, pid);
+  const cc = s.config.control;
+  p.controlAttemptsUsed += 1;
+  const acc = { dice: [], fixed: [], thresholdAdjustments: [] };
+  const base = rollDie(s.rng, cc.baseDie);
+  acc.dice.push({ source: { kind: 'base' }, die: cc.baseDie, sign: 1, result: base, value: base });
+  for (const { e, source } of controlEffects(s, pid)) applyEffect(s, e, source, acc);
+  const score = acc.dice.reduce((a, d) => a + d.value, 0) + acc.fixed.reduce((a, f) => a + f.amount, 0);
+  const success = score >= cc.threshold;
+  for (const d of acc.dice) emit(s, 'DIE_ROLLED', { playerId: pid, purpose: 'control', source: d.source, die: d.die, sign: d.sign, result: d.result });
+  const roll = { dice: acc.dice, fixed: acc.fixed, threshold: cc.threshold, score, success };
+  emit(s, 'CONTROL_ROLLED', { playerId: pid, creatureId: k.creatureId, attemptsLeft: controlAttempts(s, pid), ...clone(roll) });
+  k.record.controlDecisions.push({ playerId: pid, subdue: true, score, threshold: cc.threshold, success });
+  if (success) { subdue(s, pid); return; }
+  // A failed attempt adds no suspicion; the monster passes on.
+  k.position += 1;
+}
+
 function subdue(s, pid) {
   const k = s.control;
   const p = getPlayer(s, pid);
-  p.controlAttemptsUsed += 1;
   const pool = [...k.parts];
   const salvage = [];
   const n = Math.min(s.config.control.subdueSalvage, pool.length);
@@ -821,7 +875,6 @@ function subdue(s, pid) {
   c.status = 'destroyed';
   c.disposition = 'subdued';
   c.subduedBy = pid;
-  k.record.controlDecisions.push({ playerId: pid, subdue: true });
   k.record.outcome = 'subdued';
   k.record.subduedBy = pid;
   s.resurrections.push(k.record);
@@ -870,18 +923,8 @@ export function estimateResurrection(s, pid) {
       const copies = researchCount(s, pid, type);
       for (let i = 0; i < copies; i++) for (const e of s.config.research[type].effects) if (e.kind === 'resurrection' && e.attribute === attr) effects.push(e);
     }
-    let dist = new Map([[0, 1]]);
-    let threshold = rc.thresholds[attr];
-    for (const e of effects) {
-      if (e.op === 'threshold') { threshold += e.amount; continue; }
-      const faces = e.op === 'die' ? Array.from({ length: e.die }, (_, i) => e.sign * (i + 1)) : [e.amount];
-      const next = new Map();
-      for (const [v, pr] of dist) for (const f of faces) next.set(v + f, (next.get(v + f) || 0) + pr / faces.length);
-      dist = next;
-    }
-    let success = 0;
-    for (const [v, pr] of dist) if (v >= threshold) success += pr;
-    out[attr] = { threshold, success };
+    const threshold = rc.thresholds[attr] + effects.filter((e) => e.op === 'threshold').reduce((a, e) => a + e.amount, 0);
+    out[attr] = { threshold, success: successChance(effects, rc.thresholds[attr]) };
   }
   const pv = out.vitality.success;
   const ph = out.humanity.success;
@@ -1023,7 +1066,7 @@ function applyCommand(s, cmd) {
     s.publications.push({ playerId: p.id, type: cmd.researchType, round: s.round });
     emit(s, 'RESEARCH_PUBLISHED', { playerId: p.id, researchType: cmd.researchType });
   } else if (cmd.type === 'SUBDUE_MONSTER') {
-    if (cmd.subdue) subdue(s, p.id);
+    if (cmd.subdue) attemptControl(s, p.id);
     else declineSubdue(s, p.id);
   }
 }
@@ -1200,6 +1243,7 @@ function publicPlayer(s, p) {
     effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, researchCount(s, p.id, t)])),
     assembleCapacity: assembleCapacity(s, p.id),
     controlAttempts: controlAttempts(s, p.id),
+    controlChance: estimateControl(s, p.id),
     garrisoned: garrisoned(s, p.id),
     resurrectionOdds: estimateResurrection(s, p.id),
     workers: playerWorkers(s, p.id).map((w) => ({ ...clone(w), availableNow: (s.phase === 'day' || s.phase === 'night') ? workerAvailable(s, w) : false })),
