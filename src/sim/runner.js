@@ -151,6 +151,10 @@ export function aggregate(results) {
   agg.dealtByObjective = dealt;
   agg.winRateByObjective = Object.fromEntries(Object.keys(dealt).sort().map((o) => [o, Math.round(1000 * (agg.winsByObjective[o] || 0) / dealt[o]) / 1000]));
   agg.avgRounds = Math.round(agg.avgRounds * 100) / 100;
+  // The round the median game ended in (truncated games count at the round they stopped).
+  const rounds = results.map((r) => r.rounds).sort((x, y) => x - y);
+  const mid = rounds.length >> 1;
+  agg.medianRounds = rounds.length ? (rounds.length % 2 ? rounds[mid] : (rounds[mid - 1] + rounds[mid]) / 2) : 0;
   agg.avgFinalSuspicion = Math.round(agg.avgFinalSuspicion * 100) / 100;
   return agg;
 }

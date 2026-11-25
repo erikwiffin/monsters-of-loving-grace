@@ -747,6 +747,8 @@ test('batch aggregate reports win rate per dealt role', () => {
   const { aggregate } = runBatch({ games: 5, policies: 'heuristic', seedPrefix: 'roles', includeCommands: false });
   const dealt = Object.values(aggregate.dealtByObjective).reduce((a, b) => a + b, 0);
   assert.equal(dealt, 5 * 5);
+  const rounds = runBatch({ games: 5, policies: 'heuristic', seedPrefix: 'roles', includeCommands: false }).results.map((r) => r.rounds).sort((x, y) => x - y);
+  assert.equal(aggregate.medianRounds, rounds[2], 'median ending round');
   for (const [o, rate] of Object.entries(aggregate.winRateByObjective)) {
     assert.equal(rate, Math.round(1000 * (aggregate.winsByObjective[o] || 0) / aggregate.dealtByObjective[o]) / 1000);
   }

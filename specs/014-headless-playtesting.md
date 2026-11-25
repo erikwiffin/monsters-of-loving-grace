@@ -37,7 +37,7 @@ Each game produces a machine-readable summary containing:
 - every resurrection, with its scores and outcome;
 - optionally, the full replay command list.
 
-Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, average final suspicion and resurrection outcome counts (failed, stable, subdued and unleashed). For balance work, they also report how many players were dealt each objective and each objective's win rate: wins divided by players dealt it.
+Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, the median round in which games end, average final suspicion and resurrection outcome counts (failed, stable, subdued and unleashed). For balance work, they also report how many players were dealt each objective and each objective's win rate: wins divided by players dealt it.
 
 ## Command-line tools
 
