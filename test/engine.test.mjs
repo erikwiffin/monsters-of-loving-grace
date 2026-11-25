@@ -610,6 +610,20 @@ test('SUBDUE_MONSTER is rejected outside a control chain', () => {
   assert.equal(dispatch(s, { type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: true }).error.code, 'WRONG_PHASE');
 });
 
+test('heuristic: the Inquisitor subdues rather than let a decline bring the mob', () => {
+  const decide = (suspicionMax) => {
+    let s = resurrectionGame({ ...MONSTER, suspicionMax }, (st) => {
+      st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
+      fullBody(st, 'p2');
+    });
+    s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+    assert.equal(s.activePlayerId, 'p2');
+    return heuristicPolicy('h').decide({ playerId: 'p2', view: getPlayerView(s, 'p2'), legal: enumerateLegalCommands(s, 'p2') }).subdue;
+  };
+  assert.equal(decide(10), false, 'declines while the mob is out of reach');
+  assert.equal(decide(2), true, 'subdues when a decline would form the mob');
+});
+
 test('heuristic: non-Unleashers subdue when last in the chain; Unleashers never do', () => {
   for (const objective of ['prometheus', 'visionary', 'inquisitor', 'unleasher']) {
     let s = resurrectionGame(MONSTER, (st) => {

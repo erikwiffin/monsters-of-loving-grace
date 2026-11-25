@@ -60,7 +60,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
         const declineBringsMob = view.suspicion + cfg.control.declineSuspicion >= view.suspicionMax;
         let doSubdue;
         if (objective === 'unleasher') doSubdue = false;
-        else if (objective === 'inquisitor') doSubdue = last;
+        else if (objective === 'inquisitor') doSubdue = last || declineBringsMob; // a mob during the chain frees the monster
         else if (objective === 'prometheus') doSubdue = k.creatorId === me.id || last || declineBringsMob || me.controlAttempts > 1;
         else doSubdue = true;
         return legal.find((c) => c.subdue === doSubdue) || legal[0];

@@ -20,7 +20,7 @@ Two built-in policies ship in `src/sim/policies.js`. Each has its own seeded ran
     - **Inquisitor** attempts only when suspicion is one below the mob threshold and failure is more likely than not, since a failed Vitality roll would then bring the mob.
   - It decides whether to subdue a monster (spec 025) by objective:
     - **Unleasher** never subdues.
-    - **Inquisitor** subdues only when it is the last player in the chain with an attempt left; otherwise it declines, since a decline adds suspicion.
+    - **Inquisitor** subdues only when it is the last player in the chain with an attempt left, or when its decline would bring the mob, which would unleash the monster (spec 025). Otherwise it declines, since a decline adds suspicion.
     - **Prometheus** subdues its own monster. It subdues another player's when it is the last in the chain, when a decline would bring the mob, or when it has more than one attempt left.
     - **Visionary** always subdues.
 
