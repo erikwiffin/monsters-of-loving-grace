@@ -12,13 +12,13 @@ Each action space has a phase, a capacity per phase, an Igor permission and an e
 | hire | Tavern | 1 | No | Pay the player's next Igor cost (4, 7, then 10; maximum three). The Igor arrives next round. |
 | charity | Town hall | 1 | Yes | Pay 3. Suspicion −2, minimum 0. Only legal while suspicion is above 0. |
 | lecture | Scientific society | 1 | No | Gain 1, plus 1 for each discovery this player has published. No cap. |
-| garrison | Watch house | 2 | Yes | No cost and no immediate effect. Lets the player subdue other players' monsters during this round's resolution (spec 025). |
+| garrison | Watch house | 2 | Igor only | No cost and no immediate effect. Lets the player subdue other players' monsters during this round's resolution (spec 025). |
 
 **Ruling (lecture):** the original v0.3 document both said lecture counts "personally discovered research types" and that it "counts public discoveries only". The designer ruled that lecture counts the discoveries *this player has personally published*. Types other players have published, and unpublished discoveries, do not count. **Ruling:** the former cap of 4 is removed.
 
 **Publishing** is not an action space. It is a free action taken on the player's own turn (spec 023).
 
-**Garrison.** A worker placed here stays counted until dawn clears occupancy, so it covers that round's resurrection resolution. A player needs a garrisoned worker to subdue another player's monster, but not their own (spec 025).
+**Garrison.** Only Igors may take this space; Scientists may not. An Igor placed here stays counted until dawn clears occupancy, so it covers that round's resurrection resolution. A player needs a garrisoned Igor to subdue another player's monster, but not their own (spec 025).
 
 ## Night actions
 

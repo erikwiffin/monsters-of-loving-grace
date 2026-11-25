@@ -50,7 +50,7 @@ export function workerLabel(w) {
 const REASONS = {
   medicine: 'medicine', research: 'research', specimens: 'specimens', hire: 'hiring', charity: 'charity',
   lecture: 'lecture', publish: 'publication', graves: 'grave robbing', morgue: 'morgue raid', conceal: 'covering tracks',
-  failed_resurrection: 'failed resurrection', monster_not_subdued: 'monster not subdued', creature_created: 'a Creature walks',
+  failed_resurrection: 'failed resurrection', monster_not_subdued: 'monster not subdued', monster_subdued: 'monster subdued',
 };
 
 /** One-line description of a public event, or null to omit it from the log. */

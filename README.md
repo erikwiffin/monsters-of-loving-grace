@@ -1,7 +1,7 @@
 # Monsters of Loving Grace — browser prototype (spec v0.3)
 
 A rules-testing prototype of a worker-placement / engine-building board game about
-resurrection, suspicion and secret ambition. It is played hot-seat by 3–5 people on
+resurrection, suspicion and secret ambition. It is played hot-seat by 3–6 people on
 one device, and there is a headless rules engine for AI playtesting.
 
 **Play:** <https://erikwiffin.github.io/monsters-of-loving-grace/>
@@ -33,7 +33,7 @@ Behaviour is specified in [`specs/`](specs/000-specs.md), a set of short specs t
 
 The in-game **Rules** button shows the same summary.
 
-- **Setup:** each player starts with 3 money and 1 Scientist. Suspicion starts at 0 and the starting player is random. Objective cards are N−2 Prometheus plus one each of Visionary, Inquisitor and Unleasher. They are dealt secretly through a pass-the-device screen, and one card stays unseen.
+- **Setup:** each player starts with 3 money and 1 Scientist. Suspicion starts at 0 and the starting player is random. Objective cards (N+1) are one each of Inquisitor and Unleasher, one Visionary with 4+ players, and Prometheus for the rest. They are dealt secretly through a pass-the-device screen, and one card stays unseen.
 - **Objectives:**
   - *Prometheus*: be the only player whose Creature becomes stable in a round; win at dawn.
   - *Visionary*: two or more Creatures become stable in the same round.
@@ -48,7 +48,7 @@ The in-game **Rules** button shows the same summary.
 
   | Phase | Actions |
   |---|---|
-  | Day | medicine, research, specimens, hire, charity, lecture, garrison |
+  | Day | medicine, research, specimens, hire, charity, lecture, garrison (Igor only) |
   | Night | graves, morgue, assemble, experiment, conceal |
 
   Each action space shows its cost and effect.
@@ -56,8 +56,8 @@ The in-game **Rules** button shows the same summary.
   - Roll d20 each for Vitality (needs 20+) and Humanity (20+). Installed parts and research add dice, fixed modifiers or threshold changes.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
   - Vitality and Humanity succeed → a stable Creature.
-  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to subdue it — everyone except the creator needs a worker in the garrison that round — which destroys it and gives the subduer 3 of its parts at random. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
-- **Suspicion** comes only from graves, the morgue, failed resurrections, living Creatures (+1 each) and monsters left unsubdued. Charity lowers it by 2 and covering tracks by 1.
+  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to subdue it — everyone except the creator needs an Igor in the garrison that round — which destroys it, gives the subduer 3 of its parts at random and adds 1 suspicion. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
+- **Suspicion** comes only from graves, the morgue, failed resurrections, subdued monsters (+1) and monsters left unsubdued (+2 per decline). Charity lowers it by 2 and covering tracks by 1.
 
 ### Designer rulings (clarifications to spec v0.3)
 

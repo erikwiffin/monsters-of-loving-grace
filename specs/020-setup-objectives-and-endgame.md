@@ -1,6 +1,6 @@
 # 020 — Setup, objectives, suspicion and game end
 
-Each player is a scientist competing to create life or to fulfil a secret ambition. The game supports 3–5 players, with 5 as the default.
+Each player is a scientist competing to create life or to fulfil a secret ambition. The game supports 3–6 players, with 5 as the default.
 
 ## Setup
 
@@ -8,7 +8,7 @@ Each player is a scientist competing to create life or to fulfil a secret ambiti
 - Village suspicion starts at 0.
 - The starting player is chosen at random.
 
-The objective deck has N+1 cards for N players: N−2 Prometheus cards, plus one each of Visionary, Inquisitor and Unleasher. For five players that is 3/1/1/1, six cards in all. The deck is shuffled, and each player is dealt one card face down. The remaining card stays unseen until the game ends.
+The objective deck has N+1 cards for N players: one Inquisitor, one Unleasher, one Visionary, and Prometheus cards for the rest. For five players that is 3/1/1/1, six cards in all; for six, 4/1/1/1. **Ruling:** the Visionary is only a viable role with four or more players, so the three-player deck has no Visionary: two Prometheus, one Inquisitor and one Unleasher. The deck is shuffled, and each player is dealt one card face down. The remaining card stays unseen until the game ends.
 
 Objectives are secret. Each player sees only their own objective, through a pass-the-device privacy screen, and no other player's objective or the unseen card is shown until game over. The public rules explain every possible role. Objectives are not public character classes, and no player has special actions because of their objective. The Inquisitor uses the same legal actions as everyone else.
 
@@ -54,10 +54,10 @@ Only five things raise suspicion:
 - discovered grave robbing (graves action);
 - discovered morgue theft (morgue action);
 - a failed resurrection, meaning a failed Vitality roll (+1);
-- a living Creature, stable or monster (+1 when Vitality succeeds);
+- subduing a monster (+1 per subdue);
 - declining to subdue a monster when able to (+2 per player who declines).
 
-**Ruling:** if a stable Creature's +1 forms the mob, the mob wins for the Inquisitor at once, before dawn. If a monster's +1 forms it, the monster is unleashed instead (spec 025).
+**Ruling:** a stable Creature adds no suspicion. A subdue destroys the monster before its +1 is added, so a mob formed by a subdue is an ordinary mob, won by the Inquisitor (spec 025).
 
 Only two things lower it: charity (−2) and covering tracks (−1). Specs 022 and 025 give the details. Suspicion never rises automatically, at dawn or over time, and dawn does not change it.
 

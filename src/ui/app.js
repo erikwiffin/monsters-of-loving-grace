@@ -264,7 +264,7 @@ function actionSpace(view, id, def, enabledPhase) {
   const cap = def.capacity == null ? '∞' : def.capacity;
   let status = { ok: false, reason: '' };
   if (enabledPhase && !view.result && !aiKind(view.activePlayerId)) status = spaceStatus(id, ui.selectedWorker);
-  const igorOk = def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist or Creature only">Scientist</span>';
+  const igorOk = def.scientist === false ? '<span class="tag" title="Igors only">Igor only</span>' : def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist or Creature only">Scientist</span>';
   return `<button class="space ${def.phase} ${status.ok ? 'can' : ''}" data-act="space" data-id="${id}" ${status.ok ? '' : 'aria-disabled="true"'} title="${esc(status.reason || '')}">
     <span class="sp-top"><b>${esc(def.name)}</b>${igorOk}</span>
     <span class="sp-loc">${esc(def.location)}</span>
@@ -364,7 +364,7 @@ function objectivesFlow() {
   }
   return privacy(`<p class="eyebrow">${esc(p.name)}, your secret objective</p>
     ${objectiveCard(s.objectives[p.id])}
-    <p class="muted small">Other roles in play may include Prometheus, Visionary, Inquisitor and Unleasher. One card is left unseen.</p>
+    <p class="muted small">Other roles in play may include ${[...new Set(E.objectiveDeckFor(s.config))].map((o) => OBJ[o].name).join(', ')}. One card is left unseen.</p>
     <button class="big" data-act="obj-hide">Hide and pass the device</button>`);
 }
 
@@ -390,7 +390,7 @@ function commitmentFlow() {
     <h2>Attempt resurrection?</h2>
     ${bodyDiagram(view.config, me)}
     ${oddsLine(me.resurrectionOdds)}
-    <p class="small muted">Attempting consumes all six installed parts. A failed Vitality roll salvages three parts and adds 1 suspicion. If the Creature lives but Humanity fails, it is a monster: you, then each player clockwise, may spend a control attempt to subdue it (you have ${me.controlAttempts} left). Each player who could subdue it but doesn't adds ${view.config.control.declineSuspicion} suspicion. If no one subdues it, it is unleashed and the game ends.</p>
+    <p class="small muted">Attempting consumes all six installed parts. A failed Vitality roll salvages three parts and adds 1 suspicion. If the Creature lives but Humanity fails, it is a monster: you, then each player clockwise with an Igor in the garrison, may spend a control attempt to subdue it (you have ${me.controlAttempts} left). Subduing adds ${view.config.control.subdueSuspicion} suspicion; each player who could subdue it but doesn't adds ${view.config.control.declineSuspicion}. If no one subdues it, it is unleashed and the game ends.</p>
     <div class="choice-row"><button class="big danger" data-act="commit" data-v="1">⚡ Attempt</button><button class="big ghost" data-act="commit" data-v="0">Decline</button></div>`, 'wide');
 }
 
@@ -405,7 +405,7 @@ function subdueFlow() {
   const inc = view.config.control.declineSuspicion;
   return modal('⚡ A monster is loose',
     `<p>${own ? 'Your' : `<span class="pc pc-${c.seat(k.creatorId)}">${esc(c.name(k.creatorId))}</span>'s`} Creature lives, but its Humanity failed.</p>
-    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Subduing spends one, destroys the monster and gives you ${view.config.control.subdueSalvage} of its parts at random.</p>
+    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Subduing spends one, destroys the monster, gives you ${view.config.control.subdueSalvage} of its parts at random and adds ${view.config.control.subdueSuspicion} suspicion.</p>
     <p class="small muted">If you don't, suspicion rises by ${inc} (now ${view.suspicion}/${view.suspicionMax}) and ${later.length ? `the monster passes to ${later.map((pid) => esc(c.name(pid))).join(', then ')}` : '<b>nobody else can stop it: it will be unleashed</b>'}. If the mob forms, it cannot stop the monster either.</p>`,
     '<button class="big" data-act="subdue" data-v="1">Subdue it</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>');
 }
@@ -451,7 +451,7 @@ function reportOverlay(rep) {
       blocks.push('<p class="outcome unleash">The monster is UNLEASHED!</p></div>');
     } else if (e.type === 'MOB_FORMED') {
       blocks.push(e.overwhelmed ? '<p class="outcome unleash">The mob forms — but it cannot stop the monster!</p>' : '<p class="outcome unleash">The suspicion is too much: the mob forms!</p>');
-    } else if (e.type === 'SUSPICION_CHANGED' && e.reason === 'monster_not_subdued') {
+    } else if (e.type === 'SUSPICION_CHANGED' && (e.reason === 'monster_not_subdued' || e.reason === 'monster_subdued')) {
       blocks.push(`<p class="outcome minor">Suspicion +${e.delta} → ${e.value}/${e.max}.</p>`);
     }
   }
@@ -570,11 +570,11 @@ function renderMenu() {
   const kindOpts = (i) => [['human', 'Human'], ...Object.entries(AI_KINDS)].map(([k, label]) => `<option value="${k}" ${((ui.menuKinds || [])[i] || 'human') === k ? 'selected' : ''}>${label}</option>`).join('');
   const names = Array.from({ length: n }, (_, i) => `<div class="prow"><label>Player ${i + 1} <input name="pname" maxlength="24" value="${esc((ui.menuNames || [])[i] || '')}" placeholder="Scientist ${i + 1}"></label><label>Played by <select name="pkind">${kindOpts(i)}</select></label></div>`).join('');
   return `<div class="menu-screen">
-    <div class="title"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–5 players.</p></div>
+    <div class="title"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–6 players.</p></div>
     <div class="menu-grid">
       <section class="panel">
         <h2>New game</h2>
-        <label>Players <select id="pcount">${[3, 4, 5].map((k) => `<option ${k === n ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+        <label>Players <select id="pcount">${[3, 4, 5, 6].map((k) => `<option ${k === n ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
         <div class="names">${names}</div>
         ${ui.debug ? `<label>Seed (debug) <input id="seed" placeholder="random"></label>
           <label>Config overrides JSON (debug) <textarea id="overrides" rows="3" placeholder='{"startingMoney": 5}'></textarea></label>` : ''}

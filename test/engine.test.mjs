@@ -39,11 +39,14 @@ test('createGame is deterministic for a seed and differs across seeds', () => {
 });
 
 test('setup follows section 3', () => {
-  for (const n of [3, 4, 5]) {
+  for (const n of [3, 4, 5, 6]) {
     const s = createGame({ playerCount: n }, `setup-${n}`);
     assert.equal(s.players.length, n);
     const all = [...Object.values(s.objectives), ...s.unseenObjectives].sort();
-    const expected = [...Array(n - 2).fill('prometheus'), 'visionary', 'inquisitor', 'unleasher'].sort();
+    // The Visionary is only dealt from 4 players; Prometheus fills the rest of N+1 cards.
+    const expected = (n >= 4
+      ? [...Array(n - 2).fill('prometheus'), 'visionary', 'inquisitor', 'unleasher']
+      : ['prometheus', 'prometheus', 'inquisitor', 'unleasher']).sort();
     assert.deepEqual(all, expected);
     assert.equal(s.unseenObjectives.length, 1);
     for (const p of s.players) {
@@ -58,7 +61,7 @@ test('setup follows section 3', () => {
     assert.equal(s.activePlayerId, s.players[s.firstPlayerIndex].id);
   }
   assert.throws(() => createGame({ playerCount: 2 }, 'x'));
-  assert.throws(() => createGame({ playerCount: 6 }, 'x'));
+  assert.throws(() => createGame({ playerCount: 7 }, 'x'));
 });
 
 test('rejected commands leave state, RNG and history unchanged', () => {
@@ -493,7 +496,7 @@ test('saves made under different default rules still load and keep their rules',
 // Control attempts and monsters (spec 025)
 // ---------------------------------------------------------------------------
 
-const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 }, creatureSuspicion: 0 } };
+const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 } } };
 const garrison = (st, ...pids) => { st.occupancy.day.garrison = pids.map(sci); };
 const player = (s, pid) => s.players.find((p) => p.id === pid);
 
@@ -505,7 +508,7 @@ test('defaults: thresholds 20, suspicion track 10, three control attempts each',
   assert.equal(getPublicView(s).players[0].controlAttempts, 3);
 });
 
-test('creator may subdue their own monster: destroyed, 3 parts salvaged, no suspicion, game continues', () => {
+test('creator may subdue their own monster: destroyed, 3 parts salvaged, +1 suspicion, game continues', () => {
   let s = resurrectionGame(MONSTER, (st) => fullBody(st, 'p2'));
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
   assert.equal(s.phase, 'resolution');
@@ -515,7 +518,8 @@ test('creator may subdue their own monster: destroyed, 3 parts salvaged, no susp
   s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
   assert.equal(controlAttempts(s, 'p2'), 2);
   assert.equal(player(s, 'p2').loose.length, 3);
-  assert.equal(s.suspicion, 0);
+  assert.equal(s.suspicion, 1);
+  assert.equal(s.suspicionHistory.at(-1).reason, 'monster_subdued');
   assert.equal(s.resurrections[0].outcome, 'subdued');
   assert.equal(s.resurrections[0].subduedBy, 'p2');
   assert.equal(s.creatures[s.resurrections[0].creatureId].status, 'destroyed');
@@ -657,36 +661,45 @@ test('only garrisoned players may subdue others\' monsters; the creator needs no
   assert.equal(s.suspicion, 2, 'the skipped player adds no suspicion');
 });
 
-test('garrison is a day action, Igor-permitted, capacity 2, and lasts until dawn', () => {
+test('garrison is a day action for Igors only, capacity 2, and lasts until dawn', () => {
   const g = createGame({}, 'garrison').config.actions.garrison;
-  assert.deepEqual([g.phase, g.igor, g.capacity], ['day', true, 2]);
+  assert.deepEqual([g.phase, g.igor, g.scientist, g.capacity], ['day', true, false, 2]);
   let s = createGame({ playerCount: 3 }, 'garrison2');
   const pid = s.activePlayerId;
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'garrison' });
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'garrison' }).error.code, 'SCIENTIST_NOT_PERMITTED');
+  const igor = `igor-${pid}-1`;
+  s.workers[igor] = { id: igor, kind: 'igor', ownerId: pid, active: true, usedThisRound: false };
+  s.workerOrder.push(igor);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: igor, actionId: 'garrison' });
   assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, true);
   s = passAllUntil(s, (x) => x.round === 2);
   assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, false);
 });
 
-test('a living Creature adds suspicion; at the threshold a stable Creature brings the mob, a monster is unleashed', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => fullBody(st, 'p2'));
+test('a stable Creature adds no suspicion; a subdue that forms the mob wins for the Inquisitor', () => {
+  let s = resurrectionGame({ suspicionMax: 1, resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
+    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
+    fullBody(st, 'p2');
+  });
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
-  assert.equal(s.suspicionHistory.at(-1).reason, 'creature_created');
-  assert.equal(s.suspicion, 1);
-  let m = resurrectionGame({ suspicionMax: 1, resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
+  assert.equal(s.suspicion, 0);
+  assert.equal(s.result.reason, 'objective');
+  assert.deepEqual(s.result.winners, ['p2']);
+  let m = resurrectionGame({ ...MONSTER, suspicionMax: 1 }, (st) => {
     st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
     fullBody(st, 'p2');
   });
   m = ok(m, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
+  assert.equal(m.suspicion, 0, 'creating a monster adds nothing by itself');
+  m = ok(m, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
   assert.equal(m.result.reason, 'mob');
-  assert.deepEqual(m.result.winners, ['p1'], 'the mob arrests everyone before dawn');
-  let u = resurrectionGame({ suspicionMax: 1, resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => {
-    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
-    fullBody(st, 'p2');
-  });
-  u = ok(u, { type: 'COMMIT_RESURRECTION', playerId: 'p2', attempt: true });
-  assert.equal(u.result.reason, 'unleashed');
-  assert.deepEqual(u.result.winners, ['p3']);
+  assert.deepEqual(m.result.winners, ['p1']);
+  assert.equal(m.resurrections[0].outcome, 'subdued');
+});
+
+test('six players are supported', () => {
+  const { results } = runBatch({ games: 3, policies: 'heuristic', config: { playerCount: 6 }, seedPrefix: 'six', includeCommands: false });
+  for (const r of results) { assert.equal(r.playerCount, 6); assert.equal(r.invalidCommands, 0); }
 });
 
 test('batch aggregate reports win rate per dealt role', () => {

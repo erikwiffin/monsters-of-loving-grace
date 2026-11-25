@@ -37,14 +37,14 @@ Before changing anything, dispatch checks:
 - that the player exists and is the one whose decision it is;
 - that the phase is right for the command;
 - that the worker belongs to the player, is active and has not already acted;
-- that an Igor may take the action;
+- that an Igor may take the action, and that a Scientist may (some actions are Igor-only);
 - that the space has capacity left;
 - that the player can pay the full cost and meets every prerequisite;
 - that every choice is valid.
 
 No action may be selected unless its full cost can be paid, and balances never go negative.
 
-A rejected command returns `{ ok: false, error }`, where `error` is a structured `{ code, message }`. Codes are stable and machine-readable, for example `UNKNOWN_COMMAND`, `UNKNOWN_FIELD`, `MISSING_FIELD`, `NOT_YOUR_TURN`, `WRONG_PHASE`, `WORKER_USED`, `WORKER_PENDING`, `IGOR_NOT_PERMITTED`, `SPACE_FULL`, `INSUFFICIENT_MONEY`, `INVALID_CHOICE`, `INVALID_TARGET`, `STALE_COMMAND` and `GAME_OVER`. A rejection returns the very same state object. It leaves the RNG, the event history and the command log unchanged, and it emits no events.
+A rejected command returns `{ ok: false, error }`, where `error` is a structured `{ code, message }`. Codes are stable and machine-readable, for example `UNKNOWN_COMMAND`, `UNKNOWN_FIELD`, `MISSING_FIELD`, `NOT_YOUR_TURN`, `WRONG_PHASE`, `WORKER_USED`, `WORKER_PENDING`, `IGOR_NOT_PERMITTED`, `SCIENTIST_NOT_PERMITTED`, `SPACE_FULL`, `INSUFFICIENT_MONEY`, `INVALID_CHOICE`, `INVALID_TARGET`, `STALE_COMMAND` and `GAME_OVER`. A rejection returns the very same state object. It leaves the RNG, the event history and the command log unchanged, and it emits no events.
 
 ## Acceptance and automatic progression
 

@@ -1,10 +1,10 @@
 # 030 — Hot-seat browser interface
 
-The browser game is a local hot-seat prototype for 3–5 players sharing one device. It renders engine views and submits commands; it contains no rules logic. Questions about legality go to the engine, for example by validating a command before showing a space as available.
+The browser game is a local hot-seat prototype for 3–6 players sharing one device. It renders engine views and submits commands; it contains no rules logic. Questions about legality go to the engine, for example by validating a command before showing a space as available.
 
 ## Main menu
 
-- **New game**: choose 3–5 players (default 5), enter names (blank names get defaults), and choose who plays each seat (spec 031). In debug mode, a fixed seed and JSON configuration overrides can also be entered.
+- **New game**: choose 3–6 players (default 5), enter names (blank names get defaults), and choose who plays each seat (spec 031). In debug mode, a fixed seed and JSON configuration overrides can also be entered.
 - **Resume**: continue the game saved in this browser, if there is one.
 - **Import save**: load an exported save file.
 - **Rules summary**: the public rules, including every possible role and the designer rulings.
@@ -26,7 +26,7 @@ The shared board always shows only public information:
 
 - the round and phase, and a plain suspicion meter showing value and maximum;
 - a turn bar showing the active player, a selector for their available workers, a Publish button when they have an unpublished discovery, and the pass button;
-- every day and night action space, with its location, cost and effect text, capacity, Igor permission and the workers occupying it. Spaces in the current phase are highlighted when the selected worker can legally take them. When a space is unavailable, it explains why;
+- every day and night action space, with its location, cost and effect text, capacity, Igor permission (including Igor-only spaces) and the workers occupying it. Spaces in the current phase are highlighted when the selected worker can legally take them. When a space is unavailable, it explains why;
 - the research market and deck count, plus the publication record;
 - one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), effective research (own copies, copies via publication, published marks), a body diagram, remaining control attempts and whether they are garrisoned, odds for a complete body, loose parts and Creatures;
 - the Chronicle, a readable log of public events.

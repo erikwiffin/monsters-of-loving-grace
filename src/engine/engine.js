@@ -39,15 +39,15 @@ export function resolveConfig(overrides = {}) {
 
 function validateConfig(cfg) {
   const n = cfg.playerCount;
-  if (!Number.isInteger(n) || n < 3 || n > 5) throw new Error('playerCount must be an integer from 3 to 5');
+  if (!Number.isInteger(n) || n < 3 || n > 6) throw new Error('playerCount must be an integer from 3 to 6');
   if (!Number.isInteger(cfg.suspicionMax) || cfg.suspicionMax < 1) throw new Error('suspicionMax must be a positive integer');
   for (const attr of ATTRIBUTES) {
     if (!Number.isInteger(cfg.resurrection.thresholds[attr])) throw new Error(`resurrection threshold for ${attr} must be an integer`);
   }
-  for (const k of ['failedVitalitySuspicion', 'creatureSuspicion']) {
+  for (const k of ['failedVitalitySuspicion']) {
     if (!Number.isInteger(cfg.resurrection[k]) || cfg.resurrection[k] < 0) throw new Error(`resurrection.${k} must be a non-negative integer`);
   }
-  for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSalvage']) {
+  for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSuspicion', 'subdueSalvage']) {
     if (!Number.isInteger(cfg.control[k]) || cfg.control[k] < 0) throw new Error(`control.${k} must be a non-negative integer`);
   }
   for (const [id, v] of Object.entries(cfg.partVariants)) {
@@ -452,6 +452,7 @@ function placementError(s, p, w, actionId) {
   if (!w.active) return err('WORKER_PENDING', 'That worker is not available until next round.');
   if (!workerAvailable(s, w)) return err('WORKER_USED', 'That worker has already acted.');
   if (w.kind === 'igor' && !def.igor) return err('IGOR_NOT_PERMITTED', 'Igors may not take that action.');
+  if (w.kind === 'scientist' && def.scientist === false) return err('SCIENTIST_NOT_PERMITTED', 'Only an Igor may take that action.');
   if (def.capacity != null && occupancyOf(s, actionId).length >= def.capacity) return err('SPACE_FULL', `${def.location} is full.`);
   return HANDLERS[actionId].prereq(s, p, w, def);
 }
@@ -464,6 +465,16 @@ function hasLegalPlacement(s, p) {
     }
   }
   return false;
+}
+
+/**
+ * The N+1 objective cards for a configuration: the Inquisitor, the Unleasher,
+ * the Visionary from visionaryMinPlayers players, and Prometheus for the rest.
+ */
+export function objectiveDeckFor(cfg) {
+  const n = cfg.playerCount;
+  const special = n >= cfg.visionaryMinPlayers ? ['visionary', 'inquisitor', 'unleasher'] : ['inquisitor', 'unleasher'];
+  return [...Array(n + 1 - special.length).fill('prometheus'), ...special];
 }
 
 // ---------------------------------------------------------------------------
@@ -518,7 +529,7 @@ export function createGame(config = {}, seed) {
   s.firstPlayerIndex = randInt(s.rng, n);
   s.turnPointer = s.firstPlayerIndex;
 
-  const objectiveDeck = [...Array(n - 2).fill('prometheus'), 'visionary', 'inquisitor', 'unleasher'];
+  const objectiveDeck = objectiveDeckFor(cfg);
   shuffle(s.rng, objectiveDeck);
   s.players.forEach((p, i) => { s.objectives[p.id] = objectiveDeck[i]; });
   s.unseenObjectives = objectiveDeck.slice(n);
@@ -768,8 +779,6 @@ function resurrect(s, pid) {
     record.creatureId = cid;
     s.resurrections.push(record);
     emit(s, 'CREATURE_STABILIZED', { playerId: pid, creatureId: cid, disposition: 'humane' });
-    // The village notices a new life; a mob formed now arrests everyone before dawn.
-    changeSuspicion(s, s.config.resurrection.creatureSuspicion, 'creature_created', pid);
     return;
   }
   // A monster: the control chain starts with its creator and runs clockwise.
@@ -781,7 +790,6 @@ function resurrect(s, pid) {
   const chain = Array.from({ length: n }, (_, i) => s.players[(p.seat + i) % n].id);
   s.control = { creatorId: pid, creatureId: cid, parts: clone(consumed), chain, position: 0, record };
   emit(s, 'MONSTER_CREATED', { playerId: pid, creatureId: cid, chain: [...chain] });
-  changeSuspicion(s, s.config.resurrection.creatureSuspicion, 'creature_created', pid, mobCannotStopMonster);
 }
 
 function mobCannotStopMonster(s) {
@@ -808,6 +816,9 @@ function subdue(s, pid) {
   s.resurrections.push(k.record);
   s.control = null;
   emit(s, 'MONSTER_SUBDUED', { playerId: pid, creatorId: c.ownerId, creatureId: c.id, attemptsLeft: controlAttempts(s, pid), salvagedParts: clone(salvage), lostParts: clone(pool) });
+  // The struggle is noticed. The monster is already destroyed, so a mob
+  // formed now is an ordinary mob.
+  changeSuspicion(s, s.config.control.subdueSuspicion, 'monster_subdued', pid);
 }
 
 function declineSubdue(s, pid) {

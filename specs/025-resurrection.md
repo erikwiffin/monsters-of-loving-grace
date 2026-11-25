@@ -38,21 +38,21 @@ Every raw die roll is displayed and logged with its source, size and sign, along
 Outcomes are checked in this order:
 
 1. **Vitality fails.** No Creature is created. Three of the six consumed parts are salvaged into loose inventory, chosen uniformly at random without replacement; the other three are lost. Suspicion rises by 1 (spec 020), which may form the mob.
-2. **Vitality and Humanity succeed.** A stable, *humane* Creature is created and owned by the player, and its ID is recorded as a stable transition for this round. Suspicion rises by 1, which may form the mob and end the game before dawn. Otherwise the game ends at that round's dawn (spec 020).
-3. **Vitality succeeds, but Humanity fails.** A monster is created and suspicion rises by 1. Resolution pauses for its control chain (below). The next commitment resolves only after the chain ends with the monster subdued.
+2. **Vitality and Humanity succeed.** A stable, *humane* Creature is created and owned by the player, and its ID is recorded as a stable transition for this round. The game ends at that round's dawn (spec 020).
+3. **Vitality succeeds, but Humanity fails.** A monster is created. Resolution pauses for its control chain (below). The next commitment resolves only after the chain ends with the monster subdued.
 
 ## Control attempts
 
 **Ruling:** every player starts the game with 3 control attempts, plus one for each effective copy of Neural Conditioning (spec 023). Each player's remaining attempts are public. Spent attempts never return.
 
-When a monster is created, a control chain begins with its creator and continues clockwise (to the left, in seat order) around the table, giving each player exactly one chance. **Ruling:** to subdue another player's monster, a player needs a worker in the garrison this round (spec 022). The creator is present at the resurrection and needs no garrison. A player who cannot subdue, for lack of attempts or a garrison, is skipped automatically, adds no suspicion, and the skip is logged. Every other player in turn decides publicly, one at a time, with `SUBDUE_MONSTER` (spec 011), whether to subdue it:
+When a monster is created, a control chain begins with its creator and continues clockwise (to the left, in seat order) around the table, giving each player exactly one chance. **Ruling:** to subdue another player's monster, a player needs an Igor in the garrison this round (spec 022). The creator is present at the resurrection and needs no garrison. A player who cannot subdue, for lack of attempts or a garrison, is skipped automatically, adds no suspicion, and the skip is logged. Every other player in turn decides publicly, one at a time, with `SUBDUE_MONSTER` (spec 011), whether to subdue it:
 
-- **Subdue.** The player spends one control attempt. The monster is destroyed: no Creature exists and nothing is recorded as a stable transition. Three of the six consumed parts, chosen uniformly at random without replacement, go to the subduing player's loose inventory; the other three are lost. The chain ends, and resolution continues with the next commitment.
+- **Subdue.** The player spends one control attempt. The monster is destroyed: no Creature exists and nothing is recorded as a stable transition. Three of the six consumed parts, chosen uniformly at random without replacement, go to the subduing player's loose inventory; the other three are lost. Then suspicion rises by 1, attributed to the subduing player; the monster is already destroyed, so if this forms the mob, the Inquisitor wins as usual. Otherwise the chain ends, and resolution continues with the next commitment.
 - **Decline.** Suspicion rises by 2, attributed to the declining player, and the chain moves to the next player. This applies to the creator as well.
 
 If the chain gets back to the creator without anyone subduing the monster, it is unleashed, and the game ends immediately with an Unleasher victory or a collective defeat (spec 020). No later commitment is resolved.
 
-**Ruling:** the mob cannot stop a monster. If the monster's creation or a decline raises suspicion to the mob threshold, the mob forms but the monster is unleashed at once. The game ends as an unleashing (terminal reason `unleashed`): the Unleasher wins if dealt, and the Inquisitor does not.
+**Ruling:** the mob cannot stop a monster. If a decline raises suspicion to the mob threshold, the mob forms but the monster is unleashed at once. The game ends as an unleashing (terminal reason `unleashed`): the Unleasher wins if dealt, and the Inquisitor does not.
 
 ## Odds estimate
 
