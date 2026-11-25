@@ -1126,7 +1126,10 @@ export function deserialize(json, { verifyReplay = true } = {}) {
   if (typeof s.seed !== 'string') throw new Error('Missing seed.');
   if (verifyReplay) {
     let rebuilt;
-    try { rebuilt = replay({ config: s.configOverrides, seed: s.seed, commands: s.commandLog }); } catch (e) { throw new Error(`Save failed replay verification: ${e.message}`); }
+    // Replay with the save's own resolved rules, so saves survive later
+    // changes to the default configuration.
+    try { rebuilt = replay({ config: s.config, seed: s.seed, commands: s.commandLog }); } catch (e) { throw new Error(`Save failed replay verification: ${e.message}`); }
+    rebuilt.configOverrides = clone(s.configOverrides);
     if (serialize(rebuilt) !== serialize(s)) throw new Error('Save failed replay verification: state does not match its command history.');
   }
   return s;

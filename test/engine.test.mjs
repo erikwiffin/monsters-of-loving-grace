@@ -461,3 +461,15 @@ test('Prometheus and another player stabilizing together: only the Visionary win
   s = ok(s, { type: 'COMMIT_RESURRECTION', playerId: s.activePlayerId, attempt: true });
   assert.deepEqual(s.result.winners, ['p3']);
 });
+
+test('saves made under different default rules still load and keep their rules', () => {
+  // Simulate a save from before a balance change by giving it non-default thresholds
+  // in its resolved config while its overrides stay empty.
+  const legacy = replay({ config: { playerCount: 3, resurrection: { thresholds: { vitality: 18, control: 18, humanity: 18 } } }, seed: 'old-rules', commands: [] });
+  legacy.configOverrides = { playerCount: 3 };
+  let st = legacy;
+  for (let i = 0; i < 30 && !st.result; i++) st = dispatch(st, enumerateLegalCommands(st, st.activePlayerId)[0]).state;
+  const back = deserialize(serialize(st));
+  assert.equal(back.config.resurrection.thresholds.control, 18);
+  assert.equal(serialize(back), serialize(st));
+});
