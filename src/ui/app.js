@@ -25,6 +25,7 @@ const ui = {
   hideGameOver: false,
   menuError: null,
   aiPaused: false,
+  logOpen: false, // Chronicle expanded; collapsed it shows only the latest entry
   aiDelay: 700,
   aiTimer: null,
 };
@@ -168,15 +169,15 @@ function suspicionMeter(v, max) {
     <span class="meter-label">Suspicion</span><span class="cells">${cells}</span><span class="meter-val">${v}<small>/${max}</small></span></div>`;
 }
 
-function partChip(cfg, part, extra = '') {
-  if (!part) return '<span class="part empty">empty</span>';
+function partChip(cfg, part, extra = '', slotLabel = '') {
+  if (!part) return `<span class="part empty" title="${slotLabel ? `${slotLabel}: empty` : 'empty'}">${slotLabel ? slotLabel.toLowerCase() : 'empty'}</span>`;
   const v = cfg.partVariants[part.variantId];
   const cls = v.effects.length ? (v.effects.some((e) => (e.op === 'die' && e.sign < 0) || (e.op === 'fixed' && e.amount < 0) || (e.op === 'threshold' && e.amount > 0)) ? 'bad' : 'good') : '';
-  return `<span class="part ${cls}" title="${esc(variantText(cfg, part.variantId))}">${esc(v.name)}${extra}</span>`;
+  return `<span class="part ${cls}" title="${slotLabel ? `${slotLabel}: ` : ''}${esc(variantText(cfg, part.variantId))}">${esc(v.name)}${extra}</span>`;
 }
 
 function bodyDiagram(cfg, p) {
-  const slot = (id, label) => `<div class="slot slot-${id}"><span class="slot-name">${label}</span>${partChip(cfg, p.body[id])}</div>`;
+  const slot = (id, label) => `<div class="slot slot-${id}">${partChip(cfg, p.body[id], '', label)}</div>`;
   return `<div class="body-grid">
     ${slot('head', 'Head')}${slot('arm1', 'Arm')}${slot('chest', 'Chest')}${slot('arm2', 'Arm')}${slot('leg1', 'Leg')}${slot('leg2', 'Leg')}
   </div>`;
@@ -208,9 +209,9 @@ function playerPanel(view, p) {
   const creatures = view.creatures.filter((c) => c.ownerId === p.id && c.status === 'stable').length;
   return `<section class="player seat-${p.seat} ${active ? 'active' : ''} ${p.passed && (view.phase === 'day' || view.phase === 'night') ? 'passed' : ''}">
     <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${aiKind(p.id) ? `<span class="badge ai" title="${esc(AI_KINDS[aiKind(p.id)])}">AI</span>` : ''}${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
-    <div class="row"><span class="lbl">Workers</span>${workers}${p.nextIgorCost != null ? `<span class="muted small">next Igor ${p.nextIgorCost}</span>` : ''}</div>
+    <div class="row" aria-label="Workers">${workers}${p.nextIgorCost != null ? `<span class="muted small" title="Next Igor costs ${p.nextIgorCost}">+Igor ${p.nextIgorCost}</span>` : ''}</div>
     <div class="row"><span class="lbl">Research</span>${research || '<span class="muted">none</span>'}</div>
-    <div class="row"><span class="lbl">Control</span>${p.controlAttempts} attempt${p.controlAttempts === 1 ? '' : 's'} left · ${pct(p.controlChance)} per roll${p.garrisoned ? ' · <b>garrisoned</b>' : ''}</div>
+    <div class="row" title="${p.controlAttempts} control attempt${p.controlAttempts === 1 ? '' : 's'} left, ${pct(p.controlChance)} chance per roll"><span class="lbl">Control</span>${p.controlAttempts} left · ${pct(p.controlChance)}/roll${p.garrisoned ? ' · <b>garrisoned</b>' : ''}</div>
     ${bodyDiagram(cfg, p)}
     ${oddsLine(p.resurrectionOdds)}
     <div class="row"><span class="lbl">Loose</span>${looseHtml}</div>
@@ -235,7 +236,9 @@ function logPanel(view) {
     const txt = describeEvent(view.events[i], c);
     if (txt) lines.push(`<li class="ev-${view.events[i].type.toLowerCase()}">${txt}</li>`);
   }
-  return `<section class="panel log"><h2>Chronicle</h2><ol>${lines.join('')}</ol></section>`;
+  const open = ui.logOpen;
+  return `<section class="panel log ${open ? 'open' : ''}"><h2><button class="log-toggle" data-act="log-toggle" aria-expanded="${open}">Chronicle <small>${open ? 'hide' : 'show all'}</small></button></h2>
+    <ol>${open ? lines.join('') : lines.slice(0, 1).join('')}</ol></section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,10 +269,8 @@ function actionSpace(view, id, def, enabledPhase) {
   if (enabledPhase && !view.result && !aiKind(view.activePlayerId)) status = spaceStatus(id, ui.selectedWorker);
   const igorOk = def.scientist === false ? '<span class="tag" title="Igors only">Igor only</span>' : def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist or Creature only">Scientist</span>';
   return `<button class="space ${def.phase} ${status.ok ? 'can' : ''}" data-act="space" data-id="${id}" ${status.ok ? '' : 'aria-disabled="true"'} title="${esc(status.reason || '')}">
-    <span class="sp-top"><b>${esc(def.name)}</b>${igorOk}</span>
-    <span class="sp-loc">${esc(def.location)}</span>
+    <span class="sp-top"><b>${esc(def.name)}</b><span class="sp-loc">${esc(def.location)}</span><span class="sp-occ">${chips}<span class="cap">${occ.length}/${cap}</span></span>${igorOk}</span>
     <span class="sp-txt">${esc(actionText(id, def, cfg))}</span>
-    <span class="sp-occ">${chips}<span class="cap">${occ.length}/${cap}</span></span>
   </button>`;
 }
 
@@ -735,6 +736,7 @@ const handlers = {
     ui.modal = null; render();
   },
   'show-gameover'() { ui.hideGameOver = false; render(); },
+  'log-toggle'() { ui.logOpen = !ui.logOpen; render(); },
   'obj-reveal'() { ui.meta.objStep = 'show'; persist(); render(); },
   'obj-hide'() {
     ui.meta.objStep = 'pass';
