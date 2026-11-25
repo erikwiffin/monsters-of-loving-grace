@@ -55,7 +55,7 @@ test('setup follows section 3', () => {
       assert.deepEqual(p.research, []);
     }
     assert.equal(s.market.length, 4);
-    assert.equal(s.deck.length, 20);
+    assert.equal(s.deck.length, 16, '5 research types x 4 copies, minus the market');
     assert.equal(s.suspicion, 0);
     assert.equal(s.phase, 'day');
     assert.equal(s.activePlayerId, s.players[s.firstPlayerIndex].id);
@@ -206,24 +206,25 @@ test('morgue draws 3 parts, rolls discovery, then the player keeps 1 and discard
   assert.equal(s.events.at(-1).type === 'PARTS_PICKED' || s.events.some((e) => e.type === 'PARTS_PICKED'), true);
 });
 
-test('specimens buy one part; assemble installs 1, plus Advanced Anatomy', () => {
+test('specimens buy one part; assemble installs any number of fitting parts, up to a whole body', () => {
   let s = createGame({ playerCount: 3, startingMoney: 10 }, 'assemble');
   const pid = s.activePlayerId;
+  assert.ok(!('anatomy' in s.config.research), 'Advanced Anatomy is retired');
   assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['athlete_leg', 'athlete_leg'] } }).error.code, 'INVALID_CHOICE');
   s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['athlete_leg'] } });
   const p = () => s.players.find((x) => x.id === pid);
   assert.deepEqual(p().loose.map((x) => x.variantId), ['athlete_leg']);
   assert.equal(p().money, 8);
-  p().loose.push({ id: 'part-w', variantId: 'ordinary_leg', type: 'leg' }, { id: 'part-x', variantId: 'poet_brain', type: 'head' }, { id: 'part-y', variantId: 'poet_brain', type: 'head' });
+  const extra = [['ordinary_arm', 'arm'], ['ordinary_arm', 'arm'], ['ordinary_leg', 'leg'], ['ordinary_chest', 'chest'], ['poet_brain', 'head'], ['poet_brain', 'head']];
+  extra.forEach(([variantId, type], i) => p().loose.push({ id: `part-x${i}`, variantId, type }));
   s = passAllUntil(s, (x) => x.phase === 'night' && x.activePlayerId === pid);
-  const ids = p().loose.map((x) => x.id);
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ids.slice(0, 2) } }).error.code, 'INVALID_CHOICE');
-  p().research = ['anatomy'];
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ['part-x', 'part-y'] } }).error.code, 'NO_MATCHING_SLOT');
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: [ids[0], 'part-x'] } });
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ['part-x4', 'part-x5'] } }).error.code, 'NO_MATCHING_SLOT');
+  const all = p().loose.filter((x) => x.id !== 'part-x5').map((x) => x.id);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: all } });
   assert.equal(p().body.leg1.variantId, 'athlete_leg');
-  assert.equal(p().body.head.id, 'part-x');
-  assert.equal(p().loose.length, 2);
+  assert.equal(p().body.head.id, 'part-x4');
+  assert.ok(Object.values(p().body).every(Boolean), 'a whole body in one action');
+  assert.deepEqual(p().loose.map((x) => x.id), ['part-x5']);
 });
 
 test('lecture pays 1 + each own publication, uncapped; publishing is free and keeps the turn', () => {
@@ -258,7 +259,7 @@ test('research and experiment acquire market cards and refill', () => {
   assert.deepEqual(p.research, [card.type]);
   assert.equal(p.money, 8);
   assert.equal(s.market.length, 4);
-  assert.equal(s.deck.length, 19);
+  assert.equal(s.deck.length, 15);
   const dupe = s.market.find((c) => c.type === card.type);
   if (dupe) {
     assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: s.activePlayerId, workerId: sci(s.activePlayerId), actionId: 'research', choices: { researchCardId: 'card-999' } }).ok, false);

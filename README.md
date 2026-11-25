@@ -67,7 +67,7 @@ These rulings resolve ambiguities in the spec and are implemented in the engine:
 2. **Publishing** is a free action on your own day or night turn: no worker, no cost, no immediate payment, and your turn continues. It is allowed for any type the player personally discovered and has not yet published themselves, even if another player already published it. Each player publishes a type at most once.
 3. **Research copies stack.** A player's effective copies of a type are 1 for their own discovery, plus 1 for each publication of that type by *another* player. Every copy applies its effect:
    - Galvanic Mastery adds 1d6 per copy; Moral Philosophy adds +5 per copy.
-   - Medical Expertise adds +1 money per copy; Advanced Anatomy adds +1 assembly slot per copy.
+   - Medical Expertise adds +1 money per copy.
    - Discreet Methods reduces suspicion by 1 per copy.
 
    Players still cannot buy a type they personally discovered.
@@ -160,7 +160,7 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 | `medicine`, `hire`, `charity`, `lecture`, `garrison`, `graves`, `morgue` | `{}` (or omitted) |
 | `research` | `{ researchCardId: 'card-17' }`: a market card whose type you have not discovered |
 | `specimens` | `{ variantIds: ['robust_chest'] }`: exactly 1 variant ID |
-| `assemble` | `{ partIds: ['part-12', 'part-18'] }`: 1 to capacity unique loose part instances, each needing an empty matching slot |
+| `assemble` | `{ partIds: ['part-12', 'part-18'] }`: 1 or more unique loose part instances (up to a whole body), each needing an empty matching slot |
 | `experiment` | `{ partIds: ['part-3', 'part-9'], researchCardId: 'card-4' }`: exactly 2 loose parts |
 
 - **Worker IDs:**

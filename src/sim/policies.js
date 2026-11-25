@@ -49,7 +49,7 @@ const NO_PUBLISH = {
 };
 const UNLEASHER_MAX_STABLE = 0.05;
 const VISIONARY_MIN_RIVALS = 3;
-const GARRISON_ALERT_PARTS = 4;
+const GARRISON_ALERT_PARTS = 5; // installed plus fitting loose parts
 
 /**
  * A simple greedy strategy: earn money, buy useful research, gather the best
@@ -130,8 +130,17 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
       // helps this objective before placing a worker.
       const pub = legal.find((c) => c.type === 'PUBLISH_RESEARCH' && !(NO_PUBLISH[objective] || []).includes(c.researchType));
       if (pub) return pub;
-      const installed = (p) => Object.values(p.body).filter(Boolean).length;
-      // A body with four or more parts can be completed tonight.
+      // Assembly is unlimited, so a rival's body can be finished in one night:
+      // count installed parts plus loose parts that fit its empty slots.
+      const installed = (p) => {
+        let n = 0;
+        for (const [type, def] of Object.entries(cfg.partTypes)) {
+          const filled = def.slots.filter((sl) => p.body[sl] !== null).length;
+          const loose = p.loose.filter((x) => x.type === type).length;
+          n += Math.min(def.slots.length, filled + loose);
+        }
+        return n;
+      };
       const rivalsNearlyReady = view.players.filter((p) => p.id !== me.id && installed(p) >= GARRISON_ALERT_PARTS).length;
       const open = {};
       for (const [type, def] of Object.entries(cfg.partTypes)) open[type] = def.slots.filter((sl) => me.body[sl] === null).length;
@@ -149,10 +158,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
           case 'research': case 'experiment': {
             const card = view.market.find((k) => k.id === c.choices.researchCardId);
             const want = (objective === 'unleasher'
-              ? { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, anatomy: 2, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 }
+              ? { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 }
               : objective === 'inquisitor'
-                ? { galvanism: 0.5, neurology: 1, philosophy: 1, anatomy: 1.5, medicine: 3, discretion: 0 }
-                : { galvanism: 4, neurology: 4.5, philosophy: 4.5, anatomy: 2, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 })[card.type] || 1;
+                ? { galvanism: 0.5, neurology: 1, philosophy: 1, medicine: 3, discretion: 0 }
+                : { galvanism: 4, neurology: 4.5, philosophy: 4.5, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 })[card.type] || 1;
             if (a === 'experiment') {
               const fitsLost = c.choices.partIds.filter((id) => { const x = me.loose.find((y) => y.id === id); return open[x.type] > 0; }).length;
               return want - fitsLost * 1.5 + 0.5;

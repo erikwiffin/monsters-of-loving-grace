@@ -36,7 +36,7 @@ Named brains occupy the head slot; there is no separate brain resource or slot. 
 
 ## Assembly
 
-The assemble action moves chosen loose parts into matching empty slots. It must fill at least one slot, and may fill one per action, plus one more per effective copy of Advanced Anatomy. Each part goes into the first empty slot of its type. A part can't be installed without an empty slot of its type, and installed parts can't be removed or swapped in this version.
+The assemble action moves chosen loose parts into matching empty slots. It must fill at least one slot, and may fill any number, up to a whole body, in one action. Each part goes into the first empty slot of its type. A part can't be installed without an empty slot of its type, and installed parts can't be removed or swapped in this version.
 
 ## Spending parts
 

@@ -510,7 +510,7 @@ function choiceModal() {
   switch (m.actionId) {
     case 'research': body += `<div class="opts">${marketOptions('card')}</div>`; break;
     case 'experiment': body += `<h3>Spend ${def.partCost} parts</h3><div class="opts">${looseOptions(false)}</div><h3>Take a card</h3><div class="opts">${marketOptions('card')}</div>`; break;
-    case 'assemble': body += `<p class="small">Choose up to ${E.assembleCapacity(s, p.id)} parts for empty slots.</p><div class="opts">${looseOptions(true)}</div>`; break;
+    case 'assemble': body += `<p class="small">Choose any parts for empty slots — up to a whole body.</p><div class="opts">${looseOptions(true)}</div>`; break;
     case 'specimens': {
       const opts = Object.entries(cfg.partTypes).map(([t, td]) => `<optgroup label="${esc(td.name)}">${Object.entries(cfg.partVariants).filter(([, v]) => v.type === t).map(([id, v]) => `<option value="${id}">${esc(v.name)} — ${esc(v.effects.length ? v.effects.map(effectText).join(', ') : 'no effect')}</option>`).join('')}</optgroup>`).join('');
       body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="variant${i}">${opts}</select></label>`).join('');

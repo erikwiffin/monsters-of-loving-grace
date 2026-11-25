@@ -24,7 +24,7 @@ Every command has a `type` and the acting `playerId`. It may also carry an optio
 | medicine, hire, charity, lecture, garrison, graves, morgue | none (`{}`) |
 | research | `researchCardId`: a market card |
 | specimens | `variantIds`: exactly one part variant ID |
-| assemble | `partIds`: one or more unique loose part instance IDs, up to the player's assembly capacity |
+| assemble | `partIds`: one or more unique loose part instance IDs, each fitting a distinct empty slot |
 | experiment | `partIds`: exactly two unique loose part instance IDs; `researchCardId`: a market card |
 
 Specimen purchases select part *variants*. Assembly and experiment payments select specific part *instances*. Unknown choice keys and missing choice keys are both rejected.

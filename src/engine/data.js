@@ -2,8 +2,8 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.7.0';
-export const SCHEMA_VERSION = 5;
+export const ENGINE_VERSION = '0.8.0';
+export const SCHEMA_VERSION = 6;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
 export const ATTRIBUTES = ['vitality', 'humanity'];
@@ -72,7 +72,7 @@ export const DEFAULT_CONFIG = {
     graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: 2, igor: true, parts: 2, suspicionTable: [1, 1, 1, 1, 0, 0] },
     // Morgue: draw `parts` random parts, keep one of them, discard the rest.
     morgue: { phase: 'night', name: 'Raid the morgue', location: 'Morgue', capacity: 1, igor: true, parts: 3, keep: 1, suspicionTable: [2, 2, 1, 1, 0, 0] },
-    assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: 1 },
+    assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: null }, // max: null = any number of parts
     experiment: { phase: 'night', name: 'Experiment', location: 'Private laboratory', capacity: null, igor: false, partCost: 2 },
   },
   partTypes: {
@@ -97,10 +97,9 @@ export const DEFAULT_CONFIG = {
     scholar_brain: { name: 'Brain of a scholar', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 6, sign: 1 }] },
     poet_brain: { name: 'Brain of a poet', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
   },
-  // Research effect kinds: medicineBonus, assembleCapacity, suspicionReduction, controlAttempts,
+  // Research effect kinds: medicineBonus, suspicionReduction, controlAttempts,
   // resurrection (same shape as part effects). Every effective copy applies.
   research: {
-    anatomy: { name: 'Advanced Anatomy', text: 'Assemble 1 more part per assemble action.', effects: [{ kind: 'assembleCapacity', amount: 1 }] },
     discretion: { name: 'Discreet Methods', text: 'Reduce suspicion from each graves or morgue action by 1 (floor 0).', effects: [{ kind: 'suspicionReduction', amount: 1 }] },
     galvanism: { name: 'Galvanic Mastery', text: 'Add 1d6 to resurrection Vitality.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
     medicine: { name: 'Medical Expertise', text: '+1 money on medicine, for any worker.', effects: [{ kind: 'medicineBonus', amount: 1 }] },

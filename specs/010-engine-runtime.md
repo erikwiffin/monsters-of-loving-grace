@@ -39,7 +39,7 @@ Every balance constant and catalogue lives in one default configuration (`src/en
 
 `createGame(overrides, seed)` deep-merges overrides into the defaults. Nested objects merge, and arrays replace. The resolved configuration is copied into the game state, so a game, and its replay, carries its own rules. This lets controlled experiments change balance without touching engine code. Invalid configurations are rejected at creation, for example a player count outside 3–6, unknown part types, unsupported dice, or an action with no rules handler.
 
-Card and part effects are data, not code. A resurrection effect is a record naming an attribute (vitality or humanity) and one of three operations: an additional signed die (d4, d6, d8, d10, d12 or d20), a signed fixed modifier, or a threshold adjustment. Research cards may also carry non-resurrection effect kinds: medicine bonus, assembly capacity, suspicion reduction and extra control attempts. There is deliberately no general scripting language. New effects should be expressible by editing the data catalogues, and the effect system should stay easy to extend with other dice mechanics.
+Card and part effects are data, not code. A resurrection effect is a record naming an attribute (vitality or humanity) and one of three operations: an additional signed die (d4, d6, d8, d10, d12 or d20), a signed fixed modifier, or a threshold adjustment. Research cards may also carry non-resurrection effect kinds: medicine bonus, suspicion reduction and extra control attempts. There is deliberately no general scripting language. New effects should be expressible by editing the data catalogues, and the effect system should stay easy to extend with other dice mechanics.
 
 ## Versioning
 

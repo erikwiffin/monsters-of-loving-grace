@@ -34,7 +34,7 @@ export function actionText(id, def, cfg) {
     case 'garrison': return 'Lets you subdue other players\' monsters this round.';
     case 'graves': return `Gain ${def.parts} random parts. d6: ${suspicionTableText(def.suspicionTable)}.`;
     case 'morgue': return `Draw ${def.parts} random parts and keep ${def.keep}. d6: ${suspicionTableText(def.suspicionTable)}.`;
-    case 'assemble': return `Install ${def.max} loose part${def.max === 1 ? '' : 's'} into empty slots (+1 per Advanced Anatomy).`;
+    case 'assemble': return def.max == null ? 'Install any number of loose parts into empty slots.' : `Install up to ${def.max} loose part${def.max === 1 ? '' : 's'} into empty slots.`;
     case 'experiment': return `Spend ${def.partCost} loose parts: take an eligible research card free.`;
     default: return '';
   }

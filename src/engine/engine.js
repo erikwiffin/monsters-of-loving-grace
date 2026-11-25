@@ -138,8 +138,10 @@ function researchBonus(s, pid, kind) {
   return total;
 }
 
-export function assembleCapacity(s, pid) {
-  return s.config.actions.assemble.max + researchBonus(s, pid, 'assembleCapacity');
+/** Most parts one assemble action may install: the configured max, or a whole body when it is null. */
+export function assembleCapacity(s) {
+  const max = s.config.actions.assemble.max;
+  return max == null ? SLOT_ORDER.length : max;
 }
 
 /** Control attempts a player has left: the starting allowance, plus one per effective Neural Conditioning, minus those spent. */

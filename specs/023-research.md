@@ -4,12 +4,11 @@ Research is persistent technology for building an engine. It is never spent and 
 
 ## Research cards
 
-There are six research types, each with a persistent effect:
+There are five research types, each with a persistent effect:
 
 | ID | Name | Effect per effective copy |
 |---|---|---|
 | medicine | Medical Expertise | +1 money from the medicine action, for any worker |
-| anatomy | Advanced Anatomy | Assemble one more part per assemble action |
 | galvanism | Galvanic Mastery | Add 1d6 to the resurrection Vitality score |
 | neurology | Neural Conditioning | +1 control attempt for subduing monsters (spec 025) |
 | philosophy | Moral Philosophy | Add a fixed +5 to the resurrection Humanity score |
@@ -19,7 +18,7 @@ Effects are defined as data (spec 010), not scripts.
 
 ## Market and deck
 
-The research deck has four copies of each type, 24 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken, by research or by experiment, the market refills immediately from the top of the deck while cards remain. The deck is finite: there is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
+The research deck has four copies of each type, 20 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken, by research or by experiment, the market refills immediately from the top of the deck while cards remain. The deck is finite: there is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
 
 A player cannot acquire a research type they have already personally discovered. Research and experiment use identical selection rules, and are unavailable when the market holds no card the player is eligible to take.
 
@@ -44,7 +43,6 @@ Every effective copy applies its effect in full. For example:
 
 - With two copies of Galvanic Mastery, the player rolls two separate d6 for Vitality.
 - With three copies of Moral Philosophy, the player adds +15 to Humanity.
-- With two copies of Advanced Anatomy, the player may assemble 3 parts per action.
 - With two copies of Discreet Methods, discovery suspicion is reduced by 2.
 - With two copies of Neural Conditioning, the player has 2 more control attempts. Because another player's publication adds a copy, it can grant attempts partway through the game.
 

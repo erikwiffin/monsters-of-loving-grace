@@ -26,7 +26,7 @@ Each action space has a phase, a capacity per phase, an Igor permission and an e
 |---|---|---:|---|---|
 | graves | Graveyard | 2 | Yes | Gain 2 random loose parts. Roll d6: 1–4 → +1 suspicion; 5–6 → none. |
 | morgue | Morgue | 1 | Yes | Draw 3 random parts and keep 1 of them. Roll d6: 1–2 → +2 suspicion; 3–4 → +1; 5–6 → none. |
-| assemble | Private laboratory | Unlimited | Yes | Move 1 chosen loose part into a matching empty body slot. Advanced Anatomy adds +1 per effective copy. |
+| assemble | Private laboratory | Unlimited | Yes | Move any number of chosen loose parts, up to a whole body, into matching empty body slots. |
 | experiment | Private laboratory | Unlimited | No | Spend any 2 chosen loose parts. Take one eligible market research card free. |
 
 ## Details
@@ -39,7 +39,7 @@ Each action space has a phase, a capacity per phase, an Igor permission and an e
 
 **Specimens.** These let a player pick an exact variant, at the same price whatever the part is. Supply is unlimited.
 
-**Assemble.** Each chosen part must fill a distinct empty slot of its own type, and at least one part must be placed. Parts fill slots in order: first arm slot, then second arm slot, and so on.
+**Assemble.** Each chosen part must fill a distinct empty slot of its own type, and at least one part must be placed. **Ruling:** there is no limit on parts per action, so a player can build a whole body in one action. Parts fill slots in order: first arm slot, then second arm slot, and so on.
 
 **Hire.** The new Igor's cost depends on how many Igors the player has already hired; the starting Igor is free and does not count towards the cost. **Ruling:** a hired Igor can act immediately, later the same day or that night, so actions can be chained within a round.
 
