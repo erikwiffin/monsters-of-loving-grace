@@ -8,11 +8,13 @@ A player is eligible if their body is complete, with all six slots filled. Eligi
 
 ## Rolling
 
-An attempt consumes all six installed parts; loose parts are untouched. Then three independent attributes are rolled, each with a base fair d20 and a base success threshold of 18:
+An attempt consumes all six installed parts; loose parts are untouched. Then three independent attributes are rolled, each with a base fair d20:
 
-- **Vitality**: does the body live?
-- **Control**: can it be directed?
-- **Humanity**: does it have a conscience?
+- **Vitality**: does the body live? Base success threshold 18.
+- **Control**: can it be directed? Base success threshold 21.
+- **Humanity**: does it have a conscience? Base success threshold 21.
+
+Control and Humanity thresholds are above the d20's maximum, so a bare die can never succeed on them. A Creature only becomes stable if its body or its creator's research adds to Control or Humanity; an unprepared body that passes Vitality is always unleashed.
 
 Installed parts (spec 024) and effective research (spec 023) may add or subtract extra dice (d4, d6, d8, d10, d12 or d20), add signed fixed modifiers, or adjust thresholds. For each attribute:
 

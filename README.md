@@ -53,7 +53,7 @@ The in-game **Rules** button shows the same summary.
 
   Each action space shows its cost and effect.
 - **Resurrection:**
-  - Roll d20 each for Vitality, Control and Humanity; each needs 18 or more. Installed parts and research add dice, fixed modifiers or threshold changes.
+  - Roll d20 each for Vitality (needs 18+), Control (21+) and Humanity (21+). Installed parts and research add dice, fixed modifiers or threshold changes. With no Control or Humanity bonus, a body that passes Vitality is always unleashed.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
   - Vitality and at least one of Control or Humanity succeed → a stable Creature.
   - Vitality succeeds but both behaviour rolls fail → the Creature is unleashed.

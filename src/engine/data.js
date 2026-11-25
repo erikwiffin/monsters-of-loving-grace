@@ -44,7 +44,7 @@ export const DEFAULT_CONFIG = {
   researchCopies: 4,
   resurrection: {
     baseDie: 20,
-    thresholds: { vitality: 18, control: 18, humanity: 18 },
+    thresholds: { vitality: 18, control: 21, humanity: 21 },
     failedVitalityRefund: 3,
     failedVitalitySuspicion: 1,
   },

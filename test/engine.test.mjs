@@ -342,7 +342,7 @@ test('resurrection rolls are fully itemised and consistent', () => {
   assert.deepEqual(v.fixed.map((f) => f.amount), [-2]);
   assert.equal(v.score, v.dice.reduce((a, d) => a + d.value, 0) - 2);
   const h = rolled.attributes.humanity;
-  assert.equal(h.threshold, 21);
+  assert.equal(h.threshold, 24);
   assert.deepEqual(h.fixed.map((f) => f.amount), [5]);
   for (const a of Object.values(rolled.attributes)) assert.equal(a.success, a.score >= a.threshold);
 });
@@ -352,9 +352,15 @@ test('estimateResurrection matches base odds', () => {
   fullBody(s, 'p1');
   const o = estimateResurrection(s, 'p1');
   assert.ok(Math.abs(o.attributes.vitality.success - 0.15) < 1e-9);
-  assert.ok(Math.abs(o.pStable - 0.15 * (1 - 0.85 * 0.85)) < 1e-9);
+  assert.equal(o.attributes.control.success, 0, 'a bare d20 cannot reach the Control threshold of 21');
+  assert.equal(o.attributes.humanity.success, 0, 'a bare d20 cannot reach the Humanity threshold of 21');
+  assert.equal(o.pStable, 0);
+  assert.ok(Math.abs(o.pUnleashed - 0.15) < 1e-9);
   assert.ok(Math.abs(o.pFailed + o.pStable + o.pUnleashed - 1) < 1e-9);
   assert.equal(estimateResurrection(s, 'p2'), null);
+  // Brain of a scholar (+1d6 Control): d20 + d6 >= 21 has probability 3.5/20.
+  fullBody(s, 'p2', { head: 'scholar_brain' });
+  assert.ok(Math.abs(estimateResurrection(s, 'p2').attributes.control.success - 0.175) < 1e-9);
 });
 
 test('player views hide secrets', () => {
