@@ -10,10 +10,10 @@ Two built-in policies ship in `src/sim/policies.js`. Each has its own seeded ran
 
 - **random** chooses uniformly among legal non-pass commands, and passes only occasionally, about 10% of the time.
 - **heuristic** is a simple greedy player:
-  - It earns money when short, and gathers and assembles good parts.
+  - It earns money when short, and gathers and assembles good parts. From a morgue raid it keeps the part that best fits its body.
   - It values research according to its objective. The Unleasher wants galvanism and avoids safety research (neurology, philosophy). The Inquisitor avoids galvanism and Discreet Methods. Everyone else values safety research and galvanism.
   - It manages suspicion unless it is the Inquisitor.
-  - It publishes every discovery it may, as soon as it can, except types its objective keeps back: Prometheus keeps philosophy, the Inquisitor keeps philosophy and Discreet Methods, and the Unleasher keeps philosophy and neurology.
+  - It publishes every discovery it may, at once, except types its objective keeps back: Prometheus keeps philosophy, the Inquisitor keeps philosophy and Discreet Methods, and the Unleasher keeps philosophy and neurology.
   - It garrisons an Igor (spec 022) when a rival has four or more installed parts: Prometheus and the Visionary readily, the Inquisitor less so, and never twice or without attempts left. The Unleasher does too, to keep others out.
   - The Unleasher values body parts that lower Humanity, and avoids those that raise it.
   - It decides on resurrection using the engine's exact odds, remembering that any stable Creature ends the game (spec 020). With a control attempt left (to subdue its own monster), the stable chance must reach 20%, or 10% from round 12. Without one, it must clearly exceed the monster chance, accepting more risk from round 12.

@@ -33,7 +33,7 @@ Behaviour is specified in [`specs/`](specs/000-specs.md), a set of short specs t
 
 The in-game **Rules** button shows the same summary.
 
-- **Setup:** each player starts with 3 money and 1 Scientist. Suspicion starts at 0 and the starting player is random. Objective cards (N+1) are one each of Inquisitor and Unleasher, one Visionary with 4+ players, and Prometheus for the rest. They are dealt secretly through a pass-the-device screen, and one card stays unseen.
+- **Setup:** each player starts with 3 money, 1 Scientist and 1 Igor. Suspicion starts at 0 and the starting player is random. Objective cards (N+1) are one each of Inquisitor and Unleasher, one Visionary with 4+ players, and Prometheus for the rest. They are dealt secretly through a pass-the-device screen, and one card stays unseen.
 - **Objectives:**
   - *Prometheus*: be the only player whose Creature becomes stable in a round; win at dawn.
   - *Visionary*: two or more Creatures become stable in the same round.
@@ -43,13 +43,13 @@ The in-game **Rules** button shows the same summary.
 - **Round:** Day → Night → secret resurrection commitments → resolution in initiative order → Dawn (objective check; any stable Creature ends the game, otherwise initiative rotates).
 - **Workers:**
   - The Scientist acts once by day and once by night.
-  - Igors cost 4, 7 and 10 (maximum 3). Each acts once per round in either phase, starts the round after hiring, and may only use spaces marked *Igor*.
+  - Everyone starts with one Igor. More cost 4, then 7 (maximum 3 in all) and can act as soon as they're hired. Each acts once per round in either phase and may only use spaces marked *Igor*.
 - **Actions:**
 
   | Phase | Actions |
   |---|---|
   | Day | medicine, research, specimens, hire, charity, lecture, garrison (Igor only) |
-  | Night | graves, morgue, assemble, experiment, conceal |
+  | Night | graves, morgue (draw 3, keep 1), assemble, experiment |
 
   Each action space shows its cost and effect.
 - **Resurrection:**
@@ -57,7 +57,7 @@ The in-game **Rules** button shows the same summary.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
   - Vitality and Humanity succeed → a stable Creature.
   - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to subdue it — everyone except the creator needs an Igor in the garrison that round — which destroys it, gives the subduer 3 of its parts at random and adds 1 suspicion. Each player who could subdue it but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
-- **Suspicion** comes only from graves, the morgue, failed resurrections, subdued monsters (+1) and monsters left unsubdued (+2 per decline). Charity lowers it by 2 and covering tracks by 1.
+- **Suspicion** comes only from graves, the morgue, failed resurrections, subdued monsters (+1) and monsters left unsubdued (+2 per decline). Only charity lowers it (by 2).
 
 ### Designer rulings (clarifications to spec v0.3)
 
@@ -149,6 +149,7 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 | Command | Fields |
 |---|---|
 | `PASS_TURN` | — (gives up all remaining placements this day/night) |
+| `PICK_PARTS` | `partIds` — after a morgue raid, the drawn part(s) to keep; the only legal command until made |
 | `PUBLISH_RESEARCH` | `researchType` — a type you discovered and haven't published; free, on your day/night turn, keeps the turn |
 | `COMMIT_RESURRECTION` | `attempt: boolean` — only for the prompted eligible player |
 | `SUBDUE_MONSTER` | `subdue: boolean` — only for the player currently deciding in a monster's control chain |
@@ -156,9 +157,9 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 
 | `actionId` | `choices` |
 |---|---|
-| `medicine`, `hire`, `charity`, `lecture`, `garrison`, `graves`, `morgue`, `conceal` | `{}` (or omitted) |
+| `medicine`, `hire`, `charity`, `lecture`, `garrison`, `graves`, `morgue` | `{}` (or omitted) |
 | `research` | `{ researchCardId: 'card-17' }`: a market card whose type you have not discovered |
-| `specimens` | `{ variantIds: ['robust_chest', 'poet_brain'] }`: exactly 2 variant IDs, duplicates allowed |
+| `specimens` | `{ variantIds: ['robust_chest'] }`: exactly 1 variant ID |
 | `assemble` | `{ partIds: ['part-12', 'part-18'] }`: 1 to capacity unique loose part instances, each needing an empty matching slot |
 | `experiment` | `{ partIds: ['part-3', 'part-9'], researchCardId: 'card-4' }`: exactly 2 loose parts |
 

@@ -2,8 +2,8 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.6.0';
-export const SCHEMA_VERSION = 4;
+export const ENGINE_VERSION = '0.7.0';
+export const SCHEMA_VERSION = 5;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
 export const ATTRIBUTES = ['vitality', 'humanity'];
@@ -40,7 +40,8 @@ export const DEFAULT_CONFIG = {
   playerNames: [],
   startingMoney: 3,
   suspicionMax: 10,
-  maxIgors: 3,
+  maxIgors: 3, // including the starting Igor(s)
+  startingIgors: 1,
   igorCosts: [4, 7, 10],
   marketSize: 4,
   researchCopies: 4,
@@ -59,20 +60,20 @@ export const DEFAULT_CONFIG = {
   },
   // capacity: null means unlimited. igor: whether a hired Igor may take it.
   actions: {
-    medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: 2, igor: true, gain: 3, igorGain: 2 },
+    medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: 2, igor: true, gain: 3 },
     research: { phase: 'day', name: 'Study research', location: 'University', capacity: 2, igor: false, cost: 2 },
-    specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: 2, igor: true, cost: 2, count: 2 },
-    hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: 1, igor: false },
-    charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: 1, igor: true, cost: 3, reduction: 2 },
+    specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: 2, igor: true, cost: 2, count: 1 },
+    hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: null, igor: false },
+    charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: null, igor: true, cost: 3, reduction: 2 },
     // cap: null means no cap on lecture income.
-    lecture: { phase: 'day', name: 'Give a lecture', location: 'Scientific society', capacity: 1, igor: false, base: 1, cap: null },
+    lecture: { phase: 'day', name: 'Give a lecture', location: 'Scientific society', capacity: 2, igor: false, base: 1, cap: null },
     // scientist: false makes an action Igor-only.
     garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: 2, igor: true, scientist: false },
-    graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: 2, igor: true, parts: 2, suspicionTable: [1, 1, 1, 0, 0, 0] },
-    morgue: { phase: 'night', name: 'Raid the morgue', location: 'Morgue', capacity: 1, igor: true, parts: 3, suspicionTable: [2, 2, 1, 1, 0, 0] },
-    assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: 2 },
+    graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: 2, igor: true, parts: 2, suspicionTable: [1, 1, 1, 1, 0, 0] },
+    // Morgue: draw `parts` random parts, keep one of them, discard the rest.
+    morgue: { phase: 'night', name: 'Raid the morgue', location: 'Morgue', capacity: 1, igor: true, parts: 3, keep: 1, suspicionTable: [2, 2, 1, 1, 0, 0] },
+    assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: 1 },
     experiment: { phase: 'night', name: 'Experiment', location: 'Private laboratory', capacity: null, igor: false, partCost: 2 },
-    conceal: { phase: 'night', name: 'Cover tracks', location: 'Village streets', capacity: 1, igor: true, reduction: 1 },
   },
   partTypes: {
     arm: { name: 'Arm', slots: ['arm1', 'arm2'], weight: 2 },
@@ -102,7 +103,7 @@ export const DEFAULT_CONFIG = {
     anatomy: { name: 'Advanced Anatomy', text: 'Assemble 1 more part per assemble action.', effects: [{ kind: 'assembleCapacity', amount: 1 }] },
     discretion: { name: 'Discreet Methods', text: 'Reduce suspicion from each graves or morgue action by 1 (floor 0).', effects: [{ kind: 'suspicionReduction', amount: 1 }] },
     galvanism: { name: 'Galvanic Mastery', text: 'Add 1d6 to resurrection Vitality.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
-    medicine: { name: 'Medical Expertise', text: '+1 money on medicine, including Igor placements.', effects: [{ kind: 'medicineBonus', amount: 1 }] },
+    medicine: { name: 'Medical Expertise', text: '+1 money on medicine, for any worker.', effects: [{ kind: 'medicineBonus', amount: 1 }] },
     neurology: { name: 'Neural Conditioning', text: '+1 control attempt for subduing monsters.', effects: [{ kind: 'controlAttempts', amount: 1 }] },
     philosophy: { name: 'Moral Philosophy', text: 'Add +5 to resurrection Humanity.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'fixed', amount: 5 }] },
   },

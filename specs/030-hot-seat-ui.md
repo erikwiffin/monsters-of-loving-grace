@@ -38,11 +38,11 @@ The page switches between a light "day" palette and a dark "night" palette. It w
 Choosing a space opens a confirmation dialog for the action's choices:
 
 - market cards for research;
-- variant pickers for specimens;
+- a variant picker for specimens;
 - loose parts for assemble and experiment;
 - a summary for simple actions.
 
-Nothing is sent until the player confirms. Publish opens a dialog listing the player's publishable discoveries; choosing one publishes it at once and the turn continues. Invalid choices are reported using the engine's error message, and the dialog stays open. Passing asks for confirmation first.
+Nothing is sent until the player confirms. After a morgue raid, a dialog shows the drawn parts with their effects, and the player chooses which to keep. Publish opens a dialog listing the player's publishable discoveries; choosing one publishes it at once and the turn continues. Invalid choices are reported using the engine's error message, and the dialog stays open. Passing asks for confirmation first.
 
 ## Reports and game over
 

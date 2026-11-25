@@ -4,7 +4,7 @@ Every committed action that a player would perform at the physical table is a se
 
 ## What is and isn't a command
 
-Commands are player decisions: placing a worker with all of its choices, passing, publishing research, committing to or declining a resurrection attempt, and choosing whether to subdue a monster. Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
+Commands are player decisions: placing a worker with all of its choices, picking drawn parts, passing, publishing research, committing to or declining a resurrection attempt, and choosing whether to subdue a monster. Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
 
 Dice outcomes, suspicion changes, resource grants, research refills, phase transitions, resurrection results, victory and defeat are never commands. The engine resolves them automatically.
 
@@ -13,6 +13,7 @@ Dice outcomes, suspicion changes, resource grants, research refills, phase trans
 Every command has a `type` and the acting `playerId`. It may also carry an optional `seq`, described below. Unknown command types and unknown fields are rejected.
 
 - `PASS_TURN` gives up all of the player's remaining placements in the current day or night phase. Passing is irrevocable for that phase.
+- `PICK_PARTS` with `partIds` is legal only for the player who has just raided the morgue, and is then their only legal command. It names exactly as many of the drawn parts as they may keep (spec 022).
 - `PUBLISH_RESEARCH` with a `researchType` is legal for the active player on their day or night turn, for a type they have discovered and not yet published (spec 023). The player keeps the turn.
 - `COMMIT_RESURRECTION` with `attempt: true | false` is legal only for the eligible player currently being prompted during the commitment phase.
 - `SUBDUE_MONSTER` with `subdue: true | false` is legal only for the player currently deciding in a monster's control chain during resolution (spec 025).
@@ -20,9 +21,9 @@ Every command has a `type` and the acting `playerId`. It may also carry an optio
 
 | Action | Choices |
 |---|---|
-| medicine, hire, charity, lecture, garrison, graves, morgue, conceal | none (`{}`) |
+| medicine, hire, charity, lecture, garrison, graves, morgue | none (`{}`) |
 | research | `researchCardId`: a market card |
-| specimens | `variantIds`: exactly two part variant IDs; duplicates allowed |
+| specimens | `variantIds`: exactly one part variant ID |
 | assemble | `partIds`: one or more unique loose part instance IDs, up to the player's assembly capacity |
 | experiment | `partIds`: exactly two unique loose part instance IDs; `researchCardId`: a market card |
 
@@ -44,7 +45,7 @@ Before changing anything, dispatch checks:
 
 No action may be selected unless its full cost can be paid, and balances never go negative.
 
-A rejected command returns `{ ok: false, error }`, where `error` is a structured `{ code, message }`. Codes are stable and machine-readable, for example `UNKNOWN_COMMAND`, `UNKNOWN_FIELD`, `MISSING_FIELD`, `NOT_YOUR_TURN`, `WRONG_PHASE`, `WORKER_USED`, `WORKER_PENDING`, `IGOR_NOT_PERMITTED`, `SCIENTIST_NOT_PERMITTED`, `SPACE_FULL`, `INSUFFICIENT_MONEY`, `INVALID_CHOICE`, `INVALID_TARGET`, `STALE_COMMAND` and `GAME_OVER`. A rejection returns the very same state object. It leaves the RNG, the event history and the command log unchanged, and it emits no events.
+A rejected command returns `{ ok: false, error }`, where `error` is a structured `{ code, message }`. Codes are stable and machine-readable, for example `UNKNOWN_COMMAND`, `UNKNOWN_FIELD`, `MISSING_FIELD`, `NOT_YOUR_TURN`, `WRONG_PHASE`, `WORKER_USED`, `WORKER_PENDING`, `IGOR_NOT_PERMITTED`, `SCIENTIST_NOT_PERMITTED`, `SPACE_FULL`, `INSUFFICIENT_MONEY`, `INVALID_CHOICE`, `INVALID_TARGET`, `PICK_PENDING`, `STALE_COMMAND` and `GAME_OVER`. A rejection returns the very same state object. It leaves the RNG, the event history and the command log unchanged, and it emits no events.
 
 ## Acceptance and automatic progression
 
@@ -63,6 +64,7 @@ A command may include `seq`, equal to the number of commands accepted so far. If
 - `PASS_TURN`, which is always legal in day or night;
 - one `PUBLISH_RESEARCH` per type the player may publish, in day or night;
 - one entry per available worker and legal action;
+- every allowed `PICK_PARTS` choice while a morgue pick is pending;
 - both commitment options during the commitment phase;
 - both subdue options for the player deciding in a control chain.
 

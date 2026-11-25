@@ -128,28 +128,42 @@ test('shared capacity is enforced per phase', () => {
   assert.equal(order.length, 5);
 });
 
-test('hired Igors activate next round; Igor unused by day may act at night', () => {
+test('everyone starts with an Igor; hired Igors act at once; an Igor acts once per round', () => {
   let s = createGame({ playerCount: 3, startingMoney: 20 }, 'igor');
   const pid = s.activePlayerId;
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'hire' });
-  assert.equal(s.players.find((p) => p.id === pid).money, 16);
-  assert.equal(s.workers[`igor-${pid}-1`].active, false);
-  s = passAllUntil(s, (x) => x.round === 2);
-  assert.equal(s.workers[`igor-${pid}-1`].active, true);
-  // Pass day with the Igor unused, then use it at night.
-  s = passAllUntil(s, (x) => x.phase === 'day' && x.activePlayerId === pid);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'medicine' });
+  for (const p of s.players) assert.equal(s.workers[`igor-${p.id}-1`].active, true);
+  // Igors earn the full medicine income.
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'medicine' });
+  assert.equal(s.players.find((p) => p.id === pid).money, 23);
   s = passAllUntil(s, (x) => x.activePlayerId === pid);
-  s = ok(s, { type: 'PASS_TURN', playerId: pid });
-  s = passAllUntil(s, (x) => x.phase === 'night' && x.activePlayerId === pid);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'graves' });
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'hire' });
+  assert.equal(s.players.find((p) => p.id === pid).money, 19, 'the first hire costs 4');
+  assert.equal(s.workers[`igor-${pid}-2`].active, true, 'a hired Igor is available at once');
+  s = passAllUntil(s, (x) => x.activePlayerId === pid);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-2`, actionId: 'specimens', choices: { variantIds: ['athlete_leg'] } });
   s = passAllUntil(s, (x) => x.phase === 'night' && x.activePlayerId === pid);
   const legal = getLegalCommands(s, pid);
-  assert.ok(!legal.some((c) => c.workerId === `igor-${pid}-1`), 'Igor acts only once per round');
+  assert.ok(!legal.some((c) => c.workerId === `igor-${pid}-1` || c.workerId === `igor-${pid}-2`), 'Igors act only once per round');
   assert.ok(legal.some((c) => c.workerId === sci(pid)), 'Scientist refreshes for night');
-  // Igors may not research.
   const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'experiment', choices: { partIds: [], researchCardId: 'x' } });
   assert.equal(r.ok, false);
+});
+
+test('hire and charity have no capacity limit; lecture holds 2; Cover tracks is gone; three Igors at most', () => {
+  const cfg = createGame({}, 'caps').config.actions;
+  assert.equal(cfg.hire.capacity, null);
+  assert.equal(cfg.charity.capacity, null);
+  assert.equal(cfg.lecture.capacity, 2);
+  assert.ok(!('conceal' in cfg));
+  let s = createGame({ playerCount: 3, startingMoney: 30 }, 'max-igors');
+  const pid = s.activePlayerId;
+  s.players.find((p) => p.id === pid).igorsHired = 2;
+  for (const k of [2, 3]) {
+    const id = `igor-${pid}-${k}`;
+    s.workers[id] = { id, kind: 'igor', ownerId: pid, active: true, usedThisRound: false };
+    s.workerOrder.push(id);
+  }
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'hire' }).error.code, 'MAX_IGORS');
 });
 
 test('graves suspicion follows the d6 table and discretion reduces it', () => {
@@ -159,7 +173,7 @@ test('graves suspicion follows the d6 table and discretion reduces it', () => {
     const pid = s.activePlayerId;
     const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
     const roll = r.events.find((e) => e.type === 'DIE_ROLLED').result;
-    assert.equal(r.state.suspicion, roll <= 3 ? 1 : 0);
+    assert.equal(r.state.suspicion, roll <= 4 ? 1 : 0);
     assert.equal(r.state.players.find((p) => p.id === pid).loose.length, 2);
 
     s.players.find((p) => p.id === pid).research = ['discretion'];
@@ -168,23 +182,48 @@ test('graves suspicion follows the d6 table and discretion reduces it', () => {
   }
 });
 
-test('specimens, assemble limits and Advanced Anatomy', () => {
+test('morgue draws 3 parts, rolls discovery, then the player keeps 1 and discards the rest', () => {
+  let s = createGame({ playerCount: 3 }, 'morgue');
+  s = passAllUntil(s, (x) => x.phase === 'night');
+  const pid = s.activePlayerId;
+  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'morgue' });
+  s = r.state;
+  const types = r.events.map((e) => e.type);
+  assert.ok(types.indexOf('PARTS_DRAWN') < types.indexOf('DIE_ROLLED'), 'parts are drawn before the die');
+  assert.equal(s.activePlayerId, pid);
+  const drawn = s.pendingPick.parts;
+  assert.equal(drawn.length, 3);
+  assert.equal(s.players.find((p) => p.id === pid).loose.length, 0);
+  const legal = getLegalCommands(s, pid);
+  assert.equal(legal.length, 3);
+  assert.ok(legal.every((c) => c.type === 'PICK_PARTS'));
+  assert.equal(dispatch(s, { type: 'PASS_TURN', playerId: pid }).error.code, 'PICK_PENDING');
+  assert.equal(dispatch(s, { type: 'PICK_PARTS', playerId: pid, partIds: [drawn[0].id, drawn[1].id] }).error.code, 'INVALID_CHOICE');
+  s = ok(s, { type: 'PICK_PARTS', playerId: pid, partIds: [drawn[1].id] });
+  assert.deepEqual(s.players.find((p) => p.id === pid).loose.map((x) => x.id), [drawn[1].id]);
+  assert.equal(s.pendingPick, null);
+  assert.notEqual(s.activePlayerId, pid, 'play moves on after the pick');
+  assert.equal(s.events.at(-1).type === 'PARTS_PICKED' || s.events.some((e) => e.type === 'PARTS_PICKED'), true);
+});
+
+test('specimens buy one part; assemble installs 1, plus Advanced Anatomy', () => {
   let s = createGame({ playerCount: 3, startingMoney: 10 }, 'assemble');
   const pid = s.activePlayerId;
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['athlete_leg', 'athlete_leg'] } });
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['athlete_leg', 'athlete_leg'] } }).error.code, 'INVALID_CHOICE');
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['athlete_leg'] } });
   const p = () => s.players.find((x) => x.id === pid);
-  assert.deepEqual(p().loose.map((x) => x.variantId), ['athlete_leg', 'athlete_leg']);
-  p().loose.push({ id: 'part-x', variantId: 'poet_brain', type: 'head' }, { id: 'part-y', variantId: 'poet_brain', type: 'head' });
+  assert.deepEqual(p().loose.map((x) => x.variantId), ['athlete_leg']);
+  assert.equal(p().money, 8);
+  p().loose.push({ id: 'part-w', variantId: 'ordinary_leg', type: 'leg' }, { id: 'part-x', variantId: 'poet_brain', type: 'head' }, { id: 'part-y', variantId: 'poet_brain', type: 'head' });
   s = passAllUntil(s, (x) => x.phase === 'night' && x.activePlayerId === pid);
   const ids = p().loose.map((x) => x.id);
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ids.slice(0, 3) } }).error.code, 'INVALID_CHOICE');
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ['part-x', 'part-y'] } }).error.code, 'NO_MATCHING_SLOT');
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ids.slice(0, 2) } }).error.code, 'INVALID_CHOICE');
   p().research = ['anatomy'];
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: [ids[0], ids[1], 'part-x'] } });
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ['part-x', 'part-y'] } }).error.code, 'NO_MATCHING_SLOT');
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: [ids[0], 'part-x'] } });
   assert.equal(p().body.leg1.variantId, 'athlete_leg');
-  assert.equal(p().body.leg2.variantId, 'athlete_leg');
   assert.equal(p().body.head.id, 'part-x');
-  assert.equal(p().loose.length, 1);
+  assert.equal(p().loose.length, 2);
 });
 
 test('lecture pays 1 + each own publication, uncapped; publishing is free and keeps the turn', () => {

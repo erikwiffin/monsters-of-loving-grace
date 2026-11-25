@@ -16,7 +16,7 @@ In New Game, each player row has a *Played by* selector with three options: Huma
 
 ## Privacy screens
 
-Privacy screens exist only for humans. Objective dealing skips AI seats; with exactly one human, it is a single screen, and with none, it is skipped. AI resurrection commitments are made silently, without pass-the-device screens, and stay hidden until the reveal like any other commitment. AI subdue decisions are public, and appear in the Chronicle and the resurrection report.
+Privacy screens exist only for humans. Objective dealing skips AI seats; with exactly one human, it is a single screen, and with none, it is skipped. AI resurrection commitments are made silently, without pass-the-device screens, and stay hidden until the reveal like any other commitment. AI morgue picks and subdue decisions are public, and appear in the Chronicle and the resurrection report.
 
 ## Pausing and waiting
 

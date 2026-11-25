@@ -394,6 +394,18 @@ function commitmentFlow() {
     <div class="choice-row"><button class="big danger" data-act="commit" data-v="1">⚡ Attempt</button><button class="big ghost" data-act="commit" data-v="0">Decline</button></div>`, 'wide');
 }
 
+// After a morgue raid the player keeps some of the drawn parts (public).
+function pickFlow() {
+  const s = ui.state;
+  const cfg = s.config;
+  const k = s.pendingPick;
+  const opts = E.getLegalCommands(s, s.activePlayerId);
+  const label = (ids) => ids.map((id) => { const x = k.parts.find((y) => y.id === id); return `${esc(variantName(cfg, x.variantId))}<small class="muted"> — ${esc(variantText(cfg, x.variantId))}</small>`; }).join(' + ');
+  return modal(`${esc(cfg.actions[k.actionId].name)}: keep ${k.keep}`,
+    `<p>You uncover these parts. Keep ${k.keep}; the rest are lost.</p><div class="opts">${opts.map((c, i) => `<button class="opt" data-act="pick" data-i="${i}">${label(c.partIds)}</button>`).join('')}</div>`,
+    '');
+}
+
 // Subduing is a public decision, so there is no pass-the-device screen.
 function subdueFlow() {
   const view = E.getPublicView(ui.state, { includeEvents: false });
@@ -504,7 +516,7 @@ function choiceModal() {
       body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="variant${i}">${opts}</select></label>`).join('');
       break;
     }
-    case 'hire': body += `<p>Cost: <b>${cfg.igorCosts[p.igorsHired]}</b> money. You have ${p.money}.</p>`; break;
+    case 'hire': body += `<p>Cost: <b>${cfg.igorCosts[p.igorsHired]}</b> money. You have ${p.money}. The Igor can work straight away.</p>`; break;
     default: break;
   }
   return modal(title, body, '<button data-act="close" class="ghost">Cancel</button><button data-act="confirm-place" class="big">Confirm</button>');
@@ -615,6 +627,7 @@ function render() {
       else if (s.result && !ui.hideGameOver && !ui.modal) forced = gameOverOverlay();
       else if (s.phase === 'commitment' && !aiKind(s.activePlayerId)) forced = commitmentFlow();
       else if (s.phase === 'resolution' && s.control && !aiKind(s.activePlayerId) && !ui.modal) forced = subdueFlow();
+      else if (s.pendingPick && !s.result && !aiKind(s.activePlayerId) && !ui.modal) forced = pickFlow();
     }
     ui.blocked = !!forced || !!ui.modal;
     if (forced) html += forced;
@@ -734,6 +747,12 @@ const handlers = {
     render();
   },
   'commit-done'() { ui.commit = null; render(); },
+  pick(el) {
+    const s = ui.state;
+    const c = E.getLegalCommands(s, s.activePlayerId)[Number(el.dataset.i)];
+    if (c) act(c);
+    render();
+  },
   'publish-open'() { ui.modal = { kind: 'publish' }; render(); },
   publish(el) {
     if (act({ type: 'PUBLISH_RESEARCH', playerId: ui.state.activePlayerId, researchType: el.dataset.id })) ui.modal = null;
@@ -749,7 +768,7 @@ const handlers = {
   'ai-pause'() { ui.aiPaused = !ui.aiPaused; render(); },
   pass() {
     const s = ui.state;
-    askConfirm(`Pass the ${s.phase}?`, `${E.getPlayer(s, s.activePlayerId).name} will place no more workers this ${s.phase}. Unused Igors and Creatures can still act ${s.phase === 'day' ? 'tonight' : 'next round'}.`, 'Pass', () => {
+    askConfirm(`Pass the ${s.phase}?`, `${E.getPlayer(s, s.activePlayerId).name} will place no more workers this ${s.phase}. Unused Igors can still act ${s.phase === 'day' ? 'tonight' : 'next round'}.`, 'Pass', () => {
       act({ type: 'PASS_TURN', playerId: s.activePlayerId });
     });
   },

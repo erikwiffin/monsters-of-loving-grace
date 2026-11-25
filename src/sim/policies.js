@@ -64,6 +64,19 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
       const me = view.players.find((p) => p.id === view.viewerId);
       const objective = view.private.objective;
       const cfg = view.config;
+      if (view.pendingPick) {
+        // Keep the drawn part(s) that best fill the body.
+        const k = view.pendingPick;
+        const openNow = {};
+        for (const [type, def] of Object.entries(cfg.partTypes)) openNow[type] = def.slots.filter((sl) => me.body[sl] === null).length;
+        const worth = (id) => {
+          const x = k.parts.find((y) => y.id === id);
+          return (openNow[x.type] > 0 ? 5 : 0) + variantValue(cfg, x.variantId, objective);
+        };
+        let best = legal[0];
+        for (const c of legal) if (c.partIds.reduce((a, id) => a + worth(id), 0) > best.partIds.reduce((a, id) => a + worth(id), 0)) best = c;
+        return best;
+      }
       if (view.phase === 'resolution' && view.control) {
         // A monster is loose in the control chain (spec 025). Subduing costs
         // one control attempt; declining adds suspicion.
@@ -175,7 +188,6 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
           case 'assemble': {
             return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0);
           }
-          case 'conceal': return wantsSuspicion ? -1 : susp * 6 - 0.5;
           default: return 0.5;
         }
       };

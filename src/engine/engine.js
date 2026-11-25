@@ -41,6 +41,7 @@ function validateConfig(cfg) {
   const n = cfg.playerCount;
   if (!Number.isInteger(n) || n < 3 || n > 6) throw new Error('playerCount must be an integer from 3 to 6');
   if (!Number.isInteger(cfg.suspicionMax) || cfg.suspicionMax < 1) throw new Error('suspicionMax must be a positive integer');
+  if (!Number.isInteger(cfg.startingIgors) || cfg.startingIgors < 0 || cfg.startingIgors > cfg.maxIgors) throw new Error('startingIgors must be an integer from 0 to maxIgors');
   for (const attr of ATTRIBUTES) {
     if (!Number.isInteger(cfg.resurrection.thresholds[attr])) throw new Error(`resurrection threshold for ${attr} must be an integer`);
   }
@@ -167,6 +168,10 @@ function eligibleMarketCards(s, p) {
   return s.market.filter((c) => !p.research.includes(c.type));
 }
 
+function igorCount(s, p) {
+  return playerWorkers(s, p.id).filter((w) => w.kind === 'igor').length;
+}
+
 function nextIgorCost(s, p) {
   return s.config.igorCosts[p.igorsHired];
 }
@@ -263,8 +268,14 @@ function checkLooseParts(p, partIds, min, max) {
 function resolveDiscovery(s, p, w, def, actionId) {
   const parts = [];
   for (let i = 0; i < def.parts; i++) parts.push(drawRandomPart(s));
-  p.loose.push(...parts);
-  emit(s, 'PARTS_GAINED', { playerId: p.id, source: actionId, parts: clone(parts) });
+  if (def.keep) {
+    // The player chooses which drawn parts to keep after the die (PICK_PARTS).
+    s.pendingPick = { playerId: p.id, actionId, parts: clone(parts), keep: def.keep };
+    emit(s, 'PARTS_DRAWN', { playerId: p.id, source: actionId, parts: clone(parts), keep: def.keep });
+  } else {
+    p.loose.push(...parts);
+    emit(s, 'PARTS_GAINED', { playerId: p.id, source: actionId, parts: clone(parts) });
+  }
   const roll = rollDie(s.rng, 6);
   const base = def.suspicionTable[roll - 1] || 0;
   const reduction = researchBonus(s, p.id, 'suspicionReduction');
@@ -279,8 +290,7 @@ export const HANDLERS = {
     choiceKeys: [],
     prereq: () => null,
     apply(s, p, w, def) {
-      const base = w.kind === 'igor' ? def.igorGain : def.gain;
-      changeMoney(s, p, base + researchBonus(s, p.id, 'medicineBonus'), 'medicine');
+      changeMoney(s, p, def.gain + researchBonus(s, p.id, 'medicineBonus'), 'medicine');
     },
   },
   research: {
@@ -315,16 +325,17 @@ export const HANDLERS = {
   hire: {
     choiceKeys: [],
     prereq(s, p) {
-      if (p.igorsHired >= s.config.maxIgors) return err('MAX_IGORS', 'You already employ the maximum number of Igors.');
+      if (igorCount(s, p) >= s.config.maxIgors) return err('MAX_IGORS', 'You already employ the maximum number of Igors.');
       return needMoney(p, nextIgorCost(s, p));
     },
     apply(s, p) {
       const cost = nextIgorCost(s, p);
       changeMoney(s, p, -cost, 'hire');
       p.igorsHired += 1;
-      const id = `igor-${p.id}-${p.igorsHired}`;
-      addWorker(s, { id, kind: 'igor', ownerId: p.id, active: false });
-      emit(s, 'IGOR_HIRED', { playerId: p.id, workerId: id, cost, availableFromRound: s.round + 1 });
+      // A hired Igor can act at once, later this day or tonight.
+      const id = `igor-${p.id}-${igorCount(s, p) + 1}`;
+      addWorker(s, { id, kind: 'igor', ownerId: p.id, active: true });
+      emit(s, 'IGOR_HIRED', { playerId: p.id, workerId: id, cost, availableFromRound: s.round });
     },
   },
   charity: {
@@ -420,11 +431,6 @@ export const HANDLERS = {
       acquireResearch(s, p, c.researchCardId, 'experiment');
     },
   },
-  conceal: {
-    choiceKeys: [],
-    prereq: (s) => (s.suspicion > 0 ? null : err('NO_SUSPICION', 'Suspicion is already 0.')),
-    apply: (s, p, w, def) => changeSuspicion(s, -def.reduction, 'conceal', p.id),
-  },
 };
 
 function publishError(s, p, t) {
@@ -509,6 +515,7 @@ export function createGame(config = {}, seed) {
     occupancy: { day: {}, night: {} },
     commitment: null,
     control: null,
+    pendingPick: null,
     stableTransitions: [],
     creatures: {},
     creatureOrder: [],
@@ -525,6 +532,7 @@ export function createGame(config = {}, seed) {
     const name = (cfg.playerNames && cfg.playerNames[i]) || `Scientist ${i + 1}`;
     s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, controlAttemptsUsed: 0, passed: false });
     addWorker(s, { id: `scientist-${id}`, kind: 'scientist', ownerId: id, active: true });
+    for (let k = 1; k <= cfg.startingIgors; k++) addWorker(s, { id: `igor-${id}-${k}`, kind: 'igor', ownerId: id, active: true });
   }
   s.firstPlayerIndex = randInt(s.rng, n);
   s.turnPointer = s.firstPlayerIndex;
@@ -656,6 +664,7 @@ function advance(s) {
   while (!s.result) {
     if (++guard > 100000) throw new Error('advance(): no decision point reached');
     if (s.phase === 'day' || s.phase === 'night') {
+      if (s.pendingPick) { s.activePlayerId = s.pendingPick.playerId; return; }
       const p = nextPlacementPlayer(s);
       if (p) { s.activePlayerId = p.id; return; }
       endPhase(s);
@@ -918,6 +927,7 @@ const COMMAND_FIELDS = {
   COMMIT_RESURRECTION: { required: ['type', 'playerId', 'attempt'], optional: ['seq'] },
   SUBDUE_MONSTER: { required: ['type', 'playerId', 'subdue'], optional: ['seq'] },
   PUBLISH_RESEARCH: { required: ['type', 'playerId', 'researchType'], optional: ['seq'] },
+  PICK_PARTS: { required: ['type', 'playerId', 'partIds'], optional: ['seq'] },
 };
 
 export const COMMAND_TYPES = Object.keys(COMMAND_FIELDS);
@@ -949,6 +959,15 @@ export function validateCommand(s, cmd) {
     if (typeof cmd.subdue !== 'boolean') return err('INVALID_CHOICE', 'subdue must be a boolean.');
     return null;
   }
+  if (cmd.type === 'PICK_PARTS') {
+    const k = s.pendingPick;
+    if (!k) return err('WRONG_PHASE', 'There are no drawn parts to pick from.');
+    const ids = cmd.partIds;
+    if (!Array.isArray(ids) || ids.length !== k.keep || new Set(ids).size !== ids.length) return err('INVALID_CHOICE', `Pick exactly ${k.keep} of the drawn parts.`);
+    for (const id of ids) if (!k.parts.some((x) => x.id === id)) return err('INVALID_TARGET', `Part ${id} was not drawn.`);
+    return null;
+  }
+  if (s.pendingPick) return err('PICK_PENDING', 'Pick from the drawn parts first.');
   if (s.phase !== 'day' && s.phase !== 'night') return err('WRONG_PHASE', cmd.type === 'PUBLISH_RESEARCH' ? 'You can only publish on your day or night turn.' : 'Workers can only be placed by day or night.');
   if (cmd.type === 'PASS_TURN') return null;
   if (cmd.type === 'PUBLISH_RESEARCH') return publishError(s, p, cmd.researchType);
@@ -988,6 +1007,13 @@ function applyCommand(s, cmd) {
     s.commitment.choices[p.id] = cmd.attempt;
     emit(s, 'COMMITMENT_LOCKED', { playerId: p.id });
     emit(s, 'COMMITMENT_RECORDED', { playerId: p.id, attempt: cmd.attempt }, [p.id]);
+  } else if (cmd.type === 'PICK_PARTS') {
+    const k = s.pendingPick;
+    const kept = k.parts.filter((x) => cmd.partIds.includes(x.id));
+    const discarded = k.parts.filter((x) => !cmd.partIds.includes(x.id));
+    p.loose.push(...kept);
+    s.pendingPick = null;
+    emit(s, 'PARTS_PICKED', { playerId: p.id, source: k.actionId, kept: clone(kept), discarded: clone(discarded) });
   } else if (cmd.type === 'PUBLISH_RESEARCH') {
     // A free action: the player keeps their turn.
     p.published.push(cmd.researchType);
@@ -1044,6 +1070,10 @@ export function getLegalCommands(s, pid) {
     ];
   }
   const p = getPlayer(s, pid);
+  if (s.pendingPick) {
+    const k = s.pendingPick;
+    return combinations(k.parts.map((x) => x.id), k.keep).map((partIds) => ({ type: 'PICK_PARTS', playerId: pid, partIds }));
+  }
   const out = [{ type: 'PASS_TURN', playerId: pid }];
   for (const t of publishable(p)) out.push({ type: 'PUBLISH_RESEARCH', playerId: pid, researchType: t });
   for (const w of playerWorkers(s, pid)) {
@@ -1163,7 +1193,7 @@ function publicPlayer(s, p) {
     id: p.id, name: p.name, seat: p.seat, money: p.money,
     loose: clone(p.loose), body: clone(p.body), bodyComplete: bodyComplete(p),
     research: [...p.research], published: [...p.published], igorsHired: p.igorsHired,
-    nextIgorCost: p.igorsHired < s.config.maxIgors ? nextIgorCost(s, p) : null,
+    nextIgorCost: igorCount(s, p) < s.config.maxIgors ? nextIgorCost(s, p) : null,
     passed: p.passed,
     effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, researchCount(s, p.id, t)])),
     assembleCapacity: assembleCapacity(s, p.id),
@@ -1194,6 +1224,7 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     creatures: s.creatureOrder.map((id) => clone(s.creatures[id])),
     stableTransitions: [...s.stableTransitions],
     commitment: s.commitment ? { order: [...s.commitment.order], decided: s.commitment.order.filter((pid) => pid in s.commitment.choices) } : null,
+    pendingPick: s.pendingPick ? clone(s.pendingPick) : null,
     control: s.control ? {
       creatorId: s.control.creatorId, creatureId: s.control.creatureId, chain: [...s.control.chain], position: s.control.position,
       deciderId: s.control.chain[s.control.position] || null, decisions: clone(s.control.record.controlDecisions),

@@ -25,18 +25,17 @@ export const researchName = (cfg, t) => (cfg.research[t] ? cfg.research[t].name 
 
 export function actionText(id, def, cfg) {
   switch (id) {
-    case 'medicine': return `Gain ${def.gain} money (Igor gains ${def.igorGain}). +1 per Medical Expertise copy.`;
+    case 'medicine': return `Gain ${def.gain} money. +1 per Medical Expertise copy.`;
     case 'research': return `Pay ${def.cost}: take an eligible research card from the market.`;
-    case 'specimens': return `Pay ${def.cost}: choose any ${def.count} named body parts.`;
-    case 'hire': return `Pay ${cfg.igorCosts.join(' / ')}: hire an Igor (works from next round, max ${cfg.maxIgors}).`;
+    case 'specimens': return `Pay ${def.cost}: choose ${def.count === 1 ? 'any named body part' : `any ${def.count} named body parts`}.`;
+    case 'hire': return `Pay ${cfg.igorCosts.slice(0, cfg.maxIgors - cfg.startingIgors).join(' / ')}: hire an Igor who can work at once (max ${cfg.maxIgors} Igors).`;
     case 'charity': return `Pay ${def.cost}: suspicion −${def.reduction}.`;
     case 'lecture': return `Gain ${def.base} + 1 per discovery you have published${def.cap == null ? '' : ` (max ${def.cap})`}.`;
     case 'garrison': return 'Lets you subdue other players\' monsters this round.';
-    case 'graves': return `Gain ${def.parts} random parts. d6: 1–3 → +1 suspicion.`;
-    case 'morgue': return `Gain ${def.parts} random parts. d6: 1–2 → +2, 3–4 → +1 suspicion.`;
-    case 'assemble': return `Install ${def.max} loose parts into empty slots (+1 per Advanced Anatomy).`;
+    case 'graves': return `Gain ${def.parts} random parts. d6: ${suspicionTableText(def.suspicionTable)}.`;
+    case 'morgue': return `Draw ${def.parts} random parts and keep ${def.keep}. d6: ${suspicionTableText(def.suspicionTable)}.`;
+    case 'assemble': return `Install ${def.max} loose part${def.max === 1 ? '' : 's'} into empty slots (+1 per Advanced Anatomy).`;
     case 'experiment': return `Spend ${def.partCost} loose parts: take an eligible research card free.`;
-    case 'conceal': return `Suspicion −${def.reduction}.`;
     default: return '';
   }
 }
@@ -49,9 +48,19 @@ export function workerLabel(w) {
 
 const REASONS = {
   medicine: 'medicine', research: 'research', specimens: 'specimens', hire: 'hiring', charity: 'charity',
-  lecture: 'lecture', publish: 'publication', graves: 'grave robbing', morgue: 'morgue raid', conceal: 'covering tracks',
+  lecture: 'lecture', publish: 'publication', graves: 'grave robbing', morgue: 'morgue raid',
   failed_resurrection: 'failed resurrection', monster_not_subdued: 'monster not subdued', monster_subdued: 'monster subdued',
 };
+
+/** "1–2 → +2, 3–4 → +1 suspicion" from a d6 discovery table (faces with no suspicion are omitted). */
+function suspicionTableText(table) {
+  const runs = [];
+  table.forEach((v, i) => {
+    const last = runs[runs.length - 1];
+    if (last && last.v === v) last.to = i + 1; else runs.push({ v, from: i + 1, to: i + 1 });
+  });
+  return `${runs.filter((r) => r.v > 0).map((r) => `${r.from === r.to ? r.from : `${r.from}–${r.to}`} → +${r.v}`).join(', ')} suspicion`;
+}
 
 /** One-line description of a public event, or null to omit it from the log. */
 export function describeEvent(e, ctx) {
@@ -64,6 +73,8 @@ export function describeEvent(e, ctx) {
     case 'WORKER_PLACED': return `${n(e.playerId)} sends ${e.workerKind === 'scientist' ? 'their Scientist' : 'an Igor'} to the ${esc(e.location)} (${esc(cfg.actions[e.actionId].name.toLowerCase())}).`;
     case 'TURN_PASSED': return `${n(e.playerId)} passes for the ${e.phase}.`;
     case 'MONEY_CHANGED': return `${n(e.playerId)} ${e.delta >= 0 ? 'gains' : 'pays'} ${Math.abs(e.delta)} money (now ${e.balance}).`;
+    case 'PARTS_DRAWN': return `${n(e.playerId)} uncovers ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')} and may keep ${e.keep}.`;
+    case 'PARTS_PICKED': return `${n(e.playerId)} keeps ${e.kept.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
     case 'PARTS_GAINED': return `${n(e.playerId)} obtains ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
     case 'PARTS_INSTALLED': return `${n(e.playerId)} installs ${e.installs.map((i) => `${esc(variantName(cfg, i.variantId))} (${i.slot})`).join(', ')}${e.bodyComplete ? ' — <i>the body is complete</i>' : ''}.`;
     case 'PARTS_SPENT': return `${n(e.playerId)} consumes ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')} in experiments.`;

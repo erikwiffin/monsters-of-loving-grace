@@ -4,7 +4,7 @@ Each player is a scientist competing to create life or to fulfil a secret ambiti
 
 ## Setup
 
-- Each player starts with 3 money, one Scientist, 3 control attempts (spec 025), no Igors, no loose or installed body parts, no research and no Creature.
+- Each player starts with 3 money, one Scientist, one Igor, 3 control attempts (spec 025), no loose or installed body parts, no research and no Creature.
 - Village suspicion starts at 0.
 - The starting player is chosen at random.
 
@@ -59,7 +59,7 @@ Only five things raise suspicion:
 
 **Ruling:** a stable Creature adds no suspicion. A subdue destroys the monster before its +1 is added, so a mob formed by a subdue is an ordinary mob, won by the Inquisitor (spec 025).
 
-Only two things lower it: charity (−2) and covering tracks (−1). Specs 022 and 025 give the details. Suspicion never rises automatically, at dawn or over time, and dawn does not change it.
+Only charity lowers it (−2). Specs 022 and 025 give the details. Suspicion never rises automatically, at dawn or over time, and dawn does not change it.
 
 There is no individual suspicion per player in this version.
 

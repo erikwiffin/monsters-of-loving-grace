@@ -23,7 +23,7 @@ At the start of night, everyone's pass status resets and the turn returns to the
 Each worker has a stable ID. There are two kinds.
 
 - **Scientist** (`scientist-pN`): every player has one from the start. It acts once by day and once by night, refreshing for the night. It may take any action.
-- **Igor** (`igor-pN-k`): hired at the Tavern for 4, then 7, then 10 money, up to three per player. There are no wages. A newly hired Igor is pending and becomes available at the start of the next round, which prevents chaining actions within one round. An Igor acts once per full round, in either day or night. An Igor used by day can't act that night; one left unused by day may act at night. There is no advance assignment. An Igor may only take actions marked as Igor-permitted (spec 022).
+- **Igor** (`igor-pN-k`): every player starts with one Igor (`igor-pN-1`), available from round 1. More are hired at the Tavern for 4, then 7 money, up to three Igors per player in all. There are no wages. A newly hired Igor can act at once (spec 022). An Igor acts once per full round, in either day or night. An Igor used by day can't act that night; one left unused by day may act at night. There is no advance assignment. An Igor may only take actions marked as Igor-permitted (spec 022).
 
 ## Resurrection commitment
 
@@ -41,7 +41,6 @@ At dawn, Prometheus and Visionary are checked together (spec 020). If any Creatu
 
 - the first player rotates one seat;
 - all action-space occupancy and worker-used flags are cleared;
-- pending workers (newly hired Igors) become available;
 - the round's stable transitions are cleared;
 - the round number increases, and a new day begins.
 
