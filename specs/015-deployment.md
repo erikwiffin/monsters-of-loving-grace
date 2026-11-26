@@ -5,7 +5,7 @@ The playable game is a static site hosted on GitHub Pages at the repository's pr
 ## Static site constraints
 
 - There is no application server, database, account system, external API, online multiplayer or real-money system.
-- Every asset is local; there are no mandatory CDN dependencies. Fonts are system fonts.
+- Every asset is local; there are no mandatory CDN dependencies. Fonts may be bundled in `assets/` with their licence files.
 - The site is HTML, CSS and native ES modules, with no build step. `index.html` is the entry point.
 - Every URL is relative, so the site works under a repository subpath without configuration.
 - ES modules need HTTP(S), so local play uses a static server. `bin/serve.mjs` is provided and contains no game logic.
