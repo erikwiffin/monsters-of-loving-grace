@@ -173,23 +173,47 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const remaining = Math.max(0, EXPECTED_ROUNDS - view.round);
 
       // Whether to commit to a resurrection tonight (preparing is public and binding).
+      // Everything about a resurrection is public: bodies, exact odds, control
+      // chances, garrisons and who has prepared tonight.
+      // Chance that a monster of mine is never subdued: I try first (if I have
+      // an attempt), then every garrisoned rival with an attempt, each of whom
+      // might also decline (an Unleasher would).
+      const pUnleashed = () => {
+        let escape = me.controlAttempts > 0 ? 1 - me.controlChance : 1;
+        for (const p of rivals) if (p.garrisoned && p.controlAttempts > 0) escape *= 1 - 0.8 * p.controlChance;
+        return escape;
+      };
+      const preparedRivals = rivals.filter((p) => (view.prepared || []).includes(p.id));
+      // Chance that at least one rival who has prepared tonight stabilizes.
+      const rivalStable = preparedRivals.reduce((a, p) => a * (1 - (p.resurrectionOdds ? p.resurrectionOdds.pStable : 0)), 1);
+      const pRivalStable = 1 - rivalStable;
+      // Rivals with a complete body whose Scientist could still prepare tonight.
+      // That includes bodies their loose parts can finish tonight.
+      const rivalsCouldPrepare = rivals.filter((p) => installedPlusLoose(p) >= 6 && !p.passed && !(view.prepared || []).includes(p.id)
+        && p.workers.some((w) => w.kind === 'scientist' && w.availableNow)).length;
+
       const shouldAttempt = () => {
         const odds = me.resurrectionOdds;
         if (!odds) return false;
         const late = view.round >= 12;
         const bar = st.attemptBar;
-        const canControl = me.controlAttempts > 0 && me.controlChance >= 0.5;
-        const safeEnough = canControl
-          ? odds.pStable >= (late ? 0.1 : 0.2) * bar
-          : odds.pStable >= odds.pMonster * 1.2 * bar || (late && odds.pStable >= odds.pMonster * 0.6 * bar);
-        const preparedRivals = (view.prepared || []).filter((pid) => pid !== me.id);
-        if (objective === 'prometheus') return safeEnough && preparedRivals.length === 0;
+        // A subdued monster is a setback; an unleashed one ends the game.
+        const pUnleash = odds.pMonster * pUnleashed();
+        const safeEnough = odds.pStable >= bar * Math.max(late ? 0.1 : 0.2, 1.5 * pUnleash);
+        if (objective === 'prometheus') {
+          // Two stable Creatures lose for Prometheus: stay out if a rival who
+          // prepared is likely to succeed.
+          return safeEnough && pRivalStable < 0.25;
+        }
         if (objective === 'visionary') {
-          const ready = rivals.filter((p) => p.bodyComplete).length;
-          return safeEnough && (preparedRivals.length > 0 || ready >= Math.min(VISIONARY_MIN_RIVALS, rivals.length));
+          // If a rival stabilizes alone, the Visionary loses anyway, so join any
+          // promising attempt even with poor odds. Only an unleashed monster,
+          // which would end a game that might otherwise go on, holds it back.
+          if (pRivalStable >= 0.1) return odds.pStable >= 0.03 && odds.pStable * pRivalStable >= 0.5 * pUnleash * (1 - pRivalStable);
+          return false;
         }
         if (objective === 'unleasher') {
-          const pEscape = rivals.filter((p) => p.garrisoned && p.controlAttempts > 0).reduce((a, p) => a * (1 - p.controlChance), 1);
+          const pEscape = pUnleashed() / (me.controlAttempts > 0 ? 1 - me.controlChance : 1); // it won't subdue its own
           return pEscape >= 0.5
             ? odds.pMonster * pEscape > odds.pStable
             : odds.pMonster > odds.pStable * 4 && odds.pStable <= UNLEASHER_MAX_STABLE;
@@ -197,6 +221,9 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         // Inquisitor: only a failed Vitality helps, and only if it brings the mob.
         return view.suspicion >= view.suspicionMax - cfg.resurrection.failedVitalitySuspicion && odds.pFailed > 0.5;
       };
+      // The Visionary waits for a rival to commit first, keeping its Scientist free.
+      const visionaryWaiting = objective === 'visionary' && view.phase === 'night' && me.bodyComplete
+        && preparedRivals.length === 0 && rivalsCouldPrepare > 0;
       const igorFree = me.workers.some((w) => w.kind === 'igor' && w.availableNow);
       // Keep one Igor back for the night when a night action is worth more than
       // a typical day action: a day placement by the last free Igor pays for it.
@@ -210,7 +237,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const a = c.actionId;
         const def = cfg.actions[a];
         const isSci = c.workerId.startsWith('scientist');
-        const reserve = isSci ? 0 : igorReserve;
+        const reserve = isSci ? (visionaryWaiting && a !== 'prepare' ? 3 : 0) : igorReserve;
         // Keep the Scientist free for what only it can do.
         const sciTax = isSci && igorFree && a !== 'prepare' ? 0.3 : 0;
         const susCost = expectedSuspicion(def, reduction) * suspicionPrice;
@@ -232,11 +259,15 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             // An installed part is cheap to lose if a spare loose part can replace it.
             const spares = {};
             for (const t of Object.keys(open)) spares[t] = Math.max(0, looseFits(t) - open[t]);
+            // Discarding a harmful part (a damaged arm, say) is also an upgrade:
+            // experiments are the only way to empty a filled slot.
+            const refill = cfg.actions.specimens ? cfg.actions.specimens.cost * moneyValue * 0.6 + 1.5 : 3;
             const lost = c.choices.partIds.reduce((acc, id) => {
               const slot = Object.keys(me.body).find((sl) => me.body[sl] && me.body[sl].id === id);
-              const t = me.body[slot].type;
-              if (spares[t] > 0) { spares[t]--; return acc + spareValue + 1; }
-              return acc + partValue(me.body[slot].variantId, () => 1);
+              const part = me.body[slot];
+              const quality = variantValue(cfg, part.variantId, objective) * 0.4;
+              if (spares[part.type] > 0) { spares[part.type]--; return acc + spareValue + 1 + quality; }
+              return acc + Math.max(0.3, Math.min(partValue(part.variantId, () => 1), refill + quality));
             }, 0);
             return hit * (meanWant + 0.3 * (n - 1)) - lost - susCost - sciTax;
           }
@@ -281,7 +312,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             if (!rivalsNearlyReady) return -0.2;
             if (objective === 'unleasher') return 3.5;
             if (me.garrisoned || me.controlAttempts === 0) return -0.2;
-            return objective === 'inquisitor' ? 2.5 : 4.5;
+            // Take a scarce garrison slot before an Unleasher can fill it.
+            const gCap = (view.capacities || {}).garrison;
+            const gLeft = gCap == null ? Infinity : gCap - ((view.occupancy.day || {}).garrison || []).length;
+            return (objective === 'inquisitor' ? 2.5 : 4.5) + (gLeft <= 1 ? 1 : 0);
           }
           case 'assemble':
             if (wantsSuspicion) return 0.2;
@@ -290,6 +324,11 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
           case 'prepare':
             // Wait for assembly first if loose parts still fit the body.
             if (!me.bodyComplete) return -5;
+            if (visionaryWaiting) {
+              // Nothing to join yet. If preparing now is the last chance, commit
+              // only when several rivals are ready and so likely to try too.
+              return rivalsCouldPrepare >= 2 && me.resurrectionOdds.pStable >= 0.05 ? 0.3 : 0.1;
+            }
             return shouldAttempt() ? 12 : -5;
           case 'rest': {
             // Going first matters when the day's capped spaces fill up.
