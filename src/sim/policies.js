@@ -85,7 +85,7 @@ function expectedSuspicion(def, reduction) {
  * the configuration's numbers and the engine's exact odds. Because values come
  * from the config, it adapts when a sweep changes costs, gains or suspicion.
  */
-export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'standard' } = {}) {
+export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'standard', igorBias = null } = {}) {
   const r = makeRandom(seed);
   const st = STYLES[style] || STYLES.standard;
   return {
@@ -129,7 +129,13 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const excess = Math.max(0, view.suspicion - dangerLine);
       const reduction = me.effectiveResearch.discretion * ((cfg.research.discretion && cfg.research.discretion.effects[0].amount) || 0);
       // Money matters less the more of it a player already holds.
-      const moneyValue = me.money < 4 ? 1.5 : me.money < 10 ? 1 : me.money < 20 ? 0.5 : 0.2;
+      let moneyValue = me.money < 4 ? 1.5 : me.money < 10 ? 1 : me.money < 20 ? 0.5 : 0.2;
+      // The Inquisitor builds nothing: money matters only for hiring more
+      // Igors (more night work) and for blocking charity.
+      if (wantsSuspicion) {
+        const canHire = cfg.actions.hire && me.workers.filter((w) => w.kind === 'igor').length < cfg.maxIgors;
+        moneyValue = canHire && me.money < cfg.actions.hire.cost ? 0.8 : 0.3;
+      }
 
       const open = {};
       for (const [type, def] of Object.entries(cfg.partTypes)) open[type] = def.slots.filter((sl) => me.body[sl] === null).length;
@@ -142,12 +148,12 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       // The Inquisitor builds no body: to it every part is only worth selling.
       const partValue = (variantId, needs = stillNeeded) => {
         const t = cfg.partVariants[variantId].type;
-        if (wantsSuspicion) return spareValue;
+        if (wantsSuspicion) return 0.3;
         return needs(t) > 0 ? 3 + variantValue(cfg, variantId, objective) * 0.4 : spareValue;
       };
       // A random part, drawn with the configured type weights.
       const weightTotal = Object.values(cfg.partTypes).reduce((a, t) => a + t.weight, 0);
-      const randomPartValue = wantsSuspicion ? spareValue : Object.entries(cfg.partTypes).reduce((a, [t, def]) => a + def.weight / weightTotal * (stillNeeded(t) > 0 ? 3 : spareValue), 0);
+      const randomPartValue = wantsSuspicion ? 0.3 : Object.entries(cfg.partTypes).reduce((a, [t, def]) => a + def.weight / weightTotal * (stillNeeded(t) > 0 ? 3 : spareValue), 0);
       // The Inquisitor gains by taking the last slot of a space rivals need to
       // build Creatures, slowing everyone down while suspicion grows.
       const denial = (id) => {
@@ -225,19 +231,53 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const visionaryWaiting = objective === 'visionary' && view.phase === 'night' && me.bodyComplete
         && preparedRivals.length === 0 && rivalsCouldPrepare > 0;
       const igorFree = me.workers.some((w) => w.kind === 'igor' && w.availableNow);
-      // Keep one Igor back for the night when a night action is worth more than
-      // a typical day action: a day placement by the last free Igor pays for it.
+      // An Igor used by day can't act tonight, so a day placement costs what
+      // that Igor would have earned at night. Plan tonight's jobs, give the best
+      // to the Scientist, and charge each day Igor for the job it gives up.
       const freeIgors = me.workers.filter((w) => w.kind === 'igor' && w.availableNow).length;
-      const graves = cfg.actions.graves;
-      const nightValue = graves ? graves.parts * randomPartValue - expectedSuspicion(graves, reduction) * suspicionPrice : 0;
-      const igorReserve = view.phase === 'day' && freeIgors === 1 && nightValue > 2.5 ? 0.6 * nightValue : 0;
+      const nightJobs = () => {
+        const jobs = [];
+        const capOf = (id) => { const c = (view.capacities || {})[id]; return c == null ? 3 : c; };
+        // Rivals compete for capped spaces, so count on only some of the slots.
+        const slots = (id) => Math.max(1, Math.round(capOf(id) / 2));
+        const g = cfg.actions.graves;
+        // Seat experiments (600 games, 5 players) showed builders win less when
+        // they save Igors for graves or selling: the parts are random and the
+        // shared suspicion feeds the Inquisitor. Only the Inquisitor plans those.
+        const gravesValue = g ? g.parts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
+        // Graves fill only about a third of rounds, so the Inquisitor plans on every slot.
+        for (let i = 0; wantsSuspicion && g && i < capOf('graves'); i++) jobs.push(gravesValue);
+        const sl = cfg.actions.sell;
+        if (sl && wantsSuspicion) {
+          // Spare parts on hand, plus what a grave robbery tonight would bring.
+          const spareCount = me.loose.length - Object.keys(open).reduce((a2, t) => a2 + Math.min(open[t], looseFits(t)), 0)
+            + (wantsSuspicion && g ? g.parts : 0);
+          const sellValue = sl.gain * moneyValue - sl.parts * spareValue - expectedSuspicion(sl, reduction) * suspicionPrice;
+          for (let i = 0; i < Math.min(slots('sell'), Math.floor(spareCount / sl.parts)); i++) jobs.push(sellValue);
+        }
+        if (me.bodyComplete && shouldAttempt()) jobs.push(12); // the Scientist prepares
+        else if (!wantsSuspicion && totalStillNeeded === 0 && needed > 0) jobs.push(5); // assemble the whole body
+        jobs.push(0.8); // rest, if nobody else takes it
+        return jobs.filter((v) => v > 0).sort((x, y) => y - x);
+      };
+      let igorReserve = 0;
+      if (view.phase === 'day' && freeIgors > 0) {
+        const jobs = nightJobs();
+        const sciFree = me.workers.some((w) => w.kind === 'scientist' && w.availableNow) || view.phase === 'day';
+        const forIgors = sciFree ? jobs.slice(1) : jobs; // the Scientist takes the best job tonight
+        // Placing an Igor now leaves freeIgors - 1 for the night: it gives up the
+        // job at position freeIgors - 1, if there is one.
+        igorReserve = 0.8 * (forIgors[freeIgors - 1] || 0);
+      }
 
       const score = (c) => {
         if (c.type === 'PASS_TURN') return 0.2;
         const a = c.actionId;
         const def = cfg.actions[a];
         const isSci = c.workerId.startsWith('scientist');
-        const reserve = isSci ? (visionaryWaiting && a !== 'prepare' ? 3 : 0) : igorReserve;
+        let reserve = isSci ? (visionaryWaiting && a !== 'prepare' ? 3 : 0) : igorReserve;
+        // Experiments only: push Igors towards one phase (spec 016).
+        if (!isSci && igorBias) reserve += view.phase === igorBias ? -3 : 3;
         // Keep the Scientist free for what only it can do.
         const sciTax = isSci && igorFree && a !== 'prepare' ? 0.3 : 0;
         const susCost = expectedSuspicion(def, reduction) * suspicionPrice;
@@ -315,12 +355,19 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             // Take a scarce garrison slot before an Unleasher can fill it.
             const gCap = (view.capacities || {}).garrison;
             const gLeft = gCap == null ? Infinity : gCap - ((view.occupancy.day || {}).garrison || []).length;
-            return (objective === 'inquisitor' ? 2.5 : 4.5) + (gLeft <= 1 ? 1 : 0);
+            // The Inquisitor rarely subdues, so a garrison is worth little to it.
+            return (objective === 'inquisitor' ? 0.8 : 4.5 + (gLeft <= 1 ? 1 : 0));
           }
-          case 'assemble':
+          case 'assemble': {
             if (wantsSuspicion) return 0.2;
+            // Installed parts can't be swapped, so with unlimited assembly there
+            // is no reason to install anything until the whole body can be built
+            // in one action. With a limit, the work has to start earlier.
+            const filled = Object.values(me.body).filter(Boolean).length;
+            if (def.max == null && filled + c.choices.partIds.length < Object.keys(me.body).length) return -0.5;
             return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0)
               - (isSci && igorFree ? 2 : 0);
+          }
           case 'prepare':
             // Wait for assembly first if loose parts still fit the body.
             if (!me.bodyComplete) return -5;
