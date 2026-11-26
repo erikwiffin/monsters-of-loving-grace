@@ -40,41 +40,67 @@ function variantValue(cfg, variantId, objective) {
   return cfg.partVariants[variantId].effects.reduce((a, e) => a + effectValue(e) * (e.attribute === 'vitality' ? 1 : humanityWeight), 0);
 }
 
-// Research types each objective keeps to itself rather than publishing.
-const NO_PUBLISH = {
-  prometheus: ['philosophy'],
-  visionary: [],
-  inquisitor: ['discretion', 'philosophy'],
-  unleasher: ['philosophy', 'neurology', 'mesmerism', 'restraint'],
+// How much each objective wants a research type, in money.
+const RESEARCH_WANT = {
+  unleasher: { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, mesmerism: 0.5, restraint: 0.5, medicine: 2.5, discretion: 1.5 },
+  inquisitor: { galvanism: 0.5, neurology: 1, philosophy: 1, mesmerism: 1.5, restraint: 1.5, medicine: 3, discretion: 0 },
+  default: { galvanism: 4, neurology: 3.5, philosophy: 4.5, mesmerism: 4, restraint: 4, medicine: 2.5, discretion: 1.5 },
+};
+// Conducting research publishes the card. Types an objective would rather keep
+// from rivals cost it this much to publish.
+const PUBLISH_PENALTY = {
+  prometheus: { philosophy: 1.5, galvanism: 1 },
+  visionary: {},
+  inquisitor: { discretion: 2, philosophy: 1.5 },
+  unleasher: { philosophy: 2, neurology: 1.5, mesmerism: 1.5, restraint: 1.5 },
 };
 const UNLEASHER_MAX_STABLE = 0.05;
 const VISIONARY_MIN_RIVALS = 3;
 const GARRISON_ALERT_PARTS = 5; // installed plus fitting loose parts
+const EXPECTED_ROUNDS = 9; // rough game length, for valuing a new worker
+
+// Styles shift how much risk a heuristic player accepts (spec 016): suspicion
+// costs more for a cautious player and less for a bold one, and their
+// resurrection thresholds move the same way.
+const STYLES = {
+  standard: { suspicionCost: 1, attemptBar: 1 },
+  cautious: { suspicionCost: 1.6, attemptBar: 1.4 },
+  bold: { suspicionCost: 0.6, attemptBar: 0.7 },
+};
+
+/** Expected suspicion from an action's discovery roll, after Discreet Methods. */
+function expectedSuspicion(def, reduction) {
+  const r = def && def.suspicion;
+  if (!r) return 0;
+  let total = 0;
+  for (let roll = 1; roll <= r.die; roll++) {
+    const band = r.bands.find((b) => roll <= b.max);
+    total += Math.max(0, (band ? band.amount : 0) - reduction);
+  }
+  return total / r.die;
+}
 
 /**
- * A simple greedy strategy: earn money, buy useful research, gather the best
- * parts it can, assemble, and attempt resurrection once it has some safety
- * research (or immediately, if its objective favours chaos).
+ * A greedy strategy that prices every option in money, using only its view,
+ * the configuration's numbers and the engine's exact odds. Because values come
+ * from the config, it adapts when a sweep changes costs, gains or suspicion.
  */
-export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
+export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'standard', igorBias = null } = {}) {
   const r = makeRandom(seed);
+  const st = STYLES[style] || STYLES.standard;
   return {
-    name: 'heuristic',
+    name: style === 'standard' ? 'heuristic' : style,
     decide({ view, legal }) {
       const me = view.players.find((p) => p.id === view.viewerId);
       const objective = view.private.objective;
       const cfg = view.config;
+      const want = RESEARCH_WANT[objective] || RESEARCH_WANT.default;
+
       if (view.pendingPick) {
-        // Keep the drawn part(s) that best fill the body.
-        const k = view.pendingPick;
-        const openNow = {};
-        for (const [type, def] of Object.entries(cfg.partTypes)) openNow[type] = def.slots.filter((sl) => me.body[sl] === null).length;
-        const worth = (id) => {
-          const x = k.parts.find((y) => y.id === id);
-          return (openNow[x.type] > 0 ? 5 : 0) + variantValue(cfg, x.variantId, objective);
-        };
+        // Keep the drawn research card this objective wants most.
+        const typeOf = (id) => view.pendingPick.cards.find((k) => k.id === id).type;
         let best = legal[0];
-        for (const c of legal) if (c.partIds.reduce((a, id) => a + worth(id), 0) > best.partIds.reduce((a, id) => a + worth(id), 0)) best = c;
+        for (const c of legal) if ((want[typeOf(c.cardId)] || 0) > (want[typeOf(best.cardId)] || 0)) best = c;
         return best;
       }
       if (view.phase === 'resolution' && view.control) {
@@ -90,119 +116,298 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
         else doSubdue = true;
         return legal.find((c) => c.subdue === doSubdue) || legal[0];
       }
-      if (view.phase === 'commitment') {
-        // Any stable Creature ends the game at dawn (spec 020), so each
-        // objective weighs the outcomes differently. A player who still has
-        // a control attempt will subdue their own monster, so for them a
-        // monster is a setback rather than a catastrophe.
-        const odds = me.resurrectionOdds;
-        const late = view.round >= 12;
-        // Its own monster is only a setback if it can probably subdue it.
-        const canControl = me.controlAttempts > 0 && me.controlChance >= 0.5;
-        const safeEnough = canControl
-          ? odds.pStable >= (late ? 0.1 : 0.2)
-          : odds.pStable >= odds.pMonster * 1.2 || (late && odds.pStable >= odds.pMonster * 0.6);
-        let attempt;
-        if (objective === 'prometheus') {
-          // Needs a lone stable Creature.
-          attempt = safeEnough;
-        } else if (objective === 'visionary') {
-          // A lone Creature loses for everyone; only try alongside a rival body.
-          // Commitments are secret, so it waits until enough rivals are ready
-          // that at least one is likely to attempt alongside it.
-          const rivalBodies = view.players.filter((p) => p.id !== me.id && p.bodyComplete).length;
-          attempt = rivalBodies >= Math.min(VISIONARY_MIN_RIVALS, view.players.length - 1) && safeEnough;
-        } else if (objective === 'unleasher') {
-          // Wants a monster to escape; a stable Creature loses for everyone.
-          // With no rival garrisoned, nobody else can subdue its monster, so
-          // a monster is a win. Otherwise only attempt when stability is
-          // very unlikely.
-          // Chance that every garrisoned rival fails their control roll.
-          const pEscape = view.players
-            .filter((p) => p.id !== me.id && p.garrisoned && p.controlAttempts > 0)
-            .reduce((a, p) => a * (1 - p.controlChance), 1);
-          attempt = pEscape >= 0.5
-            ? odds.pMonster * pEscape > odds.pStable
-            : odds.pMonster > odds.pStable * 4 && odds.pStable <= UNLEASHER_MAX_STABLE;
-        } else {
-          // Inquisitor: only a failed Vitality helps (+1 suspicion), and only
-          // when that failure would bring the mob.
-          attempt = view.suspicion >= view.suspicionMax - 1 && odds.pFailed > 0.5;
-        }
-        return legal.find((c) => c.attempt === attempt) || legal[0];
+
+      const susp = view.suspicion / view.suspicionMax;
+      // Suspicion added over the last full round: how fast the mob is coming.
+      const recentRise = (view.suspicionHistory || []).filter((h) => h.round >= view.round - 1 && h.delta > 0).reduce((x, h) => x + h.delta, 0);
+      const wantsSuspicion = objective === 'inquisitor';
+      // The price of one point of suspicion: rises steeply as the mob nears.
+      // Suspicion is the Inquisitor's only route to victory, so it buys it eagerly.
+      const pace = Math.min(1, recentRise / view.suspicionMax);
+      const suspicionPrice = wantsSuspicion ? -4 : st.suspicionCost * (1 + 8 * susp * susp + 4 * pace);
+      // Suspicion is shared: paying it down helps every rival as much as the
+      // payer, so non-Inquisitors only buy it back when the mob is close, and
+      // only as much as it takes to get out of danger.
+      // The danger line drops when suspicion is climbing fast: it is the
+      // threshold minus the rise over the last full round (at least 2).
+      const dangerLine = view.suspicionMax - Math.max(2, recentRise) - 1 - (st.suspicionCost > 1 ? 1 : 0);
+      const excess = Math.max(0, view.suspicion - dangerLine);
+      const reduction = me.effectiveResearch.discretion * ((cfg.research.discretion && cfg.research.discretion.effects[0].amount) || 0);
+      // Money matters less the more of it a player already holds.
+      let moneyValue = me.money < 4 ? 1.5 : me.money < 10 ? 1 : me.money < 20 ? 0.5 : 0.2;
+      // The Inquisitor builds nothing: money matters only for hiring more
+      // Igors (more night work) and for blocking charity.
+      if (wantsSuspicion) {
+        const canHire = cfg.actions.hire && me.workers.filter((w) => w.kind === 'igor').length < cfg.maxIgors;
+        moneyValue = canHire && me.money < cfg.actions.hire.cost ? 0.8 : 0.3;
       }
-      // Publishing is free and keeps the turn (spec 023): share whatever
-      // helps this objective before placing a worker.
-      const pub = legal.find((c) => c.type === 'PUBLISH_RESEARCH' && !(NO_PUBLISH[objective] || []).includes(c.researchType));
-      if (pub) return pub;
-      // Assembly is unlimited, so a rival's body can be finished in one night:
-      // count installed parts plus loose parts that fit its empty slots.
-      const installed = (p) => {
-        let n = 0;
-        for (const [type, def] of Object.entries(cfg.partTypes)) {
-          const filled = def.slots.filter((sl) => p.body[sl] !== null).length;
-          const loose = p.loose.filter((x) => x.type === type).length;
-          n += Math.min(def.slots.length, filled + loose);
-        }
-        return n;
-      };
-      const rivalsNearlyReady = view.players.filter((p) => p.id !== me.id && installed(p) >= GARRISON_ALERT_PARTS).length;
+
       const open = {};
       for (const [type, def] of Object.entries(cfg.partTypes)) open[type] = def.slots.filter((sl) => me.body[sl] === null).length;
       const needed = Object.values(open).reduce((a, b) => a + b, 0);
-      const looseFits = me.loose.filter((x) => open[x.type] > 0).length;
-      const susp = view.suspicion / view.suspicionMax;
-      const wantsSuspicion = objective === 'inquisitor';
+      const looseFits = (type) => me.loose.filter((x) => x.type === type).length;
+      const stillNeeded = (type) => Math.max(0, open[type] - looseFits(type));
+      const totalStillNeeded = Object.keys(open).reduce((a, t) => a + stillNeeded(t), 0);
+      // A spare part is worth what it sells for.
+      // A spare part (one that fits no empty slot) is worth a share of what it
+      // sells for; it can also feed an experiment.
+      const spareValue = cfg.actions.sell ? Math.min(2, Math.max(0.5, cfg.actions.sell.gain / cfg.actions.sell.parts * 0.4)) : 0.5;
+      // The Inquisitor builds no body: to it every part is only worth selling.
+      const partValue = (variantId, needs = stillNeeded) => {
+        const t = cfg.partVariants[variantId].type;
+        if (wantsSuspicion) return 0.3;
+        return needs(t) > 0 ? 3 + variantValue(cfg, variantId, objective) * 0.4 : spareValue;
+      };
+      // A random part, drawn with the configured type weights.
+      const weightTotal = Object.values(cfg.partTypes).reduce((a, t) => a + t.weight, 0);
+      const randomPartValue = wantsSuspicion ? 0.3 : Object.entries(cfg.partTypes).reduce((a, [t, def]) => a + def.weight / weightTotal * (stillNeeded(t) > 0 ? 3 : spareValue), 0);
+      // The Inquisitor gains by taking the last slot of a space rivals need to
+      // build Creatures, slowing everyone down while suspicion grows.
+      const denial = (id) => {
+        if (!wantsSuspicion || !['specimens', 'research'].includes(id)) return 0;
+        const cap = (view.capacities || {})[id];
+        if (cap == null) return 0;
+        const left = cap - ((view.occupancy[view.phase] || {})[id] || []).length;
+        return left <= 1 ? 1.5 : 0;
+      };
+
+      const rivals = view.players.filter((p) => p.id !== me.id);
+      const installedPlusLoose = (p) => {
+        let n = 0;
+        for (const [type, def] of Object.entries(cfg.partTypes)) {
+          const filled = def.slots.filter((sl) => p.body[sl] !== null).length;
+          n += Math.min(def.slots.length, filled + p.loose.filter((x) => x.type === type).length);
+        }
+        return n;
+      };
+      const rivalsNearlyReady = rivals.filter((p) => installedPlusLoose(p) >= GARRISON_ALERT_PARTS).length;
+      const unknownTypes = Object.keys(cfg.research).filter((t) => !me.research.includes(t));
+      const meanWant = unknownTypes.length ? unknownTypes.reduce((a, t) => a + (want[t] || 1), 0) / unknownTypes.length : 0;
+      const remaining = Math.max(0, EXPECTED_ROUNDS - view.round);
+
+      // Whether to commit to a resurrection tonight (preparing is public and binding).
+      // Everything about a resurrection is public: bodies, exact odds, control
+      // chances, garrisons and who has prepared tonight.
+      // Chance that a monster of mine is never subdued: I try first (if I have
+      // an attempt), then every garrisoned rival with an attempt, each of whom
+      // might also decline (an Unleasher would).
+      const pUnleashed = () => {
+        let escape = me.controlAttempts > 0 ? 1 - me.controlChance : 1;
+        for (const p of rivals) if (p.garrisoned && p.controlAttempts > 0) escape *= 1 - 0.8 * p.controlChance;
+        return escape;
+      };
+      const preparedRivals = rivals.filter((p) => (view.prepared || []).includes(p.id));
+      // Chance that at least one rival who has prepared tonight stabilizes.
+      const rivalStable = preparedRivals.reduce((a, p) => a * (1 - (p.resurrectionOdds ? p.resurrectionOdds.pStable : 0)), 1);
+      const pRivalStable = 1 - rivalStable;
+      // Rivals with a complete body whose Scientist could still prepare tonight.
+      // That includes bodies their loose parts can finish tonight.
+      const rivalsCouldPrepare = rivals.filter((p) => installedPlusLoose(p) >= 6 && !p.passed && !(view.prepared || []).includes(p.id)
+        && p.workers.some((w) => w.kind === 'scientist' && w.availableNow)).length;
+
+      const shouldAttempt = () => {
+        const odds = me.resurrectionOdds;
+        if (!odds) return false;
+        const late = view.round >= 12;
+        const bar = st.attemptBar;
+        // A subdued monster is a setback; an unleashed one ends the game.
+        const pUnleash = odds.pMonster * pUnleashed();
+        const safeEnough = odds.pStable >= bar * Math.max(late ? 0.1 : 0.2, 1.5 * pUnleash);
+        if (objective === 'prometheus') {
+          // Two stable Creatures lose for Prometheus: stay out if a rival who
+          // prepared is likely to succeed.
+          return safeEnough && pRivalStable < 0.25;
+        }
+        if (objective === 'visionary') {
+          // If a rival stabilizes alone, the Visionary loses anyway, so join any
+          // promising attempt even with poor odds. Only an unleashed monster,
+          // which would end a game that might otherwise go on, holds it back.
+          if (pRivalStable >= 0.1) return odds.pStable >= 0.03 && odds.pStable * pRivalStable >= 0.5 * pUnleash * (1 - pRivalStable);
+          return false;
+        }
+        if (objective === 'unleasher') {
+          const pEscape = pUnleashed() / (me.controlAttempts > 0 ? 1 - me.controlChance : 1); // it won't subdue its own
+          return pEscape >= 0.5
+            ? odds.pMonster * pEscape > odds.pStable
+            : odds.pMonster > odds.pStable * 4 && odds.pStable <= UNLEASHER_MAX_STABLE;
+        }
+        // Inquisitor: only a failed Vitality helps, and only if it brings the mob.
+        return view.suspicion >= view.suspicionMax - cfg.resurrection.failedVitalitySuspicion && odds.pFailed > 0.5;
+      };
+      // The Visionary waits for a rival to commit first, keeping its Scientist free.
+      const visionaryWaiting = objective === 'visionary' && view.phase === 'night' && me.bodyComplete
+        && preparedRivals.length === 0 && rivalsCouldPrepare > 0;
+      const igorFree = me.workers.some((w) => w.kind === 'igor' && w.availableNow);
+      // An Igor used by day can't act tonight, so a day placement costs what
+      // that Igor would have earned at night. Plan tonight's jobs, give the best
+      // to the Scientist, and charge each day Igor for the job it gives up.
+      const freeIgors = me.workers.filter((w) => w.kind === 'igor' && w.availableNow).length;
+      const nightJobs = () => {
+        const jobs = [];
+        const capOf = (id) => { const c = (view.capacities || {})[id]; return c == null ? 3 : c; };
+        // Rivals compete for capped spaces, so count on only some of the slots.
+        const slots = (id) => Math.max(1, Math.round(capOf(id) / 2));
+        const g = cfg.actions.graves;
+        // Everyone plans graves when it pays (parts that don't fit can be sold).
+        // Graves fill only about a third of rounds, so the Inquisitor plans on
+        // every slot; builders, who also bear the suspicion, plan on fewer.
+        const gravesValue = g ? g.parts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
+        for (let i = 0; g && i < (wantsSuspicion ? capOf('graves') : slots('graves')); i++) jobs.push(gravesValue);
+        const sl = cfg.actions.sell;
+        // Spare parts on hand (plus, for the Inquisitor, tonight's grave haul)
+        // can be sold or experimented with.
+        let spareCount = me.loose.length - Object.keys(open).reduce((a2, t) => a2 + Math.min(open[t], looseFits(t)), 0)
+          + (wantsSuspicion && g ? g.parts : 0);
+        const ex = cfg.actions.experiment;
+        if (ex && spareCount > 0 && unknownTypes.length && view.deckCount > 0) {
+          const frac = unknownTypes.length / Object.keys(cfg.research).length;
+          jobs.push(frac * meanWant - spareValue - expectedSuspicion(ex, reduction) * suspicionPrice);
+          spareCount -= 1;
+        }
+        if (sl) {
+          const sellValue = sl.gain * moneyValue - sl.parts * (wantsSuspicion ? 0.3 : spareValue) - expectedSuspicion(sl, reduction) * suspicionPrice;
+          for (let i = 0; i < Math.min(slots('sell'), Math.floor(Math.max(0, spareCount) / sl.parts)); i++) jobs.push(sellValue);
+        }
+        if (me.bodyComplete && shouldAttempt()) jobs.push(12); // the Scientist prepares
+        else if (!wantsSuspicion && totalStillNeeded === 0 && needed > 0) jobs.push(5); // assemble the whole body
+        jobs.push(0.8); // rest, if nobody else takes it
+        return jobs.filter((v) => v > 0).sort((x, y) => y - x);
+      };
+      // What it costs to discard these parts (loose or installed). Spare loose
+      // parts are cheap. An installed part is cheap if a spare can replace it,
+      // and discarding a harmful one (a damaged arm, say) is an upgrade.
+      const discardCost = (ids) => {
+        const spares = {};
+        for (const t of Object.keys(open)) spares[t] = Math.max(0, looseFits(t) - open[t]);
+        const refill = cfg.actions.specimens ? cfg.actions.specimens.cost * moneyValue * 0.6 + 1.5 : 3;
+        return ids.reduce((acc, id) => {
+          const loose = me.loose.find((x) => x.id === id);
+          if (loose) {
+            if (spares[loose.type] > 0) { spares[loose.type]--; return acc + spareValue; }
+            return acc + partValue(loose.variantId);
+          }
+          const slot = Object.keys(me.body).find((sl) => me.body[sl] && me.body[sl].id === id);
+          const part = me.body[slot];
+          const quality = variantValue(cfg, part.variantId, objective) * 0.4;
+          if (spares[part.type] > 0) { spares[part.type]--; return acc + spareValue + 1 + quality; }
+          return acc + Math.max(0.3, Math.min(partValue(part.variantId, () => 1), refill + quality));
+        }, 0);
+      };
+      let igorReserve = 0;
+      if (view.phase === 'day' && freeIgors > 0) {
+        const jobs = nightJobs();
+        const sciFree = me.workers.some((w) => w.kind === 'scientist' && w.availableNow) || view.phase === 'day';
+        const forIgors = sciFree ? jobs.slice(1) : jobs; // the Scientist takes the best job tonight
+        // Placing an Igor now leaves freeIgors - 1 for the night: it gives up the
+        // job at position freeIgors - 1, if there is one.
+        igorReserve = 0.8 * (forIgors[freeIgors - 1] || 0);
+      }
 
       const score = (c) => {
         if (c.type === 'PASS_TURN') return 0.2;
         const a = c.actionId;
         const def = cfg.actions[a];
+        const isSci = c.workerId.startsWith('scientist');
+        let reserve = isSci ? (visionaryWaiting && a !== 'prepare' ? 3 : 0) : igorReserve;
+        // Experiments only: push Igors towards one phase (spec 016).
+        if (!isSci && igorBias) reserve += view.phase === igorBias ? -3 : 3;
+        // Keep the Scientist free for what only it can do.
+        const sciTax = isSci && igorFree && a !== 'prepare' ? 0.3 : 0;
+        const susCost = expectedSuspicion(def, reduction) * suspicionPrice;
+        return actionScore(c, a, def, isSci, sciTax, susCost) - reserve;
+      };
+      const actionScore = (c, a, def, isSci, sciTax, susCost) => {
         switch (a) {
-          case 'medicine': return me.money < 4 ? 4 : 1.5;
-          case 'research': case 'experiment': {
+          case 'medicine': return (def.gain + me.effectiveResearch.medicine) * moneyValue * 0.8 - sciTax;
+          case 'research': {
             const card = view.market.find((k) => k.id === c.choices.researchCardId);
-            const want = (objective === 'unleasher'
-              ? { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, mesmerism: 0.5, restraint: 0.5, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 }
-              : objective === 'inquisitor'
-                ? { galvanism: 0.5, neurology: 1, philosophy: 1, mesmerism: 1.5, restraint: 1.5, medicine: 3, discretion: 0 }
-                : { galvanism: 4, neurology: 3.5, philosophy: 4.5, mesmerism: 4, restraint: 4, medicine: 2.5, discretion: susp > 0.3 ? 3 : 1 })[card.type] || 1;
-            if (a === 'experiment') {
-              const fitsLost = c.choices.partIds.filter((id) => { const x = me.loose.find((y) => y.id === id); return open[x.type] > 0; }).length;
-              return want - fitsLost * 1.5 + 0.5;
-            }
-            return me.money >= def.cost + 2 ? want : want - 1.5;
+            const pen = (PUBLISH_PENALTY[objective] || {})[card.type] || 0;
+            return (want[card.type] || 1) - pen - def.cost * moneyValue * 0.6 - sciTax + denial('research');
+          }
+          case 'experiment': {
+            // Draw one card per discarded part; keep the best eligible one,
+            // privately (no publishing penalty, unlike research).
+            const n = c.choices.partIds.length;
+            const frac = unknownTypes.length / Object.keys(cfg.research).length;
+            const hit = 1 - Math.pow(1 - frac, n);
+            return hit * (meanWant + 0.3 * (n - 1)) - discardCost(c.choices.partIds) - susCost - sciTax;
           }
           case 'specimens': {
-            if (!needed) return 0;
-            const left = { ...open };
+            if (!needed && !wantsSuspicion) return -1;
+            const left = {};
+            for (const t of Object.keys(open)) left[t] = stillNeeded(t);
             let v = 0;
             for (const vid of c.choices.variantIds) {
+              v += partValue(vid, (t) => left[t]);
               const t = cfg.partVariants[vid].type;
-              if (left[t] > 0) { left[t]--; v += 2 + variantValue(cfg, vid, objective) * 0.4; } else v -= 1;
+              if (left[t] > 0) left[t]--;
             }
-            return looseFits >= needed ? v - 4 : v;
+            return v - def.cost * moneyValue * 0.6 - sciTax + denial('specimens');
           }
-          case 'hire': return view.round <= 5 ? 3.5 : 1;
-          case 'charity': return wantsSuspicion ? -1 : susp * 6 - 1;
-          case 'lecture': return 1 + me.published.length;
+          case 'graves':
+            return def.parts * randomPartValue - susCost - sciTax;
+          case 'sell': {
+            const lost = c.choices.partIds.reduce((acc, id) => acc + partValue(me.loose.find((x) => x.id === id).variantId), 0);
+            return def.gain * moneyValue - lost - susCost - sciTax;
+          }
+          case 'hire': return def.cost > me.money ? -1 : (cfg.actions.medicine ? cfg.actions.medicine.gain : 2) * Math.min(remaining, 5) * 0.35 - def.cost * moneyValue * 0.6 - sciTax;
+          case 'charity': {
+            const units = (c.choices && c.choices.units) || 1;
+            const cut = Math.min(units * def.reduction, view.suspicion);
+            const pay = units * def.cost * moneyValue * 0.6;
+            if (wantsSuspicion) {
+              // The Inquisitor takes a scarce charity slot as cheaply as it can,
+              // to keep rivals from paying suspicion down.
+              const cap = (view.capacities || {}).charity;
+              const left = cap == null ? Infinity : cap - ((view.occupancy.day || {}).charity || []).length;
+              const othersCould = (def.maxUnits || 1) * def.reduction;
+              const block = left <= 1 && susp >= 0.4 ? othersCould * 1.2 : 0;
+              return block - cut * 2 - pay - sciTax;
+            }
+            // Only the part of the cut that gets the table out of danger is worth paying for.
+            return Math.min(cut, excess) * suspicionPrice * 1.5 - pay - sciTax;
+          }
           case 'garrison': {
             // A garrisoned worker lets its owner subdue rivals' monsters; for
             // the Unleasher, filling the space keeps others from doing so.
-            if (!rivalsNearlyReady) return 0;
+            if (!rivalsNearlyReady) return -0.2;
             if (objective === 'unleasher') return 3.5;
-            if (me.garrisoned || me.controlAttempts === 0) return 0;
-            return objective === 'inquisitor' ? 2.5 : 4.5;
-          }
-          case 'graves': case 'morgue': {
-            if (wantsSuspicion) return 4;
-            if (looseFits >= needed) return 0.5 - susp * 3;
-            return (a === 'morgue' ? 3.5 : 3) - susp * 4;
+            if (me.garrisoned || me.controlAttempts === 0) return -0.2;
+            // Take a scarce garrison slot before an Unleasher can fill it.
+            const gCap = (view.capacities || {}).garrison;
+            const gLeft = gCap == null ? Infinity : gCap - ((view.occupancy.day || {}).garrison || []).length;
+            // The Inquisitor rarely subdues, so a garrison is worth little to it.
+            return (objective === 'inquisitor' ? 0.8 : 4.5 + (gLeft <= 1 ? 1 : 0));
           }
           case 'assemble': {
-            return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0);
+            if (wantsSuspicion) return 0.2;
+            // Installed parts can't be swapped, so with unlimited assembly there
+            // is no reason to install anything until the whole body can be built
+            // in one action. With a limit, the work has to start earlier.
+            const filled = Object.values(me.body).filter(Boolean).length;
+            if (def.max == null && filled + c.choices.partIds.length < Object.keys(me.body).length) return -0.5;
+            return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0)
+              - (isSci && igorFree ? 2 : 0);
           }
-          default: return 0.5;
+          case 'prepare':
+            // Wait for assembly first if loose parts still fit the body.
+            if (!me.bodyComplete) return -5;
+            if (visionaryWaiting) {
+              // Nothing to join yet. If preparing now is the last chance, commit
+              // only when several rivals are ready and so likely to try too.
+              return rivalsCouldPrepare >= 2 && me.resurrectionOdds.pStable >= 0.05 ? 0.3 : 0.1;
+            }
+            return shouldAttempt() ? 12 : -5;
+          case 'rest': {
+            // Going first matters when the day's capped spaces fill up.
+            const caps = view.capacities || {};
+            const full = Object.keys(cfg.actions).filter((id) => cfg.actions[id].phase === 'day' && caps[id] != null
+              && ((view.occupancy.day || {})[id] || []).length >= caps[id]).length;
+            const order = view.initiative || [];
+            const firstAnyway = order.length > 1 && order[1] === me.id;
+            return firstAnyway ? -0.5 : 0.4 + 0.7 * full - sciTax;
+          }
+          default: return 0.1;
         }
       };
       let best = legal[0];
@@ -216,4 +421,9 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75 } = {}) {
   };
 }
 
-export const POLICIES = { random: randomPolicy, heuristic: heuristicPolicy };
+export const POLICIES = {
+  random: randomPolicy,
+  heuristic: heuristicPolicy,
+  cautious: (seed) => heuristicPolicy(seed, { style: 'cautious' }),
+  bold: (seed) => heuristicPolicy(seed, { style: 'bold' }),
+};

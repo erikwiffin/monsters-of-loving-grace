@@ -1,0 +1,10 @@
+{
+  "description": "The default configuration alone: a reference for the other sweeps.",
+  "games": 120,
+  "players": [3, 4, 5, 6],
+  "policies": ["heuristic", "cautious,bold"],
+  "sampler": "oat",
+  "seed": "money-1",
+  "maxRounds": 60,
+  "params": {}
+}

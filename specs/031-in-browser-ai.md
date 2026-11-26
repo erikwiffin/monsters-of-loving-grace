@@ -9,14 +9,14 @@ In New Game, each player row has a *Played by* selector with three options: Huma
 ## Playing
 
 - An AI seat acts on its own after a short delay, about 0.7 seconds, so humans can follow the action in the Chronicle.
-- On an AI's turn, the turn bar says "AI is thinking…". Action spaces can't be clicked, and the human-only controls (Publish, View my objective, Pass) are hidden.
-- An AI seat receives only its own filtered player view and its legal commands, exactly as in headless play. It never sees authoritative state, other players' objectives or hidden commitments.
+- On an AI's turn, the turn bar says "AI is thinking…". Action spaces can't be clicked, and the human-only controls (View my objective, Pass) are hidden.
+- An AI seat receives only its own filtered player view and its legal commands, exactly as in headless play. It never sees authoritative state, other players' objectives or the deck order.
 - Each AI decision is seeded from the game seed, the seat and the number of commands so far, so a reloaded or resumed game makes the same AI choices.
 - If a policy returns an invalid command, or throws an error, the first legal command is played instead.
 
 ## Privacy screens
 
-Privacy screens exist only for humans. Objective dealing skips AI seats; with exactly one human, it is a single screen, and with none, it is skipped. AI resurrection commitments are made silently, without pass-the-device screens, and stay hidden until the reveal like any other commitment. AI morgue picks and subdue decisions are public, and appear in the Chronicle and the resurrection report.
+Privacy screens exist only for humans. Objective dealing skips AI seats; with exactly one human, it is a single screen, and with none, it is skipped. AI experiment picks, preparations and subdue decisions are public, and appear in the Chronicle and the resurrection report.
 
 ## Pausing and waiting
 

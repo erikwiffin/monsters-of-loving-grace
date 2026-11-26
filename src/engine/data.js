@@ -2,13 +2,13 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.10.0';
-export const SCHEMA_VERSION = 7;
+export const ENGINE_VERSION = '0.11.0';
+export const SCHEMA_VERSION = 8;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
 export const ATTRIBUTES = ['vitality', 'humanity'];
 export const ALLOWED_DICE = [4, 6, 8, 10, 12, 20];
-export const PHASES = ['day', 'night', 'commitment', 'resolution', 'dawn', 'ended'];
+export const PHASES = ['day', 'night', 'resolution', 'dawn', 'ended'];
 
 export const OBJECTIVE_INFO = {
   prometheus: {
@@ -39,12 +39,10 @@ export const DEFAULT_CONFIG = {
   visionaryMinPlayers: 4,
   playerNames: [],
   startingMoney: 3,
-  // The mob threshold. null: take it from suspicionMaxByPlayers for the player count.
-  suspicionMax: null,
-  suspicionMaxByPlayers: { 3: 10, 4: 10, 5: 9, 6: 8 },
+  // The mob threshold, the same at every player count.
+  suspicionMax: 10,
   maxIgors: 3, // including the starting Igor(s)
   startingIgors: 1,
-  igorCosts: [4, 7, 10],
   marketSize: 4,
   researchCopies: 4,
   resurrection: {
@@ -63,22 +61,26 @@ export const DEFAULT_CONFIG = {
     subdueSuspicion: 1,
     subdueSalvage: 3,
   },
-  // capacity: null means unlimited. igor: whether a hired Igor may take it.
+  // capacity: null = unlimited; a number = the same at every player count; or
+  //   an object keyed by the smallest player count of each tier, e.g.
+  //   { 3: 2, 5: 3 } = 2 slots with 3-4 players, 3 slots with 5-6.
+  // igor: false = Scientist only; scientist: false = Igor only.
+  // suspicion: a discovery roll. Roll `die`; the first band whose `max` is at
+  //   least the roll adds its `amount` (before Discreet Methods); a roll above
+  //   every band adds nothing.
   actions: {
-    medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: 2, igor: true, gain: 3 },
-    research: { phase: 'day', name: 'Study research', location: 'University', capacity: 2, igor: false, cost: 2 },
-    specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: 2, igor: true, cost: 2, count: 1 },
-    hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: null, igor: false },
-    charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: null, igor: true, cost: 3, reduction: 2 },
-    // cap: null means no cap on lecture income.
-    lecture: { phase: 'day', name: 'Give a lecture', location: 'Scientific society', capacity: 2, igor: false, base: 1, cap: null },
-    // scientist: false makes an action Igor-only.
-    garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: 2, igor: true, scientist: false },
-    graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: 2, igor: true, parts: 2, suspicionTable: [1, 1, 1, 1, 0, 0] },
-    // Morgue: draw `parts` random parts, keep one of them, discard the rest.
-    morgue: { phase: 'night', name: 'Raid the morgue', location: 'Morgue', capacity: 1, igor: true, parts: 3, keep: 1, suspicionTable: [2, 2, 1, 1, 0, 0] },
+    medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: null, igor: true, gain: 3 },
+    research: { phase: 'day', name: 'Conduct research', location: 'University', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2 },
+    specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2, count: 1 },
+    charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: { 3: 2, 5: 3 }, igor: true, cost: 3, reduction: 2, maxUnits: 1 },
+    hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: { 3: 2, 5: 3 }, igor: true, cost: 4 },
+    garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: { 3: 2, 5: 3 }, igor: true, scientist: false },
     assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: null }, // max: null = any number of parts
-    experiment: { phase: 'night', name: 'Experiment', location: 'Private laboratory', capacity: null, igor: false, partCost: 2 },
+    prepare: { phase: 'night', name: 'Prepare resurrection', location: 'Private laboratory', capacity: null, igor: false },
+    sell: { phase: 'night', name: 'Sell parts', location: 'Back alley', capacity: { 3: 2, 5: 3 }, igor: true, gain: 7, parts: 2, suspicion: { die: 6, bands: [{ max: 2, amount: 1 }] } },
+    experiment: { phase: 'night', name: 'Conduct experiments', location: 'Private laboratory', capacity: { 3: 2, 5: 3 }, igor: true, maxParts: 3, suspicion: { die: 6, bands: [{ max: 3, amount: 1 }] } },
+    graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: { 3: 2, 5: 3 }, igor: true, parts: 2, suspicion: { die: 6, bands: [{ max: 4, amount: 1 }] } },
+    rest: { phase: 'night', name: 'Rest', location: 'Home', capacity: 1, igor: true },
   },
   partTypes: {
     arm: { name: 'Arm', slots: ['arm1', 'arm2'], weight: 2 },
@@ -106,7 +108,7 @@ export const DEFAULT_CONFIG = {
   // control ({ op: 'die' | 'fixed', ... } added to control rolls),
   // resurrection (same shape as part effects). Every effective copy applies.
   research: {
-    discretion: { name: 'Discreet Methods', text: 'Reduce suspicion from each graves or morgue action by 1 (floor 0).', effects: [{ kind: 'suspicionReduction', amount: 1 }] },
+    discretion: { name: 'Discreet Methods', text: 'Reduce suspicion from each graves, sell or experiment action by 1 (floor 0).', effects: [{ kind: 'suspicionReduction', amount: 1 }] },
     galvanism: { name: 'Galvanic Mastery', text: 'Add 1d6 to resurrection Vitality.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
     medicine: { name: 'Medical Expertise', text: '+1 money on medicine, for any worker.', effects: [{ kind: 'medicineBonus', amount: 1 }] },
     neurology: { name: 'Neural Conditioning', text: '+1 control attempt for subduing monsters.', effects: [{ kind: 'controlAttempts', amount: 1 }] },

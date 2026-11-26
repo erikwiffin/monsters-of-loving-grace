@@ -3,7 +3,7 @@
 // but policies only receive filtered observations and legal commands.
 
 import {
-  createGame, dispatch, getPlayerView, enumerateLegalCommands, getReplayRecord,
+  createGame, dispatch, getPlayerView, enumerateLegalCommands, getReplayRecord, capacityFor,
 } from '../engine/index.js';
 import { POLICIES } from './policies.js';
 
@@ -22,6 +22,36 @@ function resolvePolicyFactory(policies, seed) {
     }
     cache[pid] = spec;
     return spec;
+  };
+}
+
+/**
+ * Action-economy metrics from the event log: placements per action, how many
+ * phases each capped space filled, worker hires, money left at the end, and
+ * the seat order of round 1 (for first-player advantage).
+ */
+function economyMetrics(state) {
+  const actions = {};
+  for (const id of Object.keys(state.config.actions)) actions[id] = { placements: 0, igorPlacements: 0, full: 0, roundsUsed: 0, capacity: capacityFor(state.config, id) };
+  const perPhase = {};
+  const usedIn = new Set();
+  let firstRound = null;
+  for (const e of state.events) {
+    if (e.type === 'ROUND_STARTED' && e.round === 1) firstRound = e.initiative;
+    if (e.type !== 'WORKER_PLACED') continue;
+    const a = actions[e.actionId];
+    a.placements += 1;
+    if (e.workerKind === 'igor') a.igorPlacements += 1;
+    if (!usedIn.has(`${e.round}:${e.actionId}`)) { usedIn.add(`${e.round}:${e.actionId}`); a.roundsUsed += 1; }
+    const key = `${e.round}:${e.phase}:${e.actionId}`;
+    perPhase[key] = (perPhase[key] || 0) + 1;
+    if (a.capacity != null && perPhase[key] === a.capacity) a.full += 1;
+  }
+  return {
+    actions,
+    igors: Object.fromEntries(state.players.map((p) => [p.id, Object.values(state.workers).filter((w) => w.ownerId === p.id && w.kind === 'igor').length])),
+    moneyLeft: Object.fromEntries(state.players.map((p) => [p.id, p.money])),
+    initialOrder: firstRound || [],
   };
 }
 
@@ -47,6 +77,7 @@ function summarize(state, { seed, commands, truncated, truncationReason, invalid
     finalSuspicion: state.suspicion,
     suspicionHistory: state.suspicionHistory.map((h) => ({ round: h.round, phase: h.phase, value: h.value, delta: h.delta, reason: h.reason, playerId: h.playerId })),
     resurrections: state.resurrections,
+    economy: economyMetrics(state),
     ...(includeCommands ? { commands: getReplayRecord(state).commands } : {}),
   };
 }
@@ -156,5 +187,52 @@ export function aggregate(results) {
   const mid = rounds.length >> 1;
   agg.medianRounds = rounds.length ? (rounds.length % 2 ? rounds[mid] : (rounds[mid - 1] + rounds[mid]) / 2) : 0;
   agg.avgFinalSuspicion = Math.round(agg.avgFinalSuspicion * 100) / 100;
+  Object.assign(agg, aggregateEconomy(results));
   return agg;
+}
+
+const round3 = (x) => Math.round(x * 1000) / 1000;
+
+/**
+ * Action-economy aggregates: per-action placements per round and the share
+ * of phases each capped space was full; mean Igors and leftover money; and
+ * win rate by seat in round 1's initiative order.
+ */
+function aggregateEconomy(results) {
+  const withEco = results.filter((r) => r.economy);
+  const totalRounds = withEco.reduce((a, r) => a + r.rounds, 0);
+  const actions = {};
+  for (const r of withEco) {
+    for (const [id, a] of Object.entries(r.economy.actions)) {
+      const x = actions[id] || (actions[id] = { capacity: a.capacity, placements: 0, igorPlacements: 0, full: 0, roundsUsed: 0 });
+      x.placements += a.placements;
+      x.roundsUsed += a.roundsUsed;
+      x.igorPlacements += a.igorPlacements;
+      x.full += a.full;
+    }
+  }
+  for (const x of Object.values(actions)) {
+    x.perRound = totalRounds ? round3(x.placements / totalRounds) : 0;
+    x.fullRate = x.capacity == null || !totalRounds ? null : round3(x.full / totalRounds);
+    x.igorShare = x.placements ? round3(x.igorPlacements / x.placements) : 0;
+    x.usedRate = totalRounds ? round3(x.roundsUsed / totalRounds) : 0;
+    delete x.full; delete x.igorPlacements; delete x.roundsUsed;
+  }
+  const players = withEco.reduce((a, r) => a + Object.keys(r.economy.igors).length, 0);
+  const sum = (f) => withEco.reduce((a, r) => a + Object.values(f(r)).reduce((b, v) => b + v, 0), 0);
+  const seatWins = [];
+  const seatGames = [];
+  for (const r of withEco) {
+    r.economy.initialOrder.forEach((pid, i) => {
+      seatGames[i] = (seatGames[i] || 0) + 1;
+      if (r.winners.includes(pid)) seatWins[i] = (seatWins[i] || 0) + 1;
+    });
+  }
+  return {
+    invalidCommands: withEco.reduce((a, r) => a + r.invalidCommands, 0),
+    actions,
+    avgIgors: players ? round3(sum((r) => r.economy.igors) / players) : 0,
+    avgMoneyLeft: players ? round3(sum((r) => r.economy.moneyLeft) / players) : 0,
+    winRateBySeat: seatGames.map((g, i) => round3((seatWins[i] || 0) / g)),
+  };
 }

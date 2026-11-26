@@ -1,0 +1,10 @@
+{
+  "description": "Does limiting how many parts one assemble action installs make building a body more of a process, and how does it move balance?",
+  "games": 150,
+  "players": [3, 4, 5, 6],
+  "policies": ["heuristic", "cautious,bold"],
+  "sampler": "oat",
+  "seed": "confirm-1",
+  "maxRounds": 60,
+  "params": { "actions.assemble.max": [1, 2, 3] }
+}

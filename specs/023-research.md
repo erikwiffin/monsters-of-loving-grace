@@ -14,23 +14,25 @@ There are seven research types, each with a persistent effect:
 | mesmerism | Mesmerism | Add 1d6 to control rolls (spec 025) |
 | restraint | Restraining Apparatus | Add a fixed +4 to control rolls (spec 025) |
 | philosophy | Moral Philosophy | Add a fixed +5 to the resurrection Humanity score |
-| discretion | Discreet Methods | Reduce the suspicion caused by each graves or morgue action by 1, to a minimum of 0 |
+| discretion | Discreet Methods | Reduce the suspicion from each discovery roll (graves, sell, experiment) by 1, to a minimum of 0 |
 
 Effects are defined as data (spec 010), not scripts.
 
 ## Market and deck
 
-The research deck has four copies of each type, 28 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken, by research or by experiment, the market refills immediately from the top of the deck while cards remain. The deck is finite: there is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
+The research deck has four copies of each type, 28 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken from the market by the research action, the market refills immediately from the top of the deck while cards remain. There is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
 
-A player cannot acquire a research type they have already personally discovered. Research and experiment use identical selection rules, and are unavailable when the market holds no card the player is eligible to take.
+Experiments draw from the top of the deck instead of the market, and put the cards they don't keep back at the bottom (spec 022). The deck order is hidden; only its size is public.
+
+A player cannot acquire a research type they have already personally discovered, by either route. The research action is unavailable when the market holds no card the player is eligible to take.
 
 ## Publishing
 
-**Ruling: publishing is a free action.** During their own day or night turn, before placing a worker or passing, a player may publish any number of research types they have personally discovered, using `PUBLISH_RESEARCH` (spec 011). Publishing needs no worker, costs nothing, pays nothing immediately and does not end the turn. It makes the type permanently available to all players. The publisher keeps personal discovery credit. Every publication is recorded publicly with the publisher, the type and the round.
+**Ruling: conducting research publishes.** A card taken by the research action is published at once: the player gains personal discovery credit and the type becomes available to all players. There is no other way to publish. There is no free publishing action and no `PUBLISH_RESEARCH` command. Every publication is recorded publicly with the publisher, the type and the round.
 
-**Ruling:** a player may publish any type they have personally discovered and have not already published themselves, *even if another player has already published that type*. Each player may publish a given type at most once.
+**Ruling: experiment discoveries stay private.** A card kept from an experiment gives the player personal discovery credit but is never published, so it never gives other players a copy. Because a player cannot acquire a type twice, a type first discovered by experiment can never later be published by that player.
 
-A publication does not stop other players acquiring a personal copy of that type.
+A player may conduct research on a type another player has already published, and that publishes it again. A publication does not stop other players acquiring a personal copy of that type.
 
 ## Effective research and stacking
 
@@ -48,8 +50,4 @@ Every effective copy applies its effect in full. For example:
 - With two copies of Discreet Methods, discovery suspicion is reduced by 2.
 - With two copies of Neural Conditioning, the player has 2 more control attempts. Because another player's publication adds a copy, it can grant attempts partway through the game.
 
-Effective research counts are public, since they derive from public discoveries and publications, and are shown for every player.
-
-## Lecture
-
-**Ruling:** lecture income is 1, plus 1 for each discovery this player has published, with no cap. See spec 022. Publishing pays off through lectures, so sharing research is worth more over time.
+Personal discoveries, by either route, are public, as are publications, so effective research counts are public and shown for every player.

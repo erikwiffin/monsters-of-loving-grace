@@ -30,15 +30,16 @@ Named brains occupy the head slot; there is no separate brain resource or slot. 
 
 ## Acquiring parts
 
-- **Random draws** (graves: 2 parts; morgue: 3 parts drawn, of which the player keeps 1). Each part is drawn independently, with replacement and from unlimited supply. First the type is chosen with weights arm 2/6, leg 2/6, chest 1/6 and head 1/6. Then a variant of that type is chosen uniformly.
+- **Random draws** (graves: 2 parts). Each part is drawn independently, with replacement and from unlimited supply. First the type is chosen with weights arm 2/6, leg 2/6, chest 1/6 and head 1/6. Then a variant of that type is chosen uniformly.
 - **Specimens** (day): choose exactly one variant by ID for 2 money (spec 022).
 - **Salvage**: a failed resurrection returns three of the six consumed parts to its creator's loose inventory, and subduing a monster gives three of its six parts to the subduing player (spec 025).
 
 ## Assembly
 
-The assemble action moves chosen loose parts into matching empty slots. It must fill at least one slot, and may fill any number, up to a whole body, in one action. Each part goes into the first empty slot of its type. A part can't be installed without an empty slot of its type, and installed parts can't be removed or swapped in this version.
+The assemble action moves chosen loose parts into matching empty slots. It must fill at least one slot, and may fill any number, up to a whole body, in one action. Each part goes into the first empty slot of its type. A part can't be installed without an empty slot of its type. Installed parts can't be removed, swapped or returned to loose inventory; the only way to empty a slot before a resurrection is to discard its part in an experiment.
 
 ## Spending parts
 
-- Experiments spend any two chosen loose parts (spec 022).
+- Experiments discard chosen parts, loose or installed; an installed part's slot becomes empty (spec 022).
+- Selling discards chosen *loose* parts for money (spec 022).
 - A resurrection attempt consumes all six installed parts, but never loose parts (spec 025).

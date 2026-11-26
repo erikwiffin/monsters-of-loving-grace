@@ -27,22 +27,21 @@
       <ul>
         <li><b>Prometheus</b> — be the <i>only</i> player whose Creature becomes stable that round; win at dawn.</li>
         <li><b>Visionary</b> (4+ players) — two or more Creatures (anyone's) become stable in the same round.</li>
-        <li><b>Inquisitor</b> — suspicion reaches the mob threshold (10 with 3–4 players, 9 with 5, 8 with 6): the mob arrests every scientist.</li>
+        <li><b>Inquisitor</b> — suspicion reaches the mob threshold of 10: the mob arrests every scientist.</li>
         <li><b>Unleasher</b> — any monster is unleashed (its Humanity fails and nobody subdues it).</li>
       </ul>
       <p>A mob or an unleashed monster ends the game immediately; if the mob forms while a monster is waiting to be subdued, the mob cannot stop it and the monster is unleashed. Only the matching antagonist wins, if dealt — otherwise everyone loses.</p>
       <h3>Round</h3>
       <ol>
         <li><b>Day</b> — in turn order, place one worker at a time and resolve it. Pass when done (passing is final for the phase).</li>
-        <li><b>Night</b> — the Scientist refreshes; Igors that did not act by day may act now.</li>
-        <li><b>Commitment</b> — everyone with a complete body (2 arms, 2 legs, chest, head) secretly chooses to attempt resurrection or decline.</li>
-        <li><b>Resolution</b> — attempts roll in initiative order.</li>
-        <li><b>Dawn</b> — any stable Creature ends the game: a lone Prometheus Creature wins for its owner; two or more win for the Visionary; otherwise everyone loses. If no Creature stabilized, initiative rotates and a new round begins.</li>
+        <li><b>Night</b> — the Scientist refreshes; Igors that did not act by day may act now. To attempt a resurrection, place your Scientist on <b>Prepare resurrection</b>: it is public and binding, and your body (2 arms, 2 legs, chest, head) must be complete by the end of the night.</li>
+        <li><b>Resolution</b> — everyone who prepared attempts, in initiative order.</li>
+        <li><b>Dawn</b> — any stable Creature ends the game: a lone Prometheus Creature wins for its owner; two or more win for the Visionary; otherwise everyone loses. If no Creature stabilized, whoever <b>rested</b> goes first next round; if nobody did, initiative rotates.</li>
       </ol>
       <h3>Workers</h3>
-      <p>The Scientist acts once by day and once by night. Everyone starts with one Igor; more cost 4 then 7 (max 3 in all) and can work straight away. Igors act once per round in either phase and can only use spaces marked “Igor”.</p>
+      <p>The Scientist acts once by day and once by night. Everyone starts with one Igor; more are hired at the Tavern (max 3 in all) and can work straight away. Igors act once per round in either phase. They can take any action except Prepare resurrection; only Igors may garrison the watch. Most spaces hold 2 workers with 3–4 players and 3 with 5–6; the board shows each space's limit.</p>
       <h3>Research</h3>
-      <p>Research cards are permanent. Publishing is free on your turn (no worker, and your turn continues) and shares a discovery with everyone. Copies stack: your own discovery counts once, plus one for each other player who published that type. Lecture pays 1 + the number of discoveries you have published.</p>
+      <p>Research cards are permanent. Conducting research at the University takes a market card and publishes it, sharing it with everyone. Experiments discard loose or installed parts to draw that many cards from the deck; you keep one, and it stays private. Copies stack: your own discovery counts once, plus one for each other player who published that type.</p>
       <h3>Resurrection</h3>
       <p>Roll d20 for Vitality (needs 20+) and Humanity (20+), modified by installed parts and research. Attempting consumes all six installed parts.</p>
       <ul>
@@ -53,7 +52,7 @@
       <h3>Control</h3>
       <p>Everyone starts with 3 control attempts (+1 per copy of Neural Conditioning). When a monster is created, its creator, then each player clockwise, may spend one attempt to try to subdue it: roll d20 + control research (Mesmerism +1d6, Restraining Apparatus +4 per copy), needing 20+. Except for the creator, a player needs an Igor in the <b>garrison</b> (day, Watch house, Igors only) that round to subdue. A success destroys the monster and gives the subduer 3 of its parts at random, but adds 1 suspicion; a failure adds nothing and the monster passes on. Each player who could try but doesn't adds 2 suspicion. If nobody subdues it, it is <b>unleashed</b> and the game ends.</p>
       <h3>Suspicion</h3>
-      <p>Grave robbing, morgue raids and failed resurrections raise suspicion, and so does subduing a monster (+1). Only charity (−2) lowers it. Declining to subdue a monster adds 2. The mob forms at the threshold: 10 with 3–4 players, 9 with 5, 8 with 6.</p>
+      <p>Robbing graves, selling parts and experiments each roll for discovery and may raise suspicion (each space shows its odds). Failed resurrections and subduing a monster add 1, and declining to subdue a monster adds 2. Only charity lowers it. The mob forms at 10.</p>
       <p class="muted small">Prototype v0.3 with designer rulings — see README.</p>
     </div>
   </template>

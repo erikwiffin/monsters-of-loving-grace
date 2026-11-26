@@ -4,7 +4,7 @@ Every committed action that a player would perform at the physical table is a se
 
 ## What is and isn't a command
 
-Commands are player decisions: placing a worker with all of its choices, picking drawn parts, passing, publishing research, committing to or declining a resurrection attempt, and choosing whether to subdue a monster. Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
+Commands are player decisions: placing a worker with all of its choices, picking a drawn research card, passing, and choosing whether to subdue a monster. Publishing and resurrection attempts are not separate commands: they are effects of the research and prepare placements (specs 022 and 023). Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
 
 Dice outcomes, suspicion changes, resource grants, research refills, phase transitions, resurrection results, victory and defeat are never commands. The engine resolves them automatically.
 
@@ -13,21 +13,21 @@ Dice outcomes, suspicion changes, resource grants, research refills, phase trans
 Every command has a `type` and the acting `playerId`. It may also carry an optional `seq`, described below. Unknown command types and unknown fields are rejected.
 
 - `PASS_TURN` gives up all of the player's remaining placements in the current day or night phase. Passing is irrevocable for that phase.
-- `PICK_PARTS` with `partIds` is legal only for the player who has just raided the morgue, and is then their only legal command. It names exactly as many of the drawn parts as they may keep (spec 022).
-- `PUBLISH_RESEARCH` with a `researchType` is legal for the active player on their day or night turn, for a type they have discovered and not yet published (spec 023). The player keeps the turn.
-- `COMMIT_RESURRECTION` with `attempt: true | false` is legal only for the eligible player currently being prompted during the commitment phase.
+- `PICK_RESEARCH` with `cardId` is legal only for the player who has just experimented and drawn at least one eligible card, and is then their only legal command. It names one drawn card of a type they have not discovered (spec 022).
 - `SUBDUE_MONSTER` with `subdue: true | false` is legal only for the player currently deciding in a monster's control chain during resolution (spec 025).
 - `PLACE_MEEPLE` names a `workerId`, an `actionId` and a `choices` object. `choices` may be omitted for actions that need no choices. The choices required by each action are:
 
 | Action | Choices |
 |---|---|
-| medicine, hire, charity, lecture, garrison, graves, morgue | none (`{}`) |
+| medicine, hire, garrison, graves, prepare, rest | none (`{}`) |
+| charity | `units`: optional when at most one unit may be bought; otherwise the number of units to buy (spec 022) |
 | research | `researchCardId`: a market card |
 | specimens | `variantIds`: exactly one part variant ID |
 | assemble | `partIds`: one or more unique loose part instance IDs, each fitting a distinct empty slot |
-| experiment | `partIds`: exactly two unique loose part instance IDs; `researchCardId`: a market card |
+| sell | `partIds`: exactly the configured number of unique loose part instance IDs |
+| experiment | `partIds`: one or more unique part instance IDs, loose or installed, up to the configured maximum and the cards left in the deck |
 
-Specimen purchases select part *variants*. Assembly and experiment payments select specific part *instances*. Unknown choice keys and missing choice keys are both rejected.
+Specimen purchases select part *variants*. Assembly, selling and experiments select specific part *instances*. Unknown choice keys and missing required choice keys are both rejected.
 
 ## Validation
 
@@ -38,8 +38,8 @@ Before changing anything, dispatch checks:
 - that the player exists and is the one whose decision it is;
 - that the phase is right for the command;
 - that the worker belongs to the player, is active and has not already acted;
-- that an Igor may take the action, and that a Scientist may (some actions are Igor-only);
-- that the space has capacity left;
+- that an Igor may take the action, and that a Scientist may (one action is Igor-only, another Scientist-only);
+- that the space has capacity left at this player count;
 - that the player can pay the full cost and meets every prerequisite;
 - that every choice is valid.
 
@@ -62,10 +62,8 @@ A command may include `seq`, equal to the number of commands accepted so far. If
 `getLegalCommands(state, playerId)` returns nothing unless that player is the one to act. Otherwise it lists every legal command template:
 
 - `PASS_TURN`, which is always legal in day or night;
-- one `PUBLISH_RESEARCH` per type the player may publish, in day or night;
 - one entry per available worker and legal action;
-- every allowed `PICK_PARTS` choice while a morgue pick is pending;
-- both commitment options during the commitment phase;
+- one `PICK_RESEARCH` per eligible drawn card while an experiment pick is pending;
 - both subdue options for the player deciding in a control chain.
 
 Templates for actions needing choices carry machine-readable constraints. These are an `enum` of values, a `multiset` with a count, or a `subset` with a minimum, a maximum and optional per-part-type maximums.

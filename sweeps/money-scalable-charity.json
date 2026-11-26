@@ -1,0 +1,19 @@
+{
+  "description": "Joint search over the money supply with a scarce, scalable charity: one slot at every player count, bought by the unit.",
+  "games": 60,
+  "players": [3, 4, 5, 6],
+  "policies": ["heuristic", "cautious,bold"],
+  "sampler": "lhs",
+  "samples": 40,
+  "seed": "money-1",
+  "maxRounds": 60,
+  "base": { "actions": { "charity": { "capacity": 1, "cost": 1, "reduction": 1, "maxUnits": 4 } } },
+  "params": {
+    "actions.medicine.gain": [1, 2, 3],
+    "actions.hire.cost": { "min": 3, "max": 8 },
+    "startingMoney": { "min": 1, "max": 6 },
+    "actions.charity.cost": [1, 2],
+    "actions.charity.reduction": [1, 2],
+    "actions.charity.maxUnits": { "min": 2, "max": 6 }
+  }
+}
