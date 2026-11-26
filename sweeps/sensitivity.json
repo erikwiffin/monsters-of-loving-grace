@@ -1,0 +1,27 @@
+{
+  "description": "One-at-a-time sensitivity around the baseline action set: which variables move the metrics?",
+  "games": 60,
+  "players": [3, 4, 5, 6],
+  "policies": ["heuristic", "cautious,bold"],
+  "sampler": "oat",
+  "seed": "sens-1",
+  "maxRounds": 60,
+  "params": {
+    "startingMoney": { "min": 1, "max": 6 },
+    "actions.medicine.gain": { "min": 1, "max": 5 },
+    "actions.research.cost": { "min": 0, "max": 4 },
+    "actions.specimens.cost": { "min": 1, "max": 4 },
+    "actions.charity.cost": { "min": 1, "max": 5 },
+    "actions.charity.reduction": { "min": 1, "max": 4 },
+    "actions.hire.cost": [2, 3, 4, 6, 8],
+    "actions.sell.gain": { "min": 1, "max": 5 },
+    "actions.sell.parts": { "min": 1, "max": 3 },
+    "actions.sell.suspicion.bands.0.max": { "min": 1, "max": 6 },
+    "actions.experiment.maxParts": { "min": 1, "max": 6 },
+    "actions.experiment.suspicion.bands.0.max": { "min": 1, "max": 6 },
+    "actions.graves.parts": { "min": 1, "max": 3 },
+    "actions.graves.suspicion.bands.0.max": { "min": 1, "max": 6 },
+    "actions.research.capacity.3|actions.specimens.capacity.3|actions.charity.capacity.3|actions.hire.capacity.3|actions.garrison.capacity.3|actions.sell.capacity.3|actions.experiment.capacity.3|actions.graves.capacity.3": [1, 2, 3],
+    "actions.research.capacity.5|actions.specimens.capacity.5|actions.charity.capacity.5|actions.hire.capacity.5|actions.garrison.capacity.5|actions.sell.capacity.5|actions.experiment.capacity.5|actions.graves.capacity.5": [2, 3, 4]
+  }
+}

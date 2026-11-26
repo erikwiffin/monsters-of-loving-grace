@@ -17,7 +17,6 @@ const ui = {
   meta: null, // { objIndex, objStep, objectivesDone, reportSeq }
   screen: 'menu',
   modal: null, // { kind, ... }
-  commit: null, // { pid, step: 'pass' | 'decide' | 'locked' }
   selectedWorker: null,
   debug: readDebugFlag(),
   toast: null,
@@ -87,7 +86,6 @@ function newGame({ names, seed, overrides, kinds = [] }) {
   ui.aiPaused = false;
   ui.screen = 'game';
   ui.modal = null;
-  ui.commit = null;
   ui.hideGameOver = false;
   persist();
 }
@@ -100,7 +98,6 @@ function loadSaveObject(obj) {
   if (!ui.meta.ai) ui.meta.ai = {};
   ui.screen = 'game';
   ui.modal = null;
-  ui.commit = null;
   ui.hideGameOver = false;
   persist();
 }
@@ -146,13 +143,13 @@ function pendingReport() {
   const evs = s.events;
   for (let i = evs.length - 1; i >= 0; i--) {
     const e = evs[i];
-    if (e.type !== 'COMMITMENTS_REVEALED') continue;
+    if (e.type !== 'RESURRECTIONS_ANNOUNCED') continue;
     const out = [];
     for (let j = i + 1; j < evs.length; j++) {
       if (evs[j].type === 'PHASE_ENDED' || evs[j].type === 'GAME_ENDED') break;
       out.push(evs[j]);
     }
-    if (!e.commitments.some((c) => c.attempt)) return null;
+    if (!e.playerIds.length) return null;
     const seq = out.length ? out[out.length - 1].seq : e.seq;
     if (seq <= ui.meta.reportSeq) return null;
     return { seq, reveal: e, events: out };
@@ -266,10 +263,11 @@ function actionSpace(view, id, def, enabledPhase) {
     const w = ui.state.workers[wid];
     return `<span class="meeple pc-bg-${ctx().seat(w.ownerId)}" title="${esc(ctx().name(w.ownerId))} — ${workerLabel(w)}">${w.kind === 'scientist' ? 'S' : 'I'}</span>`;
   }).join('');
-  const cap = def.capacity == null ? '∞' : def.capacity;
+  const capacity = view.capacities[id];
+  const cap = capacity == null ? '∞' : capacity;
   let status = { ok: false, reason: '' };
   if (enabledPhase && !view.result && !aiKind(view.activePlayerId)) status = spaceStatus(id, ui.selectedWorker);
-  const igorOk = def.scientist === false ? '<span class="tag" title="Igors only">Igor only</span>' : def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist or Creature only">Scientist</span>';
+  const igorOk = def.scientist === false ? '<span class="tag" title="Igors only">Igor only</span>' : def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist only">Scientist</span>';
   return `<button class="space ${def.phase} ${status.ok ? 'can' : ''}" data-act="space" data-id="${id}" ${status.ok ? '' : 'aria-disabled="true"'} title="${esc(status.reason || '')}">
     <span class="sp-top"><b>${esc(def.name)}</b><span class="sp-loc">${esc(def.location)}</span><span class="sp-occ">${chips}<span class="cap">${occ.length}/${cap}</span></span>${igorOk}</span>
     <span class="sp-txt">${esc(actionText(id, def, cfg))}</span>
@@ -297,7 +295,7 @@ function turnBar(view) {
     <span class="who"><span class="pc pc-${p.seat}">${esc(p.name)}</span>'s turn <small>(${view.phase === 'day' ? '☀ day' : '☾ night'})</small></span>
     <span class="wsels">Worker: ${chips}</span>
     <span class="spacer"></span>
-    ${aiKind(pid) ? `<span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : `${p.research.some((t) => !p.published.includes(t)) ? '<button data-act="publish-open" class="ghost">Publish…</button>' : ''}<button data-act="peek" class="ghost">View my objective</button>
+    ${aiKind(pid) ? `<span class="ai-status">${ui.aiPaused ? 'AI paused' : 'AI is thinking…'}</span>` : `<button data-act="peek" class="ghost">View my objective</button>
     <button data-act="pass" class="ghost danger-outline">Pass ${view.phase}</button>`}
   </div>`;
 }
@@ -309,7 +307,7 @@ function renderBoard() {
   return `<div class="game ${night ? 'is-night' : 'is-day'}">
     <header class="topbar">
       <h1>Monsters of Loving Grace</h1>
-      <span class="phase">Round ${view.round} · ${{ day: '☀ Day', night: '☾ Night', commitment: '⚡ Commitment', resolution: '⚡ Resolution', dawn: 'Dawn', ended: 'Game over' }[view.phase]}</span>
+      <span class="phase">Round ${view.round} · ${{ day: '☀ Day', night: '☾ Night', resolution: '⚡ Resolution', dawn: 'Dawn', ended: 'Game over' }[view.phase]}</span>
       ${suspicionMeter(view.suspicion, view.suspicionMax)}
       <nav class="menu">
         ${Object.keys(ui.meta.ai || {}).length && !view.result ? `<button data-act="ai-pause" class="ghost">${ui.aiPaused ? '▶ Resume AI' : '⏸ Pause AI'}</button>` : ''}
@@ -371,41 +369,15 @@ function objectivesFlow() {
     <button class="big" data-act="obj-hide">Hide and pass the device</button>`);
 }
 
-function commitmentFlow() {
-  const s = ui.state;
-  if (ui.commit && ui.commit.step === 'locked') {
-    const p = E.getPlayer(s, ui.commit.pid);
-    return privacy(`<h2>Decision locked</h2><p><span class="pc pc-${p.seat}">${esc(p.name)}</span>, your choice is sealed until every commitment is made.</p>
-      <button class="big" data-act="commit-done">Hide and pass the device</button>`);
-  }
-  const pid = s.activePlayerId;
-  const p = E.getPlayer(s, pid);
-  if (!ui.commit || ui.commit.pid !== pid || ui.commit.step === 'pass') {
-    const order = s.commitment.order;
-    return privacy(`<p class="eyebrow">⚡ Secret resurrection commitments · ${order.indexOf(pid) + 1} of ${order.length}</p>
-      <h2>Pass the device to <span class="pc pc-${p.seat}">${esc(p.name)}</span></h2>
-      <p class="muted">Only players with a complete body decide. Everyone else, look away.</p>
-      <button class="big" data-act="commit-open">I am ${esc(p.name)}</button>`);
-  }
-  const view = E.getPlayerView(s, pid, { includeEvents: false });
-  const me = view.players.find((x) => x.id === pid);
-  return privacy(`<p class="eyebrow">${esc(p.name)} — your objective: <b>${esc(OBJ[view.private.objective].name)}</b></p>
-    <h2>Attempt resurrection?</h2>
-    ${bodyDiagram(view.config, me)}
-    ${oddsLine(me.resurrectionOdds)}
-    <p class="small muted">Attempting consumes all six installed parts. A failed Vitality roll salvages three parts and adds 1 suspicion. If the Creature lives but Humanity fails, it is a monster: you, then each player clockwise with an Igor in the garrison, may spend a control attempt to subdue it (you have ${me.controlAttempts} left). Subduing adds ${view.config.control.subdueSuspicion} suspicion; each player who could subdue it but doesn't adds ${view.config.control.declineSuspicion}. If no one subdues it, it is unleashed and the game ends.</p>
-    <div class="choice-row"><button class="big danger" data-act="commit" data-v="1">⚡ Attempt</button><button class="big ghost" data-act="commit" data-v="0">Decline</button></div>`, 'wide');
-}
-
-// After a morgue raid the player keeps some of the drawn parts (public).
+// After an experiment the player keeps one eligible drawn research card (public).
 function pickFlow() {
   const s = ui.state;
   const cfg = s.config;
   const k = s.pendingPick;
   const opts = E.getLegalCommands(s, s.activePlayerId);
-  const label = (ids) => ids.map((id) => { const x = k.parts.find((y) => y.id === id); return `${esc(variantName(cfg, x.variantId))}<small class="muted"> — ${esc(variantText(cfg, x.variantId))}</small>`; }).join(' + ');
-  return modal(`${esc(cfg.actions[k.actionId].name)}: keep ${k.keep}`,
-    `<p>You uncover these parts. Keep ${k.keep}; the rest are lost.</p><div class="opts">${opts.map((c, i) => `<button class="opt" data-act="pick" data-i="${i}">${label(c.partIds)}</button>`).join('')}</div>`,
+  const typeOf = (id) => k.cards.find((x) => x.id === id).type;
+  return modal(`${esc(cfg.actions[k.actionId].name)}: keep one`,
+    `<p>You draw ${k.cards.map((x) => esc(researchName(cfg, x.type))).join(', ')}. Keep one you have not discovered; it stays private. The rest go to the bottom of the deck.</p><div class="opts">${opts.map((c, i) => `<button class="opt" data-act="pick" data-i="${i}"><b>${esc(researchName(cfg, typeOf(c.cardId)))}</b> <small class="muted">— ${esc(cfg.research[typeOf(c.cardId)].text)}</small></button>`).join('')}</div>`,
     '');
 }
 
@@ -425,17 +397,6 @@ function subdueFlow() {
     `<button class="big" data-act="subdue" data-v="1">Try to subdue (${pct(me.controlChance)})</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>`);
 }
 
-// Publishing is a free action on your own turn (spec 023).
-function publishModal() {
-  const s = ui.state;
-  const cfg = s.config;
-  const opts = E.getLegalCommands(s, s.activePlayerId).filter((c) => c.type === 'PUBLISH_RESEARCH');
-  const p = E.getPlayer(s, s.activePlayerId);
-  const body = `<p>Share a discovery with every player. It costs nothing and doesn't use your turn. Each discovery you publish adds 1 to your lecture income (now ${cfg.actions.lecture.base + p.published.length}).</p>
-    <div class="choice-row">${opts.map((c) => `<button data-act="publish" data-id="${c.researchType}" title="${esc(cfg.research[c.researchType].text)}">${esc(cfg.research[c.researchType].name)}</button>`).join('')}</div>`;
-  return modal('Publish a discovery', body, '<button data-act="close" class="ghost">Cancel</button>');
-}
-
 function reportOverlay(rep) {
   const cfg = ui.state.config;
   const c = ctx();
@@ -450,6 +411,8 @@ function reportOverlay(rep) {
         return `<div class="attr ${at.success ? 'ok' : 'no'}"><h4>${attrName(a)} <span>${at.score} vs ${at.threshold}+ ${at.success ? '✓' : '✗'}</span></h4><ul>${dice}${fixed}${thr}</ul><small>Base threshold ${at.baseThreshold}</small></div>`;
       }).join('');
       blocks.push(`<div class="attempt"><h3><span class="pc pc-${c.seat(e.playerId)}">${esc(c.name(e.playerId))}</span></h3><div class="attrs">${rows}</div>`);
+    } else if (e.type === 'RESURRECTION_CANCELLED') {
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))}'s body is incomplete; the attempt is called off.</p>`);
     } else if (e.type === 'RESURRECTION_FAILED') {
       blocks.push(`<p class="outcome fail">Vitality failed — no Creature. Salvaged: ${e.refundedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_STABILIZED') {
@@ -473,7 +436,7 @@ function reportOverlay(rep) {
       blocks.push(`<p class="outcome minor">Suspicion +${e.delta} → ${e.value}/${e.max}.</p>`);
     }
   }
-  const reveal = rep.reveal.commitments.map((x) => `<span class="pc pc-${c.seat(x.playerId)}">${esc(c.name(x.playerId))}</span>: ${x.attempt ? '<b>attempt</b>' : 'decline'}`).join(' · ');
+  const reveal = `Attempting: ${rep.reveal.playerIds.map((pid) => `<span class="pc pc-${c.seat(pid)}">${esc(c.name(pid))}</span>`).join(' · ')}`;
   return modal(`⚡ Resurrections — round ${rep.reveal.round}`, `<p class="reveal">${reveal}</p>${blocks.join('')}`, '<button data-act="report-done" class="big">Continue</button>');
 }
 
@@ -505,6 +468,7 @@ function choiceModal() {
     const owned = p.research.includes(c.type);
     return `<label class="opt ${owned ? 'disabled' : ''}"><input type="radio" name="${name}" value="${c.id}" ${owned ? 'disabled' : ''}> <b>${esc(cfg.research[c.type].name)}</b> <span class="muted">${esc(cfg.research[c.type].text)}${owned ? ' (already discovered)' : ''}</span></label>`;
   }).join('');
+  const installedOptions = () => Object.entries(p.body).filter(([, x]) => x).map(([slot, x]) => `<label class="opt"><input type="checkbox" name="part" value="${x.id}"> ${esc(variantName(cfg, x.variantId))} <span class="muted">${slot} — ${esc(variantText(cfg, x.variantId))}</span></label>`).join('') || '<p class="muted">No installed parts.</p>';
   const looseOptions = (filterFits) => {
     const open = {};
     for (const [t, d] of Object.entries(cfg.partTypes)) open[t] = d.slots.filter((sl) => p.body[sl] === null).length;
@@ -515,14 +479,16 @@ function choiceModal() {
   };
   switch (m.actionId) {
     case 'research': body += `<div class="opts">${marketOptions('card')}</div>`; break;
-    case 'experiment': body += `<h3>Spend ${def.partCost} parts</h3><div class="opts">${looseOptions(false)}</div><h3>Take a card</h3><div class="opts">${marketOptions('card')}</div>`; break;
+    case 'experiment': body += `<h3>Discard 1–${Math.min(def.maxParts, s.deck.length)} installed parts</h3><div class="opts">${installedOptions()}</div><p class="small muted">You draw one research card per part discarded and keep one you have not discovered.</p>`; break;
+    case 'sell': body += `<h3>Sell exactly ${def.parts} loose parts</h3><div class="opts">${looseOptions(false)}</div>`; break;
     case 'assemble': body += `<p class="small">Choose any parts for empty slots — up to a whole body.</p><div class="opts">${looseOptions(true)}</div>`; break;
     case 'specimens': {
       const opts = Object.entries(cfg.partTypes).map(([t, td]) => `<optgroup label="${esc(td.name)}">${Object.entries(cfg.partVariants).filter(([, v]) => v.type === t).map(([id, v]) => `<option value="${id}">${esc(v.name)} — ${esc(v.effects.length ? v.effects.map(effectText).join(', ') : 'no effect')}</option>`).join('')}</optgroup>`).join('');
       body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="variant${i}">${opts}</select></label>`).join('');
       break;
     }
-    case 'hire': body += `<p>Cost: <b>${cfg.igorCosts[p.igorsHired]}</b> money. You have ${p.money}. The Igor can work straight away.</p>`; break;
+    case 'hire': body += `<p>Cost: <b>${def.cost}</b> money. You have ${p.money}. The Igor can work straight away.</p>`; break;
+    case 'prepare': body += `<p>Your body is ${p.body && Object.values(p.body).every(Boolean) ? '<b>complete</b>' : '<b>not yet complete</b> — finish it tonight with another worker, or the attempt is called off'}. Everyone will see that you prepared, and you cannot back out.</p>`; break;
     default: break;
   }
   return modal(title, body, '<button data-act="close" class="ghost">Cancel</button><button data-act="confirm-place" class="big">Confirm</button>');
@@ -536,7 +502,7 @@ function collectChoices() {
   const card = () => (q('.modal input[name=card]:checked') || {}).value;
   switch (m.actionId) {
     case 'research': return { researchCardId: card() };
-    case 'experiment': return { partIds: checkedParts(), researchCardId: card() };
+    case 'experiment': case 'sell': return { partIds: checkedParts() };
     case 'assemble': return { partIds: checkedParts() };
     case 'specimens': return { variantIds: qa('.modal select[name^=variant]').map((x) => x.value) };
     default: return undefined;
@@ -565,10 +531,10 @@ function debugOverlay() {
   const s = ui.state;
   const objs = s.players.map((p) => `${esc(p.name)}: ${OBJ[s.objectives[p.id]].name}`).join(' · ');
   return modal('<span class="debug-btn">DEBUG</span> Developer tools', `
-    <p class="warn">Debug mode reveals hidden information (objectives, commitments, deck order, RNG). Do not open during a real playtest.</p>
+    <p class="warn">Debug mode reveals hidden information (objectives, deck order, RNG). Do not open during a real playtest.</p>
     <p><b>Seed:</b> <code>${esc(s.seed)}</code> · <b>Engine:</b> ${esc(s.engineVersion)} · <b>Commands:</b> ${s.commandLog.length} · <b>Events:</b> ${s.events.length}</p>
     <p><b>Objectives:</b> ${objs} · <b>Unseen:</b> ${s.unseenObjectives.map((o) => OBJ[o].name).join(', ')}</p>
-    <p><b>Commitments:</b> <code>${esc(JSON.stringify(s.commitment))}</code></p>
+    <p><b>Resolution:</b> <code>${esc(JSON.stringify(s.resolution))}</code> · <b>Rested:</b> ${esc(s.restedBy || 'nobody')}</p>
     <p><b>Deck (top first):</b> ${s.deck.map((c) => esc(c.type)).join(', ') || 'empty'}</p>
     <h3>Dispatch raw command (goes through the engine)</h3>
     <textarea id="dbg-cmd" rows="3" spellcheck="false">${esc(JSON.stringify(E.getLegalCommands(s, s.activePlayerId)[0] || {}))}</textarea>
@@ -628,12 +594,10 @@ function render() {
     const s = ui.state;
     let forced = null;
     if (!ui.meta.objectivesDone) forced = objectivesFlow();
-    else if (ui.commit && ui.commit.step === 'locked') forced = commitmentFlow();
     else {
       const rep = pendingReport();
       if (rep) forced = reportOverlay(rep);
       else if (s.result && !ui.hideGameOver && !ui.modal) forced = gameOverOverlay();
-      else if (s.phase === 'commitment' && !aiKind(s.activePlayerId)) forced = commitmentFlow();
       else if (s.phase === 'resolution' && s.control && !aiKind(s.activePlayerId) && !ui.modal) forced = subdueFlow();
       else if (s.pendingPick && !s.result && !aiKind(s.activePlayerId) && !ui.modal) forced = pickFlow();
     }
@@ -641,7 +605,7 @@ function render() {
     if (forced) html += forced;
     else if (ui.modal) {
       const k = ui.modal.kind;
-      html += k === 'choice' ? choiceModal() : k === 'publish' ? publishModal() : k === 'peek' ? peekOverlay() : k === 'confirm' ? confirmOverlay() : k === 'rules' ? rulesOverlay() : k === 'debug' ? debugOverlay() : '';
+      html += k === 'choice' ? choiceModal() : k === 'peek' ? peekOverlay() : k === 'confirm' ? confirmOverlay() : k === 'rules' ? rulesOverlay() : k === 'debug' ? debugOverlay() : '';
     }
   }
   if (ui.toast) html += `<div class="toast ${ui.toast.kind}" role="status">${esc(ui.toast.msg)}</div>`;
@@ -749,22 +713,10 @@ const handlers = {
     persist();
     render();
   },
-  'commit-open'() { ui.commit = { pid: ui.state.activePlayerId, step: 'decide' }; render(); },
-  commit(el) {
-    const pid = ui.state.activePlayerId;
-    if (act({ type: 'COMMIT_RESURRECTION', playerId: pid, attempt: el.dataset.v === '1' })) ui.commit = { pid, step: 'locked' };
-    render();
-  },
-  'commit-done'() { ui.commit = null; render(); },
   pick(el) {
     const s = ui.state;
     const c = E.getLegalCommands(s, s.activePlayerId)[Number(el.dataset.i)];
     if (c) act(c);
-    render();
-  },
-  'publish-open'() { ui.modal = { kind: 'publish' }; render(); },
-  publish(el) {
-    if (act({ type: 'PUBLISH_RESEARCH', playerId: ui.state.activePlayerId, researchType: el.dataset.id })) ui.modal = null;
     render();
   },
   subdue(el) {

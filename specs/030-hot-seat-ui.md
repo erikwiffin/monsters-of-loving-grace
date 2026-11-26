@@ -15,7 +15,6 @@ The browser game is a local hot-seat prototype for 3–6 players sharing one dev
 Secret information is shown only behind opaque pass-the-device screens that hide the board completely:
 
 - **Dealing objectives**: at the start of a game, each human player in turn gets a "Pass the device to X" screen, then "I am X — show my objective", then their objective card, then "Hide and pass".
-- **Resurrection commitments**: before each eligible human player's decision there is a pass screen. The decision screen shows only that player's objective, body, exact odds and the risks, with Attempt and Decline. A "Decision locked — hide and pass" screen follows, which doesn't reveal the choice.
 - **View my objective**: available on the active human player's turn. A confirmation screen ("only X should look") comes first, then the objective is revealed.
 
 This is casual privacy, not protection against browser storage or developer tools.
@@ -25,8 +24,8 @@ This is casual privacy, not protection against browser storage or developer tool
 The shared board always shows only public information:
 
 - the round and phase, and a plain suspicion meter showing value and maximum;
-- a turn bar showing the active player, a selector for their available workers, a Publish button when they have an unpublished discovery, and the pass button;
-- every day and night action space, with its location, cost and effect text, capacity, Igor permission (including Igor-only spaces) and the workers occupying it. Spaces in the current phase are highlighted when the selected worker can legally take them. When a space is unavailable, it explains why;
+- a turn bar showing the active player, a selector for their available workers, and the pass button;
+- every day and night action space, with its location, cost and effect text (including the odds of any discovery roll), its capacity at this player count, its worker permission (Igor, Igor only or Scientist only) and the workers occupying it. Spaces in the current phase are highlighted when the selected worker can legally take them. When a space is unavailable, it explains why;
 - the research market and deck count, plus the publication record;
 - one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), effective research (own copies, copies via publication, published marks), a body diagram, remaining control attempts and whether they are garrisoned, odds for a complete body, loose parts and Creatures;
 - the Chronicle, a readable log of public events.
@@ -39,14 +38,14 @@ Choosing a space opens a confirmation dialog for the action's choices:
 
 - market cards for research;
 - a variant picker for specimens;
-- loose parts for assemble and experiment;
+- loose parts for assemble and sell, and installed parts for experiment;
 - a summary for simple actions.
 
-Nothing is sent until the player confirms. After a morgue raid, a dialog shows the drawn parts with their effects, and the player chooses which to keep. Publish opens a dialog listing the player's publishable discoveries; choosing one publishes it at once and the turn continues. Invalid choices are reported using the engine's error message, and the dialog stays open. Passing asks for confirmation first.
+Nothing is sent until the player confirms. The prepare dialog says whether the body is complete and that preparing is public and binding. After an experiment, a dialog shows the drawn research cards with their effects, and the player chooses which eligible card to keep. Invalid choices are reported using the engine's error message, and the dialog stays open. Passing asks for confirmation first.
 
 ## Reports and game over
 
-After resolution, a resurrection report shows the revealed commitments and, for every attempt, each attribute's dice, sources, modifiers, threshold, score and outcome. It stays until dismissed. When a monster is created, the report appears before the control chain begins, and again after each decision that produced new events, so it also shows every control roll with its dice and modifiers, every decline, skip and suspicion change. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
+After resolution, a resurrection report shows who attempted and, for every attempt, each attribute's dice, sources, modifiers, threshold, score and outcome. It stays until dismissed. When a monster is created, the report appears before the control chain begins, and again after each decision that produced new events, so it also shows every control roll with its dice and modifiers, every decline, skip and suspicion change. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
 
 ## Subduing monsters
 
@@ -65,7 +64,7 @@ The game saves automatically after every committed command. If storage is unavai
 Debug mode is optional and clearly marked with a magenta **DEBUG** badge. It provides:
 
 - the seed, engine version and command count;
-- all objectives, the unseen card, current commitments and deck order;
+- all objectives, the unseen card, the resolution order and deck order;
 - the active player's legal commands and the authoritative state;
 - a box for dispatching raw JSON commands, which still go through the engine;
 - a download of the replay record.

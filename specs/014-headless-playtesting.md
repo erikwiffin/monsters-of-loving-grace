@@ -6,10 +6,11 @@ Rules testing relies on playing many games without a browser. Headless playtesti
 
 A policy is anything that, given `{ playerId, view, legal }`, returns a command. `view` is that player's filtered observation, and `legal` is the list of expanded legal commands. Policies may be scripted strategies, AI agents or human relays, and may be synchronous or asynchronous. Swapping policies requires no engine changes. Policies never receive authoritative state.
 
-Two built-in policies ship in `src/sim/policies.js`. Each has its own seeded randomness, separate from the engine's RNG.
+Built-in policies ship in `src/sim/policies.js`. Each has its own seeded randomness, separate from the engine's RNG.
 
 - **random** chooses uniformly among legal non-pass commands, and passes only occasionally, about 10% of the time.
-- **heuristic** is a simple scripted player that pursues its own objective using only its view and the engine's exact odds. Its strategy is not specified and may be tuned freely to keep playtests meaningful.
+- **heuristic** is a simple scripted player that pursues its own objective using only its view and the engine's exact odds. It must value actions from the configuration's numbers rather than fixed per-action scores, so that it plays sensibly when a parameter sweep changes them (spec 016). Otherwise its strategy is not specified and may be tuned freely to keep playtests meaningful.
+- **cautious** and **bold** are the heuristic with suspicion and resurrection risk priced higher or lower.
 
 ## Runner
 
@@ -35,9 +36,10 @@ Each game produces a machine-readable summary containing:
 - the round count, command count and invalid-command count;
 - the final suspicion and the full suspicion history;
 - every resurrection, with its scores and outcome;
+- action-economy metrics: per-action placements, Igor placements, rounds used and full phases, each player's Igors and leftover money, and round 1's initiative order;
 - optionally, the full replay command list.
 
-Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, the median round in which games end, average final suspicion and resurrection outcome counts (failed, stable, subdued and unleashed). For balance work, they also report how many players were dealt each objective and each objective's win rate: wins divided by players dealt it.
+Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, the median round in which games end, average final suspicion and resurrection outcome counts (failed, stable, subdued and unleashed). For balance work, they also report how many players were dealt each objective and each objective's win rate: wins divided by players dealt it. They also aggregate the action-economy metrics (spec 016) and the invalid-command total.
 
 ## Command-line tools
 

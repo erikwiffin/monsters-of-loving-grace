@@ -45,6 +45,7 @@ Tests are the automated safety net; the manual review against specs is required 
 | 013 | Persistence, save files and replay |
 | 014 | Headless AI playtesting |
 | 015 | Deployment to GitHub Pages |
+| 016 | Parameter sweeps |
 | 020 | Setup, objectives, suspicion and game end |
 | 021 | Round structure and workers |
 | 022 | Action spaces |

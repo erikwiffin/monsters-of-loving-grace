@@ -26,7 +26,6 @@ Any mismatch is reported as an error, which catches hand-edited or corrupted sav
 Saves preserve all rule-relevant state:
 
 - RNG state, action-space occupancy, and workers that are used or pending;
-- private commitments made so far;
 - objectives;
 - the full event history and command log.
 

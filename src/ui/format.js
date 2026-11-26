@@ -26,16 +26,17 @@ export const researchName = (cfg, t) => (cfg.research[t] ? cfg.research[t].name 
 export function actionText(id, def, cfg) {
   switch (id) {
     case 'medicine': return `Gain ${def.gain} money. +1 per Medical Expertise copy.`;
-    case 'research': return `Pay ${def.cost}: take an eligible research card from the market.`;
+    case 'research': return `Pay ${def.cost}: take an eligible research card from the market and publish it for everyone.`;
     case 'specimens': return `Pay ${def.cost}: choose ${def.count === 1 ? 'any named body part' : `any ${def.count} named body parts`}.`;
-    case 'hire': return `Pay ${cfg.igorCosts.slice(0, cfg.maxIgors - cfg.startingIgors).join(' / ')}: hire an Igor who can work at once (max ${cfg.maxIgors} Igors).`;
+    case 'hire': return `Pay ${def.cost}: hire an Igor who can work at once (max ${cfg.maxIgors} Igors).`;
     case 'charity': return `Pay ${def.cost}: suspicion −${def.reduction}.`;
-    case 'lecture': return `Gain ${def.base} + 1 per discovery you have published${def.cap == null ? '' : ` (max ${def.cap})`}.`;
     case 'garrison': return 'Lets you subdue other players\' monsters this round.';
-    case 'graves': return `Gain ${def.parts} random parts. d6: ${suspicionTableText(def.suspicionTable)}.`;
-    case 'morgue': return `Draw ${def.parts} random parts and keep ${def.keep}. d6: ${suspicionTableText(def.suspicionTable)}.`;
+    case 'graves': return `Gain ${def.parts} random parts. ${suspicionText(def.suspicion)}.`;
+    case 'sell': return `Sell ${def.parts} loose parts for ${def.gain} money. ${suspicionText(def.suspicion)}.`;
     case 'assemble': return def.max == null ? 'Install any number of loose parts into empty slots.' : `Install up to ${def.max} loose part${def.max === 1 ? '' : 's'} into empty slots.`;
-    case 'experiment': return `Spend ${def.partCost} loose parts: take an eligible research card free.`;
+    case 'prepare': return 'Attempt a resurrection after night, if your body is complete by then. Public and binding.';
+    case 'experiment': return `Discard up to ${def.maxParts} installed parts and draw that many research cards; keep one (private). ${suspicionText(def.suspicion)}.`;
+    case 'rest': return 'Go first next round.';
     default: return '';
   }
 }
@@ -48,18 +49,20 @@ export function workerLabel(w) {
 
 const REASONS = {
   medicine: 'medicine', research: 'research', specimens: 'specimens', hire: 'hiring', charity: 'charity',
-  lecture: 'lecture', publish: 'publication', graves: 'grave robbing', morgue: 'morgue raid',
+  graves: 'grave robbing', sell: 'selling parts', experiment: 'experiments',
   failed_resurrection: 'failed resurrection', monster_not_subdued: 'monster not subdued', monster_subdued: 'monster subdued',
 };
 
-/** "1–2 → +2, 3–4 → +1 suspicion" from a d6 discovery table (faces with no suspicion are omitted). */
-function suspicionTableText(table) {
-  const runs = [];
-  table.forEach((v, i) => {
-    const last = runs[runs.length - 1];
-    if (last && last.v === v) last.to = i + 1; else runs.push({ v, from: i + 1, to: i + 1 });
-  });
-  return `${runs.filter((r) => r.v > 0).map((r) => `${r.from === r.to ? r.from : `${r.from}–${r.to}`} → +${r.v}`).join(', ')} suspicion`;
+/** "d6: 1–2 → +2, 3–4 → +1 suspicion" from a discovery roll (rolls with no suspicion are omitted). */
+export function suspicionText(r) {
+  if (!r) return '';
+  let from = 1;
+  const parts = [];
+  for (const b of r.bands) {
+    if (b.amount > 0) parts.push(`${from === b.max ? from : `${from}–${b.max}`} → +${b.amount}`);
+    from = b.max + 1;
+  }
+  return `d${r.die}: ${parts.length ? parts.join(', ') : 'never'} suspicion`;
 }
 
 /** One-line description of a public event, or null to omit it from the log. */
@@ -69,26 +72,27 @@ export function describeEvent(e, ctx) {
   switch (e.type) {
     case 'GAME_STARTED': return `The experiment begins. ${n(e.firstPlayerId)} has initiative.`;
     case 'ROUND_STARTED': return `<span class="log-round">Round ${e.round}</span> — ${n(e.firstPlayerId)} leads.`;
-    case 'PHASE_STARTED': return { day: '☀ Day breaks.', night: '☾ Night falls.', commitment: '⚡ Resurrection commitments.', resolution: '⚡ Resurrections resolve.', dawn: '🌅 Dawn.' }[e.phase] || null;
+    case 'PHASE_STARTED': return { day: '☀ Day breaks.', night: '☾ Night falls.', resolution: '⚡ Resurrections resolve.', dawn: '🌅 Dawn.' }[e.phase] || null;
     case 'WORKER_PLACED': return `${n(e.playerId)} sends ${e.workerKind === 'scientist' ? 'their Scientist' : 'an Igor'} to the ${esc(e.location)} (${esc(cfg.actions[e.actionId].name.toLowerCase())}).`;
     case 'TURN_PASSED': return `${n(e.playerId)} passes for the ${e.phase}.`;
     case 'MONEY_CHANGED': return `${n(e.playerId)} ${e.delta >= 0 ? 'gains' : 'pays'} ${Math.abs(e.delta)} money (now ${e.balance}).`;
-    case 'PARTS_DRAWN': return `${n(e.playerId)} uncovers ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')} and may keep ${e.keep}.`;
-    case 'PARTS_PICKED': return `${n(e.playerId)} keeps ${e.kept.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
+    case 'RESEARCH_DRAWN': return `${n(e.playerId)} draws ${e.cards.map((k) => esc(researchName(cfg, k.type))).join(', ')} from the research deck.`;
+    case 'RESEARCH_RETURNED': return `${e.cards.length} research card${e.cards.length === 1 ? ' goes' : 's go'} to the bottom of the deck.`;
+    case 'RESURRECTION_PREPARED': return `${n(e.playerId)} prepares a resurrection for tonight${e.bodyComplete ? '' : ' (the body is not yet complete)'}.`;
+    case 'PLAYER_RESTED': return `${n(e.playerId)} rests and will go first next round.`;
     case 'PARTS_GAINED': return `${n(e.playerId)} obtains ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
     case 'PARTS_INSTALLED': return `${n(e.playerId)} installs ${e.installs.map((i) => `${esc(variantName(cfg, i.variantId))} (${i.slot})`).join(', ')}${e.bodyComplete ? ' — <i>the body is complete</i>' : ''}.`;
-    case 'PARTS_SPENT': return `${n(e.playerId)} consumes ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')} in experiments.`;
+    case 'PARTS_SPENT': return `${n(e.playerId)} ${e.reason === 'sell' ? 'sells' : 'consumes'} ${e.parts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}${e.reason === 'sell' ? '' : ' in experiments'}.`;
     case 'RESEARCH_ACQUIRED': return `${n(e.playerId)} discovers <b>${esc(researchName(cfg, e.researchType))}</b>.`;
     case 'MARKET_REFILLED': return `New research in the market: ${esc(researchName(cfg, e.researchType))} (${e.deckRemaining} left in deck).`;
     case 'MARKET_DECK_EMPTY': return 'The research deck is exhausted.';
     case 'RESEARCH_PUBLISHED': return `${n(e.playerId)} publishes <b>${esc(researchName(cfg, e.researchType))}</b> for all.`;
-    case 'IGOR_HIRED': return `${n(e.playerId)} hires an Igor for ${e.cost} (arrives round ${e.availableFromRound}).`;
-    case 'DIE_ROLLED': return e.purpose === 'discovery' ? `${n(e.playerId)} rolls d6 for discovery: <b>${e.result}</b>.` : null;
+    case 'IGOR_HIRED': return `${n(e.playerId)} hires an Igor for ${e.cost}.`;
+    case 'DIE_ROLLED': return e.purpose === 'discovery' ? `${n(e.playerId)} rolls d${e.die} for discovery: <b>${e.result}</b>.` : null;
     case 'DISCOVERY_RESOLVED': return e.increase ? null : `${n(e.playerId)} goes unnoticed${e.baseSuspicion && e.reduction ? ' (Discreet Methods)' : ''}.`;
     case 'SUSPICION_CHANGED': return `Suspicion ${e.delta >= 0 ? 'rises' : 'falls'} ${e.delta >= 0 ? '+' : '−'}${Math.abs(e.delta)} → <b>${e.value}/${e.max}</b> (${REASONS[e.reason] || e.reason}${e.playerId ? `, ${n(e.playerId)}` : ''}).`;
-    case 'COMMITMENT_AUTO_DECLINED': return null;
-    case 'COMMITMENT_LOCKED': return `${n(e.playerId)} locks a secret decision.`;
-    case 'COMMITMENTS_REVEALED': return e.commitments.length ? `Revealed: ${e.commitments.map((c) => `${n(c.playerId)} ${c.attempt ? '<b>attempts</b>' : 'declines'}`).join(', ')}.` : null;
+    case 'RESURRECTIONS_ANNOUNCED': return e.playerIds.length ? `Attempting resurrection: ${e.playerIds.map(n).join(', ')}.` : null;
+    case 'RESURRECTION_CANCELLED': return `${n(e.playerId)}'s body is incomplete; the attempt is called off.`;
     case 'RESURRECTION_STARTED': return `${n(e.playerId)} throws the switch…`;
     case 'RESURRECTION_ROLLED': return `${n(e.playerId)}: ${Object.keys(e.attributes).map((a) => `${attrName(a)} ${e.attributes[a].score}/${e.attributes[a].threshold} ${e.attributes[a].success ? '✓' : '✗'}`).join(', ')}.`;
     case 'RESURRECTION_FAILED': return `${n(e.playerId)}'s body fails to quicken. ${e.refundedParts.length} parts salvaged.`;

@@ -47,12 +47,11 @@ When the game ends for any reason, every objective, including the unseen card, i
 
 ## Suspicion
 
-**Ruling:** the mob threshold shrinks as the table grows: 10 with three or four players, 9 with five, and 8 with six. Suspicion is one shared integer meter from 0 to that threshold, starting at 0. It is shown as a plain meter, with its current and maximum values and no named or visually distinct bands. Every change is public, attributed to the responsible player and reason, logged, and clamped between 0 and the threshold. Every increase immediately checks the mob threshold.
+**Ruling:** the mob threshold is 10 at every player count. Suspicion is one shared integer meter from 0 to that threshold, starting at 0. It is shown as a plain meter, with its current and maximum values and no named or visually distinct bands. Every change is public, attributed to the responsible player and reason, logged, and clamped between 0 and the threshold. Every increase immediately checks the mob threshold.
 
-Only five things raise suspicion:
+Only these things raise suspicion:
 
-- discovered grave robbing (graves action);
-- discovered morgue theft (morgue action);
+- a discovery roll on robbing graves, selling parts or conducting experiments (spec 022);
 - a failed resurrection, meaning a failed Vitality roll (+1);
 - subduing a monster (+1 per subdue);
 - declining to subdue a monster when able to (+2 per player who declines).
