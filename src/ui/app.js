@@ -479,7 +479,7 @@ function choiceModal() {
   };
   switch (m.actionId) {
     case 'research': body += `<div class="opts">${marketOptions('card')}</div>`; break;
-    case 'experiment': body += `<h3>Discard 1–${Math.min(def.maxParts, s.deck.length)} installed parts</h3><div class="opts">${installedOptions()}</div><p class="small muted">You draw one research card per part discarded and keep one you have not discovered.</p>`; break;
+    case 'experiment': body += `<h3>Discard 1–${Math.min(def.maxParts, s.deck.length)} parts</h3><h4>Loose</h4><div class="opts">${looseOptions(false)}</div><h4>Installed (empties the slot)</h4><div class="opts">${installedOptions()}</div><p class="small muted">You draw one research card per part discarded and keep one you have not discovered.</p>`; break;
     case 'sell': body += `<h3>Sell exactly ${def.parts} loose parts</h3><div class="opts">${looseOptions(false)}</div>`; break;
     case 'assemble': body += `<p class="small">Choose any parts for empty slots — up to a whole body.</p><div class="opts">${looseOptions(true)}</div>`; break;
     case 'specimens': {

@@ -37,7 +37,7 @@ export function actionText(id, def, cfg) {
     case 'sell': return `Sell ${def.parts} loose parts for ${def.gain} money. ${suspicionText(def.suspicion)}.`;
     case 'assemble': return def.max == null ? 'Install any number of loose parts into empty slots.' : `Install up to ${def.max} loose part${def.max === 1 ? '' : 's'} into empty slots.`;
     case 'prepare': return 'Attempt a resurrection after night, if your body is complete by then. Public and binding.';
-    case 'experiment': return `Discard up to ${def.maxParts} installed parts and draw that many research cards; keep one (private). ${suspicionText(def.suspicion)}.`;
+    case 'experiment': return `Discard up to ${def.maxParts} parts (loose or installed) and draw that many research cards; keep one (private). ${suspicionText(def.suspicion)}.`;
     case 'rest': return 'Go first next round.';
     default: return '';
   }

@@ -118,14 +118,19 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       }
 
       const susp = view.suspicion / view.suspicionMax;
+      // Suspicion added over the last full round: how fast the mob is coming.
+      const recentRise = (view.suspicionHistory || []).filter((h) => h.round >= view.round - 1 && h.delta > 0).reduce((x, h) => x + h.delta, 0);
       const wantsSuspicion = objective === 'inquisitor';
       // The price of one point of suspicion: rises steeply as the mob nears.
       // Suspicion is the Inquisitor's only route to victory, so it buys it eagerly.
-      const suspicionPrice = wantsSuspicion ? -4 : st.suspicionCost * (1 + 8 * susp * susp);
+      const pace = Math.min(1, recentRise / view.suspicionMax);
+      const suspicionPrice = wantsSuspicion ? -4 : st.suspicionCost * (1 + 8 * susp * susp + 4 * pace);
       // Suspicion is shared: paying it down helps every rival as much as the
       // payer, so non-Inquisitors only buy it back when the mob is close, and
       // only as much as it takes to get out of danger.
-      const dangerLine = view.suspicionMax - 3 - (st.suspicionCost > 1 ? 1 : 0);
+      // The danger line drops when suspicion is climbing fast: it is the
+      // threshold minus the rise over the last full round (at least 2).
+      const dangerLine = view.suspicionMax - Math.max(2, recentRise) - 1 - (st.suspicionCost > 1 ? 1 : 0);
       const excess = Math.max(0, view.suspicion - dangerLine);
       const reduction = me.effectiveResearch.discretion * ((cfg.research.discretion && cfg.research.discretion.effects[0].amount) || 0);
       // Money matters less the more of it a player already holds.
@@ -144,7 +149,9 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const stillNeeded = (type) => Math.max(0, open[type] - looseFits(type));
       const totalStillNeeded = Object.keys(open).reduce((a, t) => a + stillNeeded(t), 0);
       // A spare part is worth what it sells for.
-      const spareValue = cfg.actions.sell ? cfg.actions.sell.gain / cfg.actions.sell.parts * 0.6 : 0.2;
+      // A spare part (one that fits no empty slot) is worth a share of what it
+      // sells for; it can also feed an experiment.
+      const spareValue = cfg.actions.sell ? Math.min(2, Math.max(0.5, cfg.actions.sell.gain / cfg.actions.sell.parts * 0.4)) : 0.5;
       // The Inquisitor builds no body: to it every part is only worth selling.
       const partValue = (variantId, needs = stillNeeded) => {
         const t = cfg.partVariants[variantId].type;
@@ -241,24 +248,50 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         // Rivals compete for capped spaces, so count on only some of the slots.
         const slots = (id) => Math.max(1, Math.round(capOf(id) / 2));
         const g = cfg.actions.graves;
-        // Seat experiments (600 games, 5 players) showed builders win less when
-        // they save Igors for graves or selling: the parts are random and the
-        // shared suspicion feeds the Inquisitor. Only the Inquisitor plans those.
+        // Everyone plans graves when it pays (parts that don't fit can be sold).
+        // Graves fill only about a third of rounds, so the Inquisitor plans on
+        // every slot; builders, who also bear the suspicion, plan on fewer.
         const gravesValue = g ? g.parts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
-        // Graves fill only about a third of rounds, so the Inquisitor plans on every slot.
-        for (let i = 0; wantsSuspicion && g && i < capOf('graves'); i++) jobs.push(gravesValue);
+        for (let i = 0; g && i < (wantsSuspicion ? capOf('graves') : slots('graves')); i++) jobs.push(gravesValue);
         const sl = cfg.actions.sell;
-        if (sl && wantsSuspicion) {
-          // Spare parts on hand, plus what a grave robbery tonight would bring.
-          const spareCount = me.loose.length - Object.keys(open).reduce((a2, t) => a2 + Math.min(open[t], looseFits(t)), 0)
-            + (wantsSuspicion && g ? g.parts : 0);
-          const sellValue = sl.gain * moneyValue - sl.parts * spareValue - expectedSuspicion(sl, reduction) * suspicionPrice;
-          for (let i = 0; i < Math.min(slots('sell'), Math.floor(spareCount / sl.parts)); i++) jobs.push(sellValue);
+        // Spare parts on hand (plus, for the Inquisitor, tonight's grave haul)
+        // can be sold or experimented with.
+        let spareCount = me.loose.length - Object.keys(open).reduce((a2, t) => a2 + Math.min(open[t], looseFits(t)), 0)
+          + (wantsSuspicion && g ? g.parts : 0);
+        const ex = cfg.actions.experiment;
+        if (ex && spareCount > 0 && unknownTypes.length && view.deckCount > 0) {
+          const frac = unknownTypes.length / Object.keys(cfg.research).length;
+          jobs.push(frac * meanWant - spareValue - expectedSuspicion(ex, reduction) * suspicionPrice);
+          spareCount -= 1;
+        }
+        if (sl) {
+          const sellValue = sl.gain * moneyValue - sl.parts * (wantsSuspicion ? 0.3 : spareValue) - expectedSuspicion(sl, reduction) * suspicionPrice;
+          for (let i = 0; i < Math.min(slots('sell'), Math.floor(Math.max(0, spareCount) / sl.parts)); i++) jobs.push(sellValue);
         }
         if (me.bodyComplete && shouldAttempt()) jobs.push(12); // the Scientist prepares
         else if (!wantsSuspicion && totalStillNeeded === 0 && needed > 0) jobs.push(5); // assemble the whole body
         jobs.push(0.8); // rest, if nobody else takes it
         return jobs.filter((v) => v > 0).sort((x, y) => y - x);
+      };
+      // What it costs to discard these parts (loose or installed). Spare loose
+      // parts are cheap. An installed part is cheap if a spare can replace it,
+      // and discarding a harmful one (a damaged arm, say) is an upgrade.
+      const discardCost = (ids) => {
+        const spares = {};
+        for (const t of Object.keys(open)) spares[t] = Math.max(0, looseFits(t) - open[t]);
+        const refill = cfg.actions.specimens ? cfg.actions.specimens.cost * moneyValue * 0.6 + 1.5 : 3;
+        return ids.reduce((acc, id) => {
+          const loose = me.loose.find((x) => x.id === id);
+          if (loose) {
+            if (spares[loose.type] > 0) { spares[loose.type]--; return acc + spareValue; }
+            return acc + partValue(loose.variantId);
+          }
+          const slot = Object.keys(me.body).find((sl) => me.body[sl] && me.body[sl].id === id);
+          const part = me.body[slot];
+          const quality = variantValue(cfg, part.variantId, objective) * 0.4;
+          if (spares[part.type] > 0) { spares[part.type]--; return acc + spareValue + 1 + quality; }
+          return acc + Math.max(0.3, Math.min(partValue(part.variantId, () => 1), refill + quality));
+        }, 0);
       };
       let igorReserve = 0;
       if (view.phase === 'day' && freeIgors > 0) {
@@ -292,24 +325,12 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             return (want[card.type] || 1) - pen - def.cost * moneyValue * 0.6 - sciTax + denial('research');
           }
           case 'experiment': {
-            // Draw one card per discarded installed part; keep the best eligible one.
+            // Draw one card per discarded part; keep the best eligible one,
+            // privately (no publishing penalty, unlike research).
             const n = c.choices.partIds.length;
             const frac = unknownTypes.length / Object.keys(cfg.research).length;
             const hit = 1 - Math.pow(1 - frac, n);
-            // An installed part is cheap to lose if a spare loose part can replace it.
-            const spares = {};
-            for (const t of Object.keys(open)) spares[t] = Math.max(0, looseFits(t) - open[t]);
-            // Discarding a harmful part (a damaged arm, say) is also an upgrade:
-            // experiments are the only way to empty a filled slot.
-            const refill = cfg.actions.specimens ? cfg.actions.specimens.cost * moneyValue * 0.6 + 1.5 : 3;
-            const lost = c.choices.partIds.reduce((acc, id) => {
-              const slot = Object.keys(me.body).find((sl) => me.body[sl] && me.body[sl].id === id);
-              const part = me.body[slot];
-              const quality = variantValue(cfg, part.variantId, objective) * 0.4;
-              if (spares[part.type] > 0) { spares[part.type]--; return acc + spareValue + 1 + quality; }
-              return acc + Math.max(0.3, Math.min(partValue(part.variantId, () => 1), refill + quality));
-            }, 0);
-            return hit * (meanWant + 0.3 * (n - 1)) - lost - susCost - sciTax;
+            return hit * (meanWant + 0.3 * (n - 1)) - discardCost(c.choices.partIds) - susCost - sciTax;
           }
           case 'specimens': {
             if (!needed && !wantsSuspicion) return -1;

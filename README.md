@@ -49,9 +49,9 @@ The in-game **Rules** button shows the same summary.
   | Phase | Actions |
   |---|---|
   | Day | medicine (unlimited), research (publishes the card), specimens, charity, hire, garrison (Igor only) |
-  | Night | assemble (unlimited), prepare resurrection (Scientist only, unlimited), sell parts, experiments (discard installed parts, draw that many cards, keep one privately), graves, rest (1: go first next round) |
+  | Night | assemble (unlimited), prepare resurrection (Scientist only, unlimited), sell parts, experiments (discard loose or installed parts, draw that many cards, keep one privately), graves, rest (1: go first next round) |
 
-  Each action space shows its cost, effect, capacity and discovery-roll odds. Spec 022 has the details; every number is a configuration value meant for tuning (spec 016).
+  Each action space shows its cost, effect, capacity and discovery-roll odds. Spec 022 has the details; every number is a configuration value meant for tuning (spec 016). Design principle: night actions mirror day actions (graves ↔ specimens, sell ↔ medicine, experiments ↔ research) with similar expected value but higher variance; selling pays 7 because it costs two parts.
 - **Resurrection:**
   - Roll d20 each for Vitality (needs 20+) and Humanity (20+). Installed parts and research add dice, fixed modifiers or threshold changes.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
@@ -162,7 +162,7 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 | `specimens` | `{ variantIds: ['robust_chest'] }`: exactly 1 variant ID |
 | `assemble` | `{ partIds: ['part-12', 'part-18'] }`: 1 or more unique loose part instances (up to a whole body), each needing an empty matching slot |
 | `sell` | `{ partIds: ['part-3', 'part-9'] }`: exactly the configured number of loose parts |
-| `experiment` | `{ partIds: ['part-3', 'part-9'] }`: 1 to the configured maximum of *installed* parts |
+| `experiment` | `{ partIds: ['part-3', 'part-9'] }`: 1 to the configured maximum of parts, loose or installed |
 
 - **Worker IDs:**
   - Scientists are `scientist-p1`.

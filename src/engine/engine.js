@@ -366,7 +366,7 @@ function charityMaxUnits(s, p, def) {
 
 /** Most installed parts an experiment may discard right now (0 if it can't be taken). */
 function experimentMax(s, p, def) {
-  return Math.min(def.maxParts, installedParts(p).length, s.deck.length);
+  return Math.min(def.maxParts, p.loose.length + installedParts(p).length, s.deck.length);
 }
 
 export const HANDLERS = {
@@ -548,32 +548,33 @@ export const HANDLERS = {
     },
   },
   experiment: {
-    // Discard installed parts, draw that many research cards from the deck,
-    // roll for discovery, then keep one eligible card (PICK_RESEARCH).
+    // Discard loose or installed parts, draw that many research cards from the
+    // deck, roll for discovery, then keep one eligible card (PICK_RESEARCH).
     choiceKeys: ['partIds'],
     positive: ['maxParts'],
     prereq(s, p) {
-      if (!installedParts(p).length) return err('INSUFFICIENT_PARTS', 'Requires at least one installed part.');
+      if (!p.loose.length && !installedParts(p).length) return err('INSUFFICIENT_PARTS', 'Requires at least one part.');
       return s.deck.length ? null : err('DECK_EMPTY', 'The research deck is empty.');
     },
     checkChoices(s, p, w, def, c) {
       const ids = c.partIds;
       const max = experimentMax(s, p, def);
       if (!Array.isArray(ids)) return err('INVALID_CHOICE', 'partIds must be an array.');
-      if (ids.length < 1 || ids.length > max) return err('INVALID_CHOICE', `Select 1–${max} installed parts.`);
+      if (ids.length < 1 || ids.length > max) return err('INVALID_CHOICE', `Select 1–${max} parts.`);
       if (new Set(ids).size !== ids.length) return err('INVALID_CHOICE', 'partIds must be unique.');
-      const installed = installedParts(p);
-      for (const id of ids) if (!installed.some((x) => x.id === id)) return err('INVALID_TARGET', `Part ${id} is not installed in your body.`);
+      const owned = [...p.loose, ...installedParts(p)];
+      for (const id of ids) if (!owned.some((x) => x.id === id)) return err('INVALID_TARGET', `Part ${id} is not yours.`);
       return null;
     },
-    constraints: (s, p, w, def) => ({ partIds: { type: 'subset', min: 1, max: experimentMax(s, p, def), values: installedParts(p).map((x) => x.id) } }),
+    constraints: (s, p, w, def) => ({ partIds: { type: 'subset', min: 1, max: experimentMax(s, p, def), values: [...p.loose, ...installedParts(p)].map((x) => x.id) } }),
     apply(s, p, w, def, c) {
-      const spent = [];
+      const spent = p.loose.filter((x) => c.partIds.includes(x.id));
+      p.loose = p.loose.filter((x) => !c.partIds.includes(x.id));
       for (const slot of SLOT_ORDER) {
         const part = p.body[slot];
         if (part && c.partIds.includes(part.id)) { spent.push(part); p.body[slot] = null; }
       }
-      emit(s, 'PARTS_SPENT', { playerId: p.id, reason: 'experiment', source: 'installed', parts: clone(spent) });
+      emit(s, 'PARTS_SPENT', { playerId: p.id, reason: 'experiment', parts: clone(spent) });
       const cards = s.deck.splice(0, spent.length);
       emit(s, 'RESEARCH_DRAWN', { playerId: p.id, cards: clone(cards), deckRemaining: s.deck.length });
       const eligible = cards.filter((k) => !p.research.includes(k.type));
@@ -1284,9 +1285,16 @@ export function enumerateLegalCommands(s, pid, { dedupe = true } = {}) {
   return out;
 }
 
+// Parts are interchangeable when they share a variant and a location: a loose
+// part and an installed one of the same variant are not (discarding the
+// installed one empties a slot).
+function partKey(p, id) {
+  const loose = p.loose.find((x) => x.id === id);
+  return loose ? `loose:${loose.variantId}` : `installed:${installedParts(p).find((x) => x.id === id).variantId}`;
+}
+
 function partSignature(p, ids) {
-  const all = [...p.loose, ...installedParts(p)];
-  return ids.map((id) => all.find((x) => x.id === id).variantId).sort().join('|');
+  return ids.map((id) => partKey(p, id)).sort().join('|');
 }
 
 /**
@@ -1301,8 +1309,9 @@ function variantCombos(p, values, min, max, typeCaps = null) {
   const byVariant = new Map();
   for (const id of values) {
     const part = all.find((x) => x.id === id);
-    let g = byVariant.get(part.variantId);
-    if (!g) { g = { type: part.type, ids: [] }; byVariant.set(part.variantId, g); groups.push(g); }
+    const key = partKey(p, id);
+    let g = byVariant.get(key);
+    if (!g) { g = { type: part.type, ids: [] }; byVariant.set(key, g); groups.push(g); }
     g.ids.push(id);
   }
   const out = [];

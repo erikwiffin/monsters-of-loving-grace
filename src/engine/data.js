@@ -77,7 +77,7 @@ export const DEFAULT_CONFIG = {
     garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: { 3: 2, 5: 3 }, igor: true, scientist: false },
     assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: null }, // max: null = any number of parts
     prepare: { phase: 'night', name: 'Prepare resurrection', location: 'Private laboratory', capacity: null, igor: false },
-    sell: { phase: 'night', name: 'Sell parts', location: 'Back alley', capacity: { 3: 2, 5: 3 }, igor: true, gain: 3, parts: 2, suspicion: { die: 6, bands: [{ max: 2, amount: 1 }] } },
+    sell: { phase: 'night', name: 'Sell parts', location: 'Back alley', capacity: { 3: 2, 5: 3 }, igor: true, gain: 7, parts: 2, suspicion: { die: 6, bands: [{ max: 2, amount: 1 }] } },
     experiment: { phase: 'night', name: 'Conduct experiments', location: 'Private laboratory', capacity: { 3: 2, 5: 3 }, igor: true, maxParts: 3, suspicion: { die: 6, bands: [{ max: 3, amount: 1 }] } },
     graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: { 3: 2, 5: 3 }, igor: true, parts: 2, suspicion: { die: 6, bands: [{ max: 4, amount: 1 }] } },
     rest: { phase: 'night', name: 'Rest', location: 'Home', capacity: 1, igor: true },

@@ -40,6 +40,6 @@ The assemble action moves chosen loose parts into matching empty slots. It must 
 
 ## Spending parts
 
-- Experiments discard chosen *installed* parts, emptying their slots (spec 022).
+- Experiments discard chosen parts, loose or installed; an installed part's slot becomes empty (spec 022).
 - Selling discards chosen *loose* parts for money (spec 022).
 - A resurrection attempt consumes all six installed parts, but never loose parts (spec 025).

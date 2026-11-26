@@ -256,17 +256,20 @@ test('sell parts: exactly N loose parts for money, then a discovery roll', () =>
   const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'sell', choices: { partIds: ['part-a', 'part-c'] } });
   s = r.state;
   assert.deepEqual(p().loose.map((x) => x.id), ['part-b']);
-  assert.equal(p().money, 6);
+  assert.equal(p().money, 3 + 7, 'selling pays 7: more than medicine, since it costs two parts');
   const roll = r.events.find((e) => e.type === 'DIE_ROLLED').result;
   assert.equal(s.suspicion, roll <= 2 ? 1 : 0);
 });
 
-test('experiment: discard installed parts, draw that many cards, keep one eligible; the rest go under the deck', () => {
+test('experiment: discard loose or installed parts, draw that many cards, keep one eligible; the rest go under the deck', () => {
   let s = createGame({ playerCount: 3 }, 'experiment');
   s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
   const p = () => s.players.find((x) => x.id === pid);
-  assert.ok(!getLegalCommands(s, pid).some((c) => c.actionId === 'experiment'), 'needs an installed part');
+  assert.ok(!getLegalCommands(s, pid).some((c) => c.actionId === 'experiment'), 'needs a part');
+  p().loose.push({ id: 'part-l1', variantId: 'ordinary_arm', type: 'arm' });
+  assert.deepEqual(getLegalCommands(s, pid).find((c) => c.actionId === 'experiment').choiceConstraints.partIds.values, ['part-l1'], 'a loose part will do');
+  p().loose = [];
   fullBody(s, pid);
   const tmpl = getLegalCommands(s, pid).find((c) => c.actionId === 'experiment');
   assert.equal(tmpl.choiceConstraints.partIds.max, 3);
@@ -930,4 +933,20 @@ test('heuristic: suspicion is shared, so only danger justifies charity; the Inqu
   const inq = decideDay('inquisitor', 6, scarce);
   assert.equal(inq.actionId, 'charity', 'the Inquisitor takes the only charity slot');
   assert.equal(inq.choices.units, 1, 'and spends as little as possible');
+});
+
+test('experiment: a loose part and an installed part of the same variant are different choices', () => {
+  let s = createGame({ playerCount: 3 }, 'experiment-loose');
+  s = passAllUntil(s, (x) => x.phase === 'night');
+  const pid = s.activePlayerId;
+  const p = () => s.players.find((x) => x.id === pid);
+  fullBody(s, pid);
+  p().loose.push({ id: 'part-l1', variantId: 'ordinary_arm', type: 'arm' });
+  const singles = enumerateLegalCommands(s, pid).filter((c) => c.actionId === 'experiment' && c.choices.partIds.length === 1);
+  assert.ok(singles.some((c) => c.choices.partIds[0] === 'part-l1'), 'the loose arm');
+  assert.ok(singles.some((c) => c.choices.partIds[0] === p().body.arm1.id), 'an installed arm');
+  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'experiment', choices: { partIds: ['part-l1'] } });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.state.players.find((x) => x.id === pid).loose, []);
+  assert.ok(Object.values(r.state.players.find((x) => x.id === pid).body).every(Boolean), 'the body is untouched');
 });
