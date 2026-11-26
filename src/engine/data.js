@@ -72,7 +72,7 @@ export const DEFAULT_CONFIG = {
     medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: null, igor: true, gain: 3 },
     research: { phase: 'day', name: 'Conduct research', location: 'University', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2 },
     specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2, count: 1 },
-    charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: { 3: 2, 5: 3 }, igor: true, cost: 3, reduction: 2 },
+    charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: { 3: 2, 5: 3 }, igor: true, cost: 3, reduction: 2, maxUnits: 1 },
     hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: { 3: 2, 5: 3 }, igor: true, cost: 4 },
     garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: { 3: 2, 5: 3 }, igor: true, scientist: false },
     assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: null }, // max: null = any number of parts

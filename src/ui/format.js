@@ -29,7 +29,9 @@ export function actionText(id, def, cfg) {
     case 'research': return `Pay ${def.cost}: take an eligible research card from the market and publish it for everyone.`;
     case 'specimens': return `Pay ${def.cost}: choose ${def.count === 1 ? 'any named body part' : `any ${def.count} named body parts`}.`;
     case 'hire': return `Pay ${def.cost}: hire an Igor who can work at once (max ${cfg.maxIgors} Igors).`;
-    case 'charity': return `Pay ${def.cost}: suspicion −${def.reduction}.`;
+    case 'charity': return (def.maxUnits || 1) > 1
+      ? `Pay ${def.cost} per unit, up to ${def.maxUnits} units: suspicion −${def.reduction} per unit.`
+      : `Pay ${def.cost}: suspicion −${def.reduction}.`;
     case 'garrison': return 'Lets you subdue other players\' monsters this round.';
     case 'graves': return `Gain ${def.parts} random parts. ${suspicionText(def.suspicion)}.`;
     case 'sell': return `Sell ${def.parts} loose parts for ${def.gain} money. ${suspicionText(def.suspicion)}.`;

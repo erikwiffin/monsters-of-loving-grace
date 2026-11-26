@@ -356,6 +356,14 @@ function installedParts(p) {
   return SLOT_ORDER.filter((slot) => p.body[slot] !== null).map((slot) => p.body[slot]);
 }
 
+/** Most charity units a player may buy now: the configured maximum, what they can afford, and no more than it takes to reach 0. */
+function charityMaxUnits(s, p, def) {
+  let max = def.maxUnits;
+  if (def.cost > 0) max = Math.min(max, Math.floor(p.money / def.cost));
+  if (def.reduction > 0) max = Math.min(max, Math.ceil(s.suspicion / def.reduction));
+  return Math.max(1, max);
+}
+
 /** Most installed parts an experiment may discard right now (0 if it can't be taken). */
 function experimentMax(s, p, def) {
   return Math.min(def.maxParts, installedParts(p).length, s.deck.length);
@@ -423,15 +431,29 @@ export const HANDLERS = {
     },
   },
   charity: {
+    // Buys 1 to maxUnits units, each costing `cost` and removing `reduction`
+    // suspicion. With maxUnits 1 (the default) `units` may be omitted.
     choiceKeys: [],
+    optionalChoiceKeys: ['units'],
     numbers: ['cost', 'reduction'],
+    positive: ['maxUnits'],
     prereq(s, p, w, def) {
       if (s.suspicion <= 0) return err('NO_SUSPICION', 'Suspicion is already 0.');
       return needMoney(p, def.cost);
     },
-    apply(s, p, w, def) {
-      changeMoney(s, p, -def.cost, 'charity');
-      changeSuspicion(s, -def.reduction, 'charity', p.id);
+    checkChoices(s, p, w, def, c) {
+      if (c.units === undefined) return null;
+      const max = charityMaxUnits(s, p, def);
+      return Number.isInteger(c.units) && c.units >= 1 && c.units <= max ? null : err('INVALID_CHOICE', `units must be an integer from 1 to ${max}.`);
+    },
+    constraints(s, p, w, def) {
+      const max = charityMaxUnits(s, p, def);
+      return max > 1 ? { units: { type: 'enum', values: Array.from({ length: max }, (_, i) => i + 1) } } : {};
+    },
+    apply(s, p, w, def, c) {
+      const units = c.units || 1;
+      changeMoney(s, p, -def.cost * units, 'charity');
+      changeSuspicion(s, -def.reduction * units, 'charity', p.id);
     },
   },
   garrison: {
@@ -1133,7 +1155,7 @@ export function validateCommand(s, cmd) {
   const h = HANDLERS[cmd.actionId];
   const choices = cmd.choices === undefined ? {} : cmd.choices;
   if (!isPlainObject(choices)) return err('INVALID_CHOICE', 'choices must be an object.');
-  for (const k of Object.keys(choices)) if (!h.choiceKeys.includes(k)) return err('UNKNOWN_FIELD', `Unknown choice ${k} for ${cmd.actionId}.`);
+  for (const k of Object.keys(choices)) if (!h.choiceKeys.includes(k) && !(h.optionalChoiceKeys || []).includes(k)) return err('UNKNOWN_FIELD', `Unknown choice ${k} for ${cmd.actionId}.`);
   for (const k of h.choiceKeys) if (choices[k] === undefined) return err('MISSING_CHOICE', `Missing choice ${k} for ${cmd.actionId}.`);
   if (h.checkChoices) return h.checkChoices(s, p, w, s.config.actions[cmd.actionId], choices);
   return null;
@@ -1216,7 +1238,10 @@ export function getLegalCommands(s, pid) {
       if (placementError(s, p, w, actionId)) continue;
       const h = HANDLERS[actionId];
       const entry = { type: 'PLACE_MEEPLE', playerId: pid, workerId: w.id, actionId };
-      if (h.choiceKeys.length) entry.choiceConstraints = h.constraints(s, p, w, s.config.actions[actionId]);
+      if (h.constraints) {
+        const c = h.constraints(s, p, w, s.config.actions[actionId]);
+        if (Object.keys(c).length) entry.choiceConstraints = c;
+      }
       out.push(entry);
     }
   }
@@ -1264,7 +1289,44 @@ function partSignature(p, ids) {
   return ids.map((id) => all.find((x) => x.id === id).variantId).sort().join('|');
 }
 
+/**
+ * Part selections that differ in their variants, built by choosing how many of
+ * each distinct variant to take rather than which instances. This stays small
+ * when a player holds many parts (choosing 6 of 52 instances one by one would
+ * be millions of combinations). `typeCaps` optionally limits parts per type.
+ */
+function variantCombos(p, values, min, max, typeCaps = null) {
+  const all = [...p.loose, ...installedParts(p)];
+  const groups = [];
+  const byVariant = new Map();
+  for (const id of values) {
+    const part = all.find((x) => x.id === id);
+    let g = byVariant.get(part.variantId);
+    if (!g) { g = { type: part.type, ids: [] }; byVariant.set(part.variantId, g); groups.push(g); }
+    g.ids.push(id);
+  }
+  const out = [];
+  const used = {};
+  const rec = (gi, picked) => {
+    if (gi === groups.length) {
+      if (picked.length >= min) out.push({ partIds: [...picked] });
+      return;
+    }
+    const g = groups[gi];
+    const typeLeft = typeCaps ? (typeCaps[g.type] || 0) - (used[g.type] || 0) : Infinity;
+    const most = Math.min(g.ids.length, max - picked.length, typeLeft);
+    for (let n = 0; n <= most; n++) {
+      used[g.type] = (used[g.type] || 0) + n;
+      rec(gi + 1, [...picked, ...g.ids.slice(0, n)]);
+      used[g.type] -= n;
+    }
+  };
+  rec(0, []);
+  return out.sort((a, b) => a.partIds.length - b.partIds.length);
+}
+
 function uniqueCombos(p, values, min, max, dedupe) {
+  if (dedupe) return variantCombos(p, values, min, max);
   const out = [];
   const seen = new Set();
   for (let size = min; size <= Math.min(max, values.length); size++) {
@@ -1291,6 +1353,8 @@ function expandChoices(s, p, actionId, c, dedupe) {
       for (let i = start; i < v.length; i++) { acc.push(v[i]); rec(i, acc); acc.pop(); }
     };
     rec(0, []);
+  } else if (actionId === 'assemble' && dedupe) {
+    out.push(...variantCombos(p, c.partIds.values, c.partIds.min, c.partIds.max, c.partIds.maxPerPartType));
   } else if (actionId === 'assemble') {
     const seen = new Set();
     const k = c.partIds;
@@ -1312,6 +1376,8 @@ function expandChoices(s, p, actionId, c, dedupe) {
         out.push({ partIds: combo });
       }
     }
+  } else if (actionId === 'charity') {
+    for (const units of c.units.values) out.push({ units });
   } else if (actionId === 'experiment' || actionId === 'sell') {
     out.push(...uniqueCombos(p, c.partIds.values, c.partIds.min, c.partIds.max, dedupe));
   }

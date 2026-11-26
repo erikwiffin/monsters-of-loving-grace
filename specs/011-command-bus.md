@@ -19,14 +19,15 @@ Every command has a `type` and the acting `playerId`. It may also carry an optio
 
 | Action | Choices |
 |---|---|
-| medicine, hire, charity, garrison, graves, prepare, rest | none (`{}`) |
+| medicine, hire, garrison, graves, prepare, rest | none (`{}`) |
+| charity | `units`: optional when at most one unit may be bought; otherwise the number of units to buy (spec 022) |
 | research | `researchCardId`: a market card |
 | specimens | `variantIds`: exactly one part variant ID |
 | assemble | `partIds`: one or more unique loose part instance IDs, each fitting a distinct empty slot |
 | sell | `partIds`: exactly the configured number of unique loose part instance IDs |
 | experiment | `partIds`: one or more unique *installed* part instance IDs, up to the configured maximum and the cards left in the deck |
 
-Specimen purchases select part *variants*. Assembly, selling and experiments select specific part *instances*. Unknown choice keys and missing choice keys are both rejected.
+Specimen purchases select part *variants*. Assembly, selling and experiments select specific part *instances*. Unknown choice keys and missing required choice keys are both rejected.
 
 ## Validation
 

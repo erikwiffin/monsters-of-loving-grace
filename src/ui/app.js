@@ -487,6 +487,12 @@ function choiceModal() {
       body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="variant${i}">${opts}</select></label>`).join('');
       break;
     }
+    case 'charity': {
+      const t = E.getLegalCommands(s, s.activePlayerId).find((c) => c.workerId === m.workerId && c.actionId === 'charity');
+      const units = t && t.choiceConstraints ? t.choiceConstraints.units.values : [1];
+      if (units.length > 1) body += `<label class="sel">Units <select name="units">${units.map((u) => `<option value="${u}">${u} — pay ${u * def.cost}, suspicion −${u * def.reduction}</option>`).join('')}</select></label>`;
+      break;
+    }
     case 'hire': body += `<p>Cost: <b>${def.cost}</b> money. You have ${p.money}. The Igor can work straight away.</p>`; break;
     case 'prepare': body += `<p>Your body is ${p.body && Object.values(p.body).every(Boolean) ? '<b>complete</b>' : '<b>not yet complete</b> — finish it tonight with another worker, or the attempt is called off'}. Everyone will see that you prepared, and you cannot back out.</p>`; break;
     default: break;
@@ -505,6 +511,7 @@ function collectChoices() {
     case 'experiment': case 'sell': return { partIds: checkedParts() };
     case 'assemble': return { partIds: checkedParts() };
     case 'specimens': return { variantIds: qa('.modal select[name^=variant]').map((x) => x.value) };
+    case 'charity': return q('.modal select[name=units]') ? { units: Number(q('.modal select[name=units]').value) } : undefined;
     default: return undefined;
   }
 }

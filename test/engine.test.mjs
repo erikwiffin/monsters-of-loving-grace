@@ -222,6 +222,29 @@ test('suspicion rolls are configurable: die, bands and amounts', () => {
   assert.throws(() => createGame({ actions: { graves: { suspicion: { die: 6, bands: [{ max: 7, amount: 1 }] } } } }, 'x'));
 });
 
+test('charity: one bundle by default; scalable units when maxUnits > 1', () => {
+  let s = createGame({ playerCount: 3, startingMoney: 10 }, 'charity');
+  const pid = s.activePlayerId;
+  s.suspicion = 5;
+  assert.ok(!getLegalCommands(s, pid).find((c) => c.actionId === 'charity').choiceConstraints, 'no choice with one unit');
+  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' });
+  assert.equal(r.state.suspicion, 3);
+  assert.equal(r.state.players.find((p) => p.id === pid).money, 7);
+  // Scalable: 1 money per unit, 1 suspicion per unit, up to 4 units; capacity 1.
+  let t = createGame({ playerCount: 3, startingMoney: 3, actions: { charity: { cost: 1, reduction: 1, maxUnits: 4, capacity: 1 } } }, 'charity2');
+  const q = t.activePlayerId;
+  t.suspicion = 2;
+  const tmpl = getLegalCommands(t, q).find((c) => c.actionId === 'charity');
+  assert.deepEqual(tmpl.choiceConstraints.units.values, [1, 2], 'capped by what it takes to reach 0');
+  assert.equal(dispatch(t, { type: 'PLACE_MEEPLE', playerId: q, workerId: sci(q), actionId: 'charity', choices: { units: 3 } }).error.code, 'INVALID_CHOICE');
+  t.suspicion = 9;
+  assert.deepEqual(getLegalCommands(t, q).find((c) => c.actionId === 'charity').choiceConstraints.units.values, [1, 2, 3], 'capped by money');
+  t = ok(t, { type: 'PLACE_MEEPLE', playerId: q, workerId: sci(q), actionId: 'charity', choices: { units: 1 } });
+  assert.equal(t.suspicion, 8);
+  assert.equal(t.players.find((p) => p.id === q).money, 2);
+  assert.ok(!getLegalCommands(t, t.activePlayerId).some((c) => c.actionId === 'charity'), 'one unit blocks the only slot');
+});
+
 test('sell parts: exactly N loose parts for money, then a discovery roll', () => {
   let s = createGame({ playerCount: 3 }, 'sell');
   s = passAllUntil(s, (x) => x.phase === 'night');
@@ -890,4 +913,21 @@ test('sweep scoring penalises missed targets and explains why', async () => {
 test('the cautious and bold heuristic styles play legal games', () => {
   const { results } = runBatch({ games: 4, policies: ['cautious', 'bold', 'heuristic'], includeCommands: false, seedPrefix: 'styles' });
   for (const r of results) { assert.equal(r.invalidCommands, 0); assert.equal(r.terminal, true); }
+});
+
+test('heuristic: suspicion is shared, so only danger justifies charity; the Inquisitor blocks a scarce charity slot', () => {
+  const decideDay = (objective, suspicion, config = {}) => {
+    const s = createGame({ playerCount: 3, startingMoney: 20, ...config }, 'h-charity');
+    const pid = s.activePlayerId;
+    s.objectives[pid] = objective;
+    s.suspicion = suspicion;
+    const legal = enumerateLegalCommands(s, pid).filter((c) => c.actionId === 'charity' || c.actionId === 'medicine');
+    return heuristicPolicy('h', { noise: 0 }).decide({ playerId: pid, view: getPlayerView(s, pid), legal });
+  };
+  assert.equal(decideDay('prometheus', 3).actionId, 'medicine', 'no charity while the mob is far off');
+  assert.equal(decideDay('prometheus', 9).actionId, 'charity', 'charity when the mob is near');
+  const scarce = { actions: { charity: { cost: 1, reduction: 1, maxUnits: 4, capacity: 1 } } };
+  const inq = decideDay('inquisitor', 6, scarce);
+  assert.equal(inq.actionId, 'charity', 'the Inquisitor takes the only charity slot');
+  assert.equal(inq.choices.units, 1, 'and spends as little as possible');
 });

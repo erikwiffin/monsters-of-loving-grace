@@ -4,11 +4,7 @@ Each action space has a phase, a capacity, a worker permission and an effect. An
 
 ## Capacity
 
-Every space's capacity is configured as one of:
-
-- **unlimited** (`null`): the fallback spaces, which never fill;
-- **a number**, the same at every player count;
-- **tiers by player count**, keyed by the smallest player count of each tier. `{ 3: 2, 5: 3 }`, written "2/3" below, means two slots with three or four players and three with five or six. More tiers may be added.
+A capacity is unlimited (`null`, the fallback spaces), a number, or tiers keyed by the smallest player count of each tier: `{ 3: 2, 5: 3 }`, written "2/3" below, means two slots with three or four players and three with five or six. More tiers may be added.
 
 ## Worker permissions
 
@@ -21,9 +17,9 @@ Scientists and Igors may take every action, with two exceptions: **Garrison the 
 | medicine | Practise medicine | Hospital | unlimited | Gain 3 money. Medical Expertise adds +1 per effective copy. |
 | research | Conduct research | University | 2/3 | Pay 2. Take one eligible research card from the market and publish it (spec 023). |
 | specimens | Buy specimens | Anatomical supplier | 2/3 | Pay 2. Choose any one body part by named variant. |
-| charity | Donate to charity | Town hall | 2/3 | Pay 3. Suspicion −2, minimum 0. Only legal while suspicion is above 0. |
+| charity | Donate to charity | Town hall | 2/3 | Buy 1 unit: pay 3, suspicion −2, minimum 0. Only legal while suspicion is above 0. |
 | hire | Hire an Igor | Tavern | 2/3 | Pay 4. Gain one Igor, who can act at once. At most three Igors per player, counting the starting one. |
-| garrison | Garrison the watch | Watch house | 2/3 | Igors only. No cost and no immediate effect. Lets the player subdue other players' monsters during this round's resolution (spec 025). |
+| garrison | Garrison the watch | Watch house | 2/3 | Igors only. No cost or immediate effect. Lets the player subdue other players' monsters this round (spec 025). |
 
 ## Night actions
 
@@ -38,23 +34,23 @@ Scientists and Igors may take every action, with two exceptions: **Garrison the 
 
 ## Discovery rolls
 
-Every action that can raise suspicion does so through a configurable discovery roll: a die size and an ordered list of bands, each with a highest roll and a suspicion amount. The first band whose highest roll is at least the result applies; a result above every band adds nothing. So a sweep can vary the chance and the size of a discovery independently. A flat increase is one band covering every face.
+Every action that can raise suspicion uses a configurable discovery roll: a die size and an ordered list of bands, each with a highest roll and a suspicion amount. The first band whose highest roll is at least the result applies; a higher result adds nothing. A flat increase is one band covering every face.
 
 The suspicion from the roll is reduced by 1 for each effective copy of Discreet Methods the acting player has, to a minimum of 0. The roll, the base suspicion, the reduction and the final increase are all logged, and any increase checks the mob threshold immediately (spec 020).
 
 ## Details
 
-**Graves.** The random parts are drawn first, then the discovery die is rolled (spec 024 covers random draws).
+**Graves.** The random parts are drawn first (spec 024), then the discovery die is rolled.
 
-**Sell.** The player chooses which loose parts to sell. Installed parts can't be sold. The parts are discarded, the money is paid, and then the discovery die is rolled.
+**Sell.** Only loose parts can be sold. The parts are discarded and the money paid, then the discovery die is rolled.
 
-**Experiment.** The player discards installed parts of their choice, at least one and at most the configured maximum or the cards left in the research deck; their slots become empty. They draw one card from the top of the research deck per part discarded, then the discovery die is rolled. If any drawn card is of a type the player has not personally discovered, they keep one of those with `PICK_RESEARCH` (spec 011), as a separate decision before play moves on. It is never published (spec 023). The other cards go to the bottom of the deck in the order drawn; if none is eligible, all go there. Drawn, kept and returned cards are public. If the discovery die brings the mob, the game ends before the pick. The action is unavailable with no installed part or an empty deck.
+**Experiment.** The player discards 1 or more installed parts, at most the configured maximum or the cards left in the deck; their slots become empty. They draw a card from the top of the research deck per part, then the discovery die is rolled. If any drawn card is of a type the player has not personally discovered, they keep one of those with `PICK_RESEARCH` (spec 011), as a separate decision before play moves on. It is never published (spec 023). The other cards go to the bottom of the deck in the order drawn; if none is eligible, all go there. Drawn, kept and returned cards are public. If the discovery die brings the mob, the game ends before the pick. The action is unavailable with no installed part or an empty deck.
 
 **Research.** The card must be in the face-up market, of a type the player has not personally discovered; otherwise the action is unavailable.
 
-**Specimens.** Any exact variant, at the same price. Supply is unlimited.
-
 **Assemble.** Each chosen part must fill a distinct empty slot of its own type, and at least one part must be placed. **Ruling:** there is no limit on parts per action, so a player can build a whole body in one action. Parts fill slots in order: first arm slot, then second arm slot, and so on.
+
+**Charity.** An action buys 1 to a configured maximum of units, default 1, each at the configured price and reduction; never more than the player can afford or than it takes to reach 0. With a maximum above 1, the player chooses `units` (spec 011). This lets a sweep test a scarce, scalable charity, where one cheap unit can occupy the only slot.
 
 **Hire.** **Ruling:** a hired Igor can act immediately, later the same day or that night, so actions can be chained within a round. An Igor may itself hire another Igor.
 
@@ -62,4 +58,4 @@ The suspicion from the roll is reduced by 1 for each effective copy of Discreet 
 
 **Garrison.** The Igor stays counted until dawn clears occupancy, so it covers that round's resolution. It is needed to subdue another player's monster, not one's own (spec 025).
 
-There is no direct trading between players in this version.
+There is no direct trading between players.
