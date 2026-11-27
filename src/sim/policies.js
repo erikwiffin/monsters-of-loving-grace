@@ -19,6 +19,8 @@ export function randomPolicy(seed = 'random') {
   const r = makeRandom(seed);
   return {
     name: 'random',
+    // Random play is not meant to be realistic, so runners don't stop it for hoarding.
+    realistic: false,
     decide({ legal }) {
       const nonPass = legal.filter((c) => c.type !== 'PASS_TURN');
       if (nonPass.length && r.float() > 0.1) return nonPass[r.int(nonPass.length)];
@@ -68,9 +70,11 @@ const EFFECT_WANT = {
 // unit in rivals' hands costs each objective (negative: it gains).
 const PUBLISH_HARM = {
   prometheus: { vitality: 0.3, humanity: 0.3 },
-  visionary: {},
+  // Rivals' stability research helps the Visionary: it needs two Creatures at once.
+  visionary: { vitality: -0.3, humanity: -0.3 },
   inquisitor: { discoveryBoost: -2, suspicionReduction: 2, researchCalm: 2, charityBonus: 1, humanity: 0.3, quietFailure: 1 },
-  unleasher: { humanity: 0.4, control: 0.4, controlAttempts: 1.5, noGarrison: 2, ferocity: -1, rerollhumanity: 1.5, pursuit: 2 },
+  // Rivals' Vitality makes their failures monsters, not corpses.
+  unleasher: { vitality: -0.2, humanity: 0.4, control: 0.4, controlAttempts: 1.5, noGarrison: 2, ferocity: -1, rerollhumanity: 1.5, pursuit: 2 },
 };
 // How many rivals a Visionary-style effect expects to share a round with.
 const RIVALS_PREPARING = { default: 0.4, visionary: 1.2, prometheus: 0.2, unleasher: 0.3, inquisitor: 0 };
@@ -154,11 +158,19 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         publishPenalty[t] = w.harm * (cfg.research[t].stacks === false ? 0.6 : 1);
       }
 
+      // A card kept from an experiment is never published, and the deck holds
+      // only a few copies of each type, so keeping one also keeps it from a
+      // rival. Denial is worth what that card would cost this bot in a rival's
+      // hands (PUBLISH_HARM), for about one rival.
+      const denyValue = {};
+      for (const t of Object.keys(cfg.research)) denyValue[t] = researchWorth(cfg, t, objective).harm * 0.8;
+      const keepValue = (t) => (want[t] || 0) + (denyValue[t] || 0);
+
       if (view.pendingPick) {
-        // Keep the drawn research card this objective wants most.
+        // Keep the drawn research card worth most: for itself, or to deny it.
         const typeOf = (id) => view.pendingPick.cards.find((k) => k.id === id).type;
         let best = legal[0];
-        for (const c of legal) if ((want[typeOf(c.cardId)] || 0) > (want[typeOf(best.cardId)] || 0)) best = c;
+        for (const c of legal) if (keepValue(typeOf(c.cardId)) > keepValue(typeOf(best.cardId))) best = c;
         return best;
       }
       if (view.phase === 'resolution' && view.control) {
@@ -215,13 +227,23 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const open = {};
       for (const [type, def] of Object.entries(cfg.partTypes)) open[type] = def.slots.filter((sl) => me.body[sl] === null).length;
       const needed = Object.values(open).reduce((a, b) => a + b, 0);
-      const looseFits = (type) => me.loose.filter((x) => x.type === type).length;
+      // A harmful part (one that hurts this objective's odds) doesn't count
+      // toward the body: the bot looks for a better one instead.
+      const usable = (variantId) => wantsSuspicion || variantValue(cfg, variantId, objective) >= 0;
+      const looseFits = (type) => me.loose.filter((x) => x.type === type && usable(x.variantId)).length;
+      // Installed harmful parts, which an experiment can discard to make room for better ones.
+      const installedBad = wantsSuspicion ? [] : Object.values(me.body).filter((x) => x && !usable(x.variantId));
       const stillNeeded = (type) => Math.max(0, open[type] - looseFits(type));
       const totalStillNeeded = Object.keys(open).reduce((a, t) => a + stillNeeded(t), 0);
       // A spare part is worth what it sells for.
       // A spare part (one that fits no empty slot) is worth a share of what it
       // sells for; it can also feed an experiment.
-      const spareValue = cfg.actions.sell ? Math.min(2, Math.max(0.5, cfg.actions.sell.gain / cfg.actions.sell.parts * 0.4)) : 0.5;
+      // Spares beyond what the next sale and experiment can use are worth
+      // nothing: hoarding them is pointless.
+      const sparesHeld = me.loose.length - Object.keys(open).reduce((a, t) => a + Math.min(open[t], looseFits(t)), 0);
+      const spareUse = (cfg.actions.sell ? cfg.actions.sell.parts : 0) + (cfg.actions.experiment && view.deckCount > 0 ? cfg.actions.experiment.maxParts : 0);
+      const spareValue = sparesHeld >= spareUse ? 0.05
+        : cfg.actions.sell ? Math.min(2, Math.max(0.5, cfg.actions.sell.gain / cfg.actions.sell.parts * 0.4)) : 0.5;
       // The Inquisitor builds no body: to it every part is only worth selling.
       const partValue = (variantId, needs = stillNeeded) => {
         const t = cfg.partVariants[variantId].type;
@@ -252,8 +274,25 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       };
       const rivalsNearlyReady = rivals.filter((p) => installedPlusLoose(p) >= GARRISON_ALERT_PARTS).length;
       const unknownTypes = Object.keys(cfg.research).filter((t) => !me.research.includes(t));
-      const meanWant = unknownTypes.length ? unknownTypes.reduce((a, t) => a + Math.max(0, want[t] ?? 1), 0) / unknownTypes.length : 0;
+      const meanWant = unknownTypes.length ? unknownTypes.reduce((a, t) => a + Math.max(0, keepValue(t)), 0) / unknownTypes.length : 0;
       const remaining = Math.max(0, EXPECTED_ROUNDS - view.round);
+
+      // Money is worth what the bot expects to spend soon: an Igor, the parts
+      // its body still needs (and replacements for harmful ones), research it
+      // wants from the market and charity if the mob is close. Beyond that,
+      // earning more is pointless, and a realistic player stops.
+      const igorCount = me.workers.filter((w) => w.kind === 'igor').length;
+      const canHireMore = !!cfg.actions.hire && igorCount < cfg.maxIgors;
+      const wantedCards = (view.market || []).filter((k) => !me.research.includes(k.type) && (want[k.type] || 0) - (publishPenalty[k.type] || 0) > 0.5).length;
+      // Capped spaces limit how fast money turns into anything, so plan only
+      // what the next two rounds can buy: a couple of cards and three parts.
+      const plannedSpend = (canHireMore ? cfg.actions.hire.cost : 0)
+        + (cfg.actions.research ? Math.min(wantedCards, 2) * cfg.actions.research.cost : 0)
+        + Math.min(3, wantsSuspicion ? 2 : totalStillNeeded + installedBad.length) * specimenCost
+        + (cfg.actions.charity && excess > 0 && !wantsSuspicion ? cfg.actions.charity.cost : 0);
+      const surplus = me.money - plannedSpend;
+      if (surplus >= 0) moneyValue = surplus < 4 ? Math.min(moneyValue, 0.3) : 0.02;
+      const moneyIdle = surplus >= 4;
 
       // Whether to commit to a resurrection tonight (preparing is public and binding).
       // Everything about a resurrection is public: bodies, exact odds, control
@@ -324,7 +363,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         // Everyone plans graves when it pays (parts that don't fit can be sold).
         // Graves fill only about a third of rounds, so the Inquisitor plans on
         // every slot; builders, who also bear the suspicion, plan on fewer.
-        const gravesValue = g ? gravesParts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
+        const gravesValue = g && sparesHeld < 16 ? gravesParts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
         for (let i = 0; g && i < (wantsSuspicion ? capOf('graves') : slots('graves')); i++) jobs.push(gravesValue);
         const sl = cfg.actions.sell;
         // Spare parts on hand (plus, for the Inquisitor, tonight's grave haul)
@@ -356,8 +395,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         return ids.reduce((acc, id) => {
           const loose = me.loose.find((x) => x.id === id);
           if (loose) {
-            if (spares[loose.type] > 0) { spares[loose.type]--; return acc + spareValue; }
-            return acc + partValue(loose.variantId);
+            if (spares[loose.type] > 0 || !usable(loose.variantId)) { if (spares[loose.type] > 0) spares[loose.type]--; return acc + spareValue; }
+            // A part the body needs is hard to replace: the spaces that sell
+            // parts are capped and contested.
+            return acc + partValue(loose.variantId) + 2;
           }
           const slot = Object.keys(me.body).find((sl) => me.body[sl] && me.body[sl].id === id);
           const part = me.body[slot];
@@ -391,7 +432,9 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       };
       const actionScore = (c, a, def, isSci, sciTax, susCost) => {
         switch (a) {
-          case 'medicine': return (def.gain + me.effectiveResearch.medicine) * moneyValue * 0.8 - sciTax;
+          case 'medicine':
+            if (moneyIdle) return -0.5;
+            return (def.gain + me.effectiveResearch.medicine) * moneyValue * 0.8 - sciTax;
           case 'research': {
             const card = view.market.find((k) => k.id === c.choices.researchCardId);
             const pen = publishPenalty[card.type] || 0;
@@ -403,7 +446,11 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             const n = c.choices.partIds.length;
             const frac = unknownTypes.length / Object.keys(cfg.research).length;
             const hit = 1 - Math.pow(1 - frac, n);
-            return hit * (meanWant + 0.3 * (n - 1)) - discardCost(c.choices.partIds) - susCost - sciTax;
+            const repair = c.choices.partIds.reduce((acc, id) => {
+              const bad = installedBad.find((x) => x.id === id);
+              return acc + (bad ? 1.5 - variantValue(cfg, bad.variantId, objective) * 0.6 : 0);
+            }, 0);
+            return hit * (meanWant + 0.3 * (n - 1)) + repair - discardCost(c.choices.partIds) - susCost - sciTax;
           }
           case 'specimens': {
             if (!needed && !wantsSuspicion) return -1;
@@ -419,8 +466,12 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             return v - specimenCost * moneyValue * 0.6 - sciTax + denial('specimens');
           }
           case 'graves':
+            // Nobody keeps hauling corpses into a cellar full of ones they can't use.
+            if (sparesHeld >= 16) return -1;
             return gravesParts * randomPartValue - susCost - sciTax;
           case 'sell': {
+            // With money to spare, sell only to clear a pile of junk.
+            if (moneyIdle && sparesHeld < 15) return -0.5;
             const lost = c.choices.partIds.reduce((acc, id) => acc + partValue(me.loose.find((x) => x.id === id).variantId), 0);
             return sellGain * moneyValue - lost - susCost - sciTax;
           }
@@ -438,8 +489,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
               const block = left <= 1 && susp >= 0.4 ? othersCould * 1.2 : 0;
               return block - cut * 2 - pay - sciTax;
             }
-            // Only the part of the cut that gets the table out of danger is worth paying for.
-            return Math.min(cut, excess) * suspicionPrice * 1.5 - pay - sciTax;
+            // Only the part of the cut that gets the table out of danger is worth
+            // paying for, unless the money has no other use: then any cut keeps
+            // the mob further off.
+            return Math.min(cut, excess) * suspicionPrice * 1.5 + (moneyIdle ? cut * 0.4 : 0) - pay - sciTax;
           }
           case 'garrison': {
             // A garrisoned worker lets its owner subdue rivals' monsters; for
@@ -454,11 +507,12 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             return 4.5 + (gLeft <= 1 ? 1 : 0);
           }
           case 'assemble': {
-            if (wantsSuspicion) return 0.2;
+            if (wantsSuspicion) return -1; // it builds nothing; parts are for experiments and sale
             // Installed parts can't be swapped, so with unlimited assembly there
             // is no reason to install anything until the whole body can be built
             // in one action. With a limit, the work has to start earlier.
             const filled = Object.values(me.body).filter(Boolean).length;
+            if (c.choices.partIds.some((id) => !usable(me.loose.find((x) => x.id === id).variantId))) return -3;
             if (def.max == null && filled + c.choices.partIds.length < Object.keys(me.body).length) return -0.5;
             return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0)
               - (isSci && igorFree ? 2 : 0);

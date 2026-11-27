@@ -55,7 +55,7 @@ function economyMetrics(state) {
   };
 }
 
-function summarize(state, { seed, commands, truncated, truncationReason, invalidCommands, policyNames, includeCommands }) {
+function summarize(state, { seed, commands, truncated, truncationReason, hoarding = null, invalidCommands, policyNames, includeCommands }) {
   const r = state.result;
   return {
     seed: String(seed),
@@ -65,6 +65,8 @@ function summarize(state, { seed, commands, truncated, truncationReason, invalid
     terminal: !!r,
     truncated,
     truncationReason: truncationReason || null,
+    // Who tripped the hoarding limit, with their objective and policy.
+    hoarding: hoarding ? { ...hoarding, objective: state.objectives[hoarding.playerId], policy: policyNames[state.players.findIndex((p) => p.id === hoarding.playerId)], round: state.round, phase: state.phase } : null,
     terminalReason: r ? r.reason : null,
     winners: r ? r.winners : [],
     winnerObjectives: r ? r.winners.map((pid) => state.objectives[pid]) : [],
@@ -105,15 +107,37 @@ function budgetExceeded(state, commands, maxCommands, maxRounds) {
   return null;
 }
 
+// A bot holding more money or loose parts than this is no longer playing
+// realistically, so the game stops teaching anything (spec 014).
+export const DEFAULT_HOARD_LIMIT = { money: 25, parts: 25 };
+
+/**
+ * The first player over a hoarding limit, as { playerId, resource, value, limit },
+ * or null. Seats whose policy declares `realistic: false` (random play) are
+ * exempt: they test the rules, not strategy.
+ */
+function hoarder(state, limit, policyFor) {
+  if (!limit) return null;
+  for (const [i, p] of state.players.entries()) {
+    if (policyFor(p.id, i).realistic === false) continue;
+    if (limit.money != null && p.money > limit.money) return { playerId: p.id, resource: 'money', value: p.money, limit: limit.money };
+    if (limit.parts != null && p.loose.length > limit.parts) return { playerId: p.id, resource: 'parts', value: p.loose.length, limit: limit.parts };
+  }
+  return null;
+}
+
 /** Run one game synchronously. Policies must return commands synchronously. */
 export function runGame(opts = {}) {
-  const { maxCommands = 20000, maxRounds = 200, includeCommands = true } = opts;
+  const { maxCommands = 20000, maxRounds = 200, includeCommands = true, hoardLimit = DEFAULT_HOARD_LIMIT } = opts;
   let { state, policyFor } = setup(opts);
   const counters = { invalid: 0 };
   let truncationReason = null;
+  let hoarding = null;
   while (!state.result) {
     truncationReason = budgetExceeded(state, state.commandLog.length, maxCommands, maxRounds);
     if (truncationReason) break;
+    hoarding = hoarder(state, hoardLimit, policyFor);
+    if (hoarding) { truncationReason = 'hoarding'; break; }
     const pid = state.activePlayerId;
     const idx = state.players.findIndex((p) => p.id === pid);
     const policy = policyFor(pid, idx);
@@ -125,20 +149,23 @@ export function runGame(opts = {}) {
   }
   const policyNames = state.players.map((p, i) => policyFor(p.id, i).name || 'custom');
   return {
-    summary: summarize(state, { seed: opts.seed ?? 'sim', commands: state.commandLog, truncated: !state.result, truncationReason, invalidCommands: counters.invalid, policyNames, includeCommands }),
+    summary: summarize(state, { seed: opts.seed ?? 'sim', commands: state.commandLog, truncated: !state.result, truncationReason, hoarding, invalidCommands: counters.invalid, policyNames, includeCommands }),
     state,
   };
 }
 
 /** Same as runGame, but awaits policies (for LLM agents or remote players). */
 export async function runGameAsync(opts = {}) {
-  const { maxCommands = 20000, maxRounds = 200, includeCommands = true } = opts;
+  const { maxCommands = 20000, maxRounds = 200, includeCommands = true, hoardLimit = DEFAULT_HOARD_LIMIT } = opts;
   let { state, policyFor } = setup(opts);
   const counters = { invalid: 0 };
   let truncationReason = null;
+  let hoarding = null;
   while (!state.result) {
     truncationReason = budgetExceeded(state, state.commandLog.length, maxCommands, maxRounds);
     if (truncationReason) break;
+    hoarding = hoarder(state, hoardLimit, policyFor);
+    if (hoarding) { truncationReason = 'hoarding'; break; }
     const pid = state.activePlayerId;
     const idx = state.players.findIndex((p) => p.id === pid);
     const policy = policyFor(pid, idx);
@@ -149,7 +176,7 @@ export async function runGameAsync(opts = {}) {
   }
   const policyNames = state.players.map((p, i) => policyFor(p.id, i).name || 'custom');
   return {
-    summary: summarize(state, { seed: opts.seed ?? 'sim', commands: state.commandLog, truncated: !state.result, truncationReason, invalidCommands: counters.invalid, policyNames, includeCommands }),
+    summary: summarize(state, { seed: opts.seed ?? 'sim', commands: state.commandLog, truncated: !state.result, truncationReason, hoarding, invalidCommands: counters.invalid, policyNames, includeCommands }),
     state,
   };
 }
@@ -163,13 +190,20 @@ export function runBatch({ games = 100, seedPrefix = 'batch', ...opts } = {}) {
 
 export function aggregate(results) {
   const agg = {
-    games: results.length, truncated: 0, byReason: {}, winsByObjective: {}, collectiveDefeats: 0,
+    games: results.length, truncated: 0, truncatedByReason: {}, hoardingBy: {}, byReason: {}, winsByObjective: {}, collectiveDefeats: 0,
     avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, failed: 0, stable: 0, subdued: 0, unleashed: 0 },
   };
   const dealt = {};
   for (const r of results) {
     for (const o of Object.values(r.objectives)) dealt[o] = (dealt[o] || 0) + 1;
-    if (r.truncated) agg.truncated++;
+    if (r.truncated) {
+      agg.truncated++;
+      agg.truncatedByReason[r.truncationReason] = (agg.truncatedByReason[r.truncationReason] || 0) + 1;
+    }
+    if (r.hoarding) {
+      const k = `${r.hoarding.objective}:${r.hoarding.resource}`;
+      agg.hoardingBy[k] = (agg.hoardingBy[k] || 0) + 1;
+    }
     const reason = r.terminalReason || 'truncated';
     agg.byReason[reason] = (agg.byReason[reason] || 0) + 1;
     if (r.collectiveDefeat) agg.collectiveDefeats++;
