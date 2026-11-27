@@ -74,3 +74,50 @@ one round (7 → 8), and resurrection attempts per game rise from 1–1.8 to
 
 Still open: the 3-player Unleasher (≈0.4), the Inquisitor's tilt (low at
 4, high at 5), and the 3-player no-winner share (≈0.1 vs 0.25).
+
+# Behaviour-tree Prometheus
+
+An alternative policy architecture: `src/sim/bt.js` is a small behaviour-tree
+library (selector, sequence, condition, action, guard), and
+`src/sim/bt-prometheus.js` a tree that plays the Prometheus objective (it
+defers to the heuristic for any other objective). It is not one of the
+built-in policies of spec 014.
+
+`experiments/bt-prometheus.mjs` gives the first seat dealt Prometheus the
+policy under test and the heuristic to every other seat, and reports that
+seat's win rate per player count, how the games it lost ended, and the odds of
+its attempts. `experiments/bt-trace.mjs` prints one such game, decision by
+decision.
+
+```
+node experiments/bt-prometheus.mjs --games 500
+node experiments/bt-prometheus.mjs --games 500 --policy heuristic   # baseline
+node experiments/bt-prometheus.mjs --games 100 --params '{"attemptMinStable":0.2}'
+node experiments/bt-trace.mjs 5 12
+```
+
+Win rate of that one Prometheus seat, 500 games per player count, seeds
+`btp-N-i`, 60-round budget:
+
+| Players | Heuristic | BT |
+|---:|---:|---:|
+| 3 | 33.2% | 52.6% |
+| 4 | 41.0% | 62.4% |
+| 5 | 16.8% | 43.2% |
+| 6 | 17.2% | 39.6% |
+
+The ideas that mattered, roughly in order: planning the body from installed
+and loose parts together, and discarding installed parts the plan replaces by
+experiment; keeping every worker busy; buying research and specimens on one
+value scale; taking Discreet Methods early, which makes graves, selling and
+experiments free of suspicion and nearly removes the mob; and taking capped
+spaces before unlimited ones. Threshold tuning moves the results by less
+than the noise of a 100-game batch.
+
+What is left is mostly outside one player's control. Rival Prometheus wins
+start around round 8, a Visionary alone, or two Creatures in one round, end
+another 10–15% of games, and at three players an Unleasher's monster escapes
+the two remaining hunters about a quarter of the time. An unmodified body
+stabilizes 0.25% of the time, and Humanity has few sources (four copies of
+Moral Philosophy, each published copy helping every player equally), so no
+policy can count on winning before round 6, which a 90% win rate would need.
