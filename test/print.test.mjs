@@ -48,11 +48,15 @@ test('card counts come from the configuration and cover every player count', () 
     const deck = objectiveDeckFor(resolveConfig({ playerCount: n }));
     for (const o of new Set(deck)) assert.ok(copies[o] >= deck.filter((x) => x === o).length, `${o} at ${n} players`);
   }
-  assert.equal(comp('objective:prometheus').copies, 4);
+  assert.equal(comp('objective:prometheus').copies, 3);
+  assert.equal(comp('objective:unleasher').copies, 2, 'six players deal two Unleashers');
   assert.equal(comp('workers:1').copies, 1 + DEFAULT_CONFIG.maxIgors);
   // Overrides flow through: more research copies print more cards.
   const more = buildSections({ config: { researchCopies: 5 } }).flatMap((s) => s.components).find((c) => c.id === 'research:medicine');
   assert.equal(more.copies, 5);
+  // So do per-type counts (spec 023).
+  const fewer = buildSections({ config: { research: { restraint: { copies: 2 } } } }).flatMap((s) => s.components).find((c) => c.id === 'research:restraint');
+  assert.equal(fewer.copies, 2);
 });
 
 test('action tiles show a slot per capacity, marking slots used only at higher player counts', () => {
