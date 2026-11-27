@@ -20,6 +20,7 @@ Behaviour is specified in [`specs/`](specs/000-specs.md), a set of short specs t
 | Play locally | `npm run serve` (or `node bin/serve.mjs 8080`), then open <http://localhost:8080/>. The dev server only serves static files. ES modules need http(s), so double-clicking `index.html` will not work. |
 | Run the tests | `npm test` (Node ≥ 18, no dependencies) |
 | Simulate games | `npm run simulate -- --games 200 --policy heuristic` |
+| Print and play | Open `index.html?print` (or **Print and play** in the main menu) to print every component and the [rulebook](assets/rulebook.md) for a physical playtest. Untick components you don't need to reprint. |
 
 ### GitHub Pages deployment
 

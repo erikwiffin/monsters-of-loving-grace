@@ -7,4 +7,5 @@ The `specs/` directory is the source of truth for what this project should do. S
 - Do not edit an existing spec without asking first. If a request contradicts a spec, name the spec and the behaviour in conflict and ask before changing anything. Once approved, update the spec and the code in the same commit.
 - If a spec and the code disagree, report it and ask which one is right.
 - Before pushing, run `npm test` and `node bin/simulate.mjs --games 20 --policy heuristic,random`. Both must pass with no invalid commands. Then re-read the relevant specs to confirm that no specified behaviour changed.
+- Any change to gameplay (the 02x specs or the default configuration) also updates the player-facing rulebook, `assets/rulebook.md`, and its rules fingerprint, in the same commit (spec 032). `node bin/rulebook-fingerprint.mjs` prints the current fingerprint.
 - The rules live only in `src/engine/`. The UI (`src/ui/`) and the simulator (`src/sim/`) must go through the engine API and never re-implement rules.

@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Monsters of Loving Grace</title>
   <meta name="description" content="Hot-seat browser prototype of the Monsters of Loving Grace board game.">
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="assets/logo.png" type="image/png" sizes="512x512">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -57,6 +59,10 @@
     </div>
   </template>
 
-  <script type="module" src="src/ui/app.js"></script>
+  <!-- index.html?print opens the print-and-play view (spec 032) instead of the game. -->
+  <script type="module">
+    if (new URLSearchParams(location.search).has('print')) import('./src/ui/print.js');
+    else import('./src/ui/app.js');
+  </script>
 </body>
 </html>
