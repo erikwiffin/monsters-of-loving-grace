@@ -169,7 +169,13 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const declineBringsMob = view.suspicion + cfg.control.declineSuspicion >= view.suspicionMax;
         let doSubdue;
         if (objective === 'unleasher') doSubdue = false;
-        else if (objective === 'inquisitor') doSubdue = last || declineBringsMob; // a mob during the chain frees the monster
+        else if (objective === 'inquisitor') {
+          // An unleashing loses for the Inquisitor. It declines (adding suspicion)
+          // only if another player able to subdue, not the creator, comes after
+          // it, or never if declining would bring the mob (which frees the monster).
+          const otherHunter = k.upcoming.some((pid) => pid !== k.creatorId);
+          doSubdue = !otherHunter || declineBringsMob;
+        }
         else if (objective === 'prometheus') doSubdue = k.creatorId === me.id || last || declineBringsMob || me.controlAttempts > 1;
         else doSubdue = true;
         return legal.find((c) => c.subdue === doSubdue) || legal[0];
@@ -442,8 +448,8 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             // Take a scarce garrison slot before an Unleasher can fill it.
             const gCap = (view.capacities || {}).garrison;
             const gLeft = gCap == null ? Infinity : gCap - ((view.occupancy.day || {}).garrison || []).length;
-            // The Inquisitor rarely subdues, so a garrison is worth little to it.
-            return (objective === 'inquisitor' ? 0.8 : 4.5 + (gLeft <= 1 ? 1 : 0));
+            // An unleashing loses for the Inquisitor too, so it garrisons like anyone else.
+            return 4.5 + (gLeft <= 1 ? 1 : 0);
           }
           case 'assemble': {
             if (wantsSuspicion) return 0.2;

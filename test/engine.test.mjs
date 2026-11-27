@@ -44,9 +44,12 @@ test('setup follows section 3', () => {
     assert.equal(s.players.length, n);
     const all = [...Object.values(s.objectives), ...s.unseenObjectives].sort();
     // The Visionary is only dealt from 4 players; Prometheus fills the rest of N+1 cards.
-    const expected = (n >= 4
-      ? [...Array(n - 2).fill('prometheus'), 'visionary', 'inquisitor', 'unleasher']
-      : ['prometheus', 'prometheus', 'inquisitor', 'unleasher']).sort();
+    // Six players have two Unleashers.
+    const expected = (n === 6
+      ? ['prometheus', 'prometheus', 'prometheus', 'visionary', 'inquisitor', 'unleasher', 'unleasher']
+      : n >= 4
+        ? [...Array(n - 2).fill('prometheus'), 'visionary', 'inquisitor', 'unleasher']
+        : ['prometheus', 'prometheus', 'inquisitor', 'unleasher']).sort();
     assert.deepEqual(all, expected);
     assert.equal(s.unseenObjectives.length, 1);
     for (const p of s.players) {

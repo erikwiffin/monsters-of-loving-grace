@@ -8,7 +8,7 @@ Each player is a scientist competing to create life or to fulfil a secret ambiti
 - Village suspicion starts at 0.
 - The starting player is chosen at random.
 
-The objective deck has N+1 cards for N players: one Inquisitor, one Unleasher, one Visionary, and Prometheus cards for the rest. For five players that is 3/1/1/1, six cards in all; for six, 4/1/1/1. **Ruling:** the Visionary is only a viable role with four or more players, so the three-player deck has no Visionary: two Prometheus, one Inquisitor and one Unleasher. The deck is shuffled, and each player is dealt one card face down. The remaining card stays unseen until the game ends.
+The objective deck has N+1 cards for N players: one Inquisitor, one Unleasher, one Visionary, and Prometheus cards for the rest. For five players that is three Prometheus and one of each other role, six cards in all. **Ruling:** the six-player deck has two Unleashers, so it holds three Prometheus, one Inquisitor, one Visionary and two Unleashers. Both Unleashers win together, and neither knows the other. **Ruling:** the Visionary is only a viable role with four or more players, so the three-player deck has no Visionary: two Prometheus, one Inquisitor and one Unleasher. The deck is shuffled, and each player is dealt one card face down. The remaining card stays unseen until the game ends.
 
 Objectives are secret. Each player sees only their own objective, through a pass-the-device privacy screen, and no other player's objective or the unseen card is shown until game over. The public rules explain every possible role. Objectives are not public character classes, and no player has special actions because of their objective. The Inquisitor uses the same legal actions as everyone else.
 
@@ -26,7 +26,7 @@ Objectives are secret. Each player sees only their own objective, through a pass
 Two catastrophes end the game immediately, in whatever phase they happen. No further actions, rolls or resurrection attempts are resolved after them.
 
 - **The mob.** When suspicion reaches the mob threshold, the villagers form a mob and arrest every scientist. The Inquisitor wins if that card was dealt to a player.
-- **An unleashed monster.** The Unleasher wins if that card was dealt to a player.
+- **An unleashed monster.** Every Unleasher dealt to a player wins.
 
 **Ruling:** if the mob forms while a monster awaits subduing, the mob cannot stop it. The monster is unleashed instead, and the game ends as an unleashing, not a mob.
 

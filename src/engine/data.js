@@ -39,7 +39,7 @@ export const DEFAULT_CONFIG = {
   visionaryMinPlayers: 4,
   // Unleasher cards in the objective deck: a number, or tiers keyed by the
   // smallest player count, like action capacities. They share a victory.
-  unleashers: 1,
+  unleashers: { 3: 1, 6: 2 },
   playerNames: [],
   startingMoney: 3,
   // The mob threshold, the same at every player count.
