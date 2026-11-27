@@ -148,3 +148,20 @@ Win rate of that seat:
 - The tuned Prometheus never garrisons (`garrisonAlert` 8, above a whole
   body) and values preparing higher. Worth checking whether garrisoning is
   worth its Igor for a Prometheus at all.
+
+## Tuning for a default: every seat of the role
+
+A best response is not a default. The single-seat tuned Prometheus weights
+won 3.8 points more in one seat on fresh seeds (29.1% → 33.0%, p = 0.009),
+but with every Prometheus playing them, all-heuristic balance shifted hard
+(800 games per player count): the Unleasher rose from 32.1% to 49.2% at
+three players and from 4.1% to 13.9% at six, and the Inquisitor halved at
+five and six. The tuned weights never garrison, which pays while others
+hunt monsters. They stay here as a challenger, not a default.
+
+`bin/tune.mjs --objective prometheus --deviators all --players 3,4,5,6
+--games 60` puts every Prometheus seat on each candidate. After three
+generations no candidate beat the standard weights (33.7% per Prometheus
+seat): the best were 32.6% and 33.5%, and the search mean fell to
+29.9–31.8%. The run was stopped there. The standard weights look close to
+the best for Prometheus as a whole field, so they remain the defaults.
