@@ -7,6 +7,7 @@ import {
   sourceLabel, attrName, pct,
 } from './format.js';
 import { POLICIES } from '../sim/policies.js';
+import { renderMarkdown } from './markdown.js';
 import { storageAvailable, writeSave, readSave, clearSave, makeSave, SAVE_FORMAT, readDebugFlag, writeDebugFlag } from './storage.js';
 
 const root = document.getElementById('app');
@@ -266,10 +267,15 @@ function actionSpace(view, id, def, enabledPhase) {
   const capacity = view.capacities[id];
   const cap = capacity == null ? '∞' : capacity;
   let status = { ok: false, reason: '' };
-  if (enabledPhase && !view.result && !aiKind(view.activePlayerId)) status = spaceStatus(id, ui.selectedWorker);
-  const igorOk = def.scientist === false ? '<span class="tag" title="Igors only">Igor only</span>' : def.igor ? '<span class="tag">Igor</span>' : '<span class="tag no" title="Scientist only">Scientist</span>';
-  return `<button class="space ${def.phase} ${status.ok ? 'can' : ''}" data-act="space" data-id="${id}" ${status.ok ? '' : 'aria-disabled="true"'} title="${esc(status.reason || '')}">
-    <span class="sp-top"><b>${esc(def.name)}</b><span class="sp-loc">${esc(def.location)}</span><span class="sp-occ">${chips}<span class="cap">${occ.length}/${cap}</span></span>${igorOk}</span>
+  const choosing = enabledPhase && !view.result && !aiKind(view.activePlayerId);
+  if (choosing) status = spaceStatus(id, ui.selectedWorker);
+  // Hatching marks the spaces the selected worker can't take this turn.
+  const state = status.ok ? 'can' : choosing ? 'cant' : '';
+  // Only restrictions are shown; a space any worker may take has no tag.
+  const noWorker = def.scientist === false ? '<span class="tag" title="Scientists may not work here">No Scientist</span>'
+    : def.igor === false ? '<span class="tag" title="Igors may not work here">No Igor</span>' : '';
+  return `<button class="space ${def.phase} ${state}" data-act="space" data-id="${id}" ${status.ok ? '' : 'aria-disabled="true"'} title="${esc(status.reason || '')}">
+    <span class="sp-top"><b>${esc(def.name)}</b><span class="sp-loc">${esc(def.location)}</span><span class="sp-occ">${chips}<span class="cap">${occ.length}/${cap}</span></span>${noWorker}</span>
     <span class="sp-txt">${esc(actionText(id, def, cfg))}</span>
   </button>`;
 }
@@ -288,7 +294,7 @@ function turnBar(view) {
   const p = view.players.find((x) => x.id === pid);
   const ws = availableWorkers(view, pid);
   if (!ui.selectedWorker || !ws.some((w) => w.id === ui.selectedWorker)) {
-    ui.selectedWorker = (ws.find((w) => w.kind === 'scientist') || ws[0] || {}).id || null;
+    ui.selectedWorker = (ws.find((w) => w.kind !== 'scientist') || ws[0] || {}).id || null;
   }
   const chips = ws.map((w) => `<button class="wsel ${w.kind} ${ui.selectedWorker === w.id ? 'sel' : ''}" data-act="worker" data-id="${w.id}">${workerLabel(w)}</button>`).join('');
   return `<div class="turnbar seat-${p.seat}">
@@ -312,6 +318,7 @@ function renderBoard() {
       <nav class="menu">
         ${Object.keys(ui.meta.ai || {}).length && !view.result ? `<button data-act="ai-pause" class="ghost">${ui.aiPaused ? '▶ Resume AI' : '⏸ Pause AI'}</button>` : ''}
         <button data-act="rules" class="ghost">Rules</button>
+        <button data-act="print-and-play" class="ghost">Print</button>
         <button data-act="export" class="ghost">Export</button>
         <button data-act="import" class="ghost">Import</button>
         <button data-act="restart" class="ghost">Restart</button>
@@ -483,8 +490,10 @@ function choiceModal() {
     case 'sell': body += `<h3>Sell exactly ${def.parts} loose parts</h3><div class="opts">${looseOptions(false)}</div>`; break;
     case 'assemble': body += `<p class="small">Choose any parts for empty slots — up to a whole body.</p><div class="opts">${looseOptions(true)}</div>`; break;
     case 'specimens': {
-      const opts = Object.entries(cfg.partTypes).map(([t, td]) => `<optgroup label="${esc(td.name)}">${Object.entries(cfg.partVariants).filter(([, v]) => v.type === t).map(([id, v]) => `<option value="${id}">${esc(v.name)} — ${esc(v.effects.length ? v.effects.map(effectText).join(', ') : 'no effect')}</option>`).join('')}</optgroup>`).join('');
-      body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="variant${i}">${opts}</select></label>`).join('');
+      const opts = Object.entries(cfg.partTypes).map(([t, td]) => `<option value="${t}">${esc(td.name)}</option>`).join('');
+      body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="ptype${i}">${opts}</select></label>`).join('');
+      body += '<p class="small muted">You choose the type; its variant is drawn at random:</p><ul class="small">'
+        + Object.entries(cfg.partTypes).map(([t, td]) => `<li><b>${esc(td.name)}</b>: ${Object.entries(cfg.partVariants).filter(([, v]) => v.type === t).map(([, v]) => `${esc(v.name)} (${esc(v.effects.length ? v.effects.map(effectText).join(', ') : 'no effect')})`).join(', ')}</li>`).join('') + '</ul>';
       break;
     }
     case 'charity': {
@@ -510,7 +519,7 @@ function collectChoices() {
     case 'research': return { researchCardId: card() };
     case 'experiment': case 'sell': return { partIds: checkedParts() };
     case 'assemble': return { partIds: checkedParts() };
-    case 'specimens': return { variantIds: qa('.modal select[name^=variant]').map((x) => x.value) };
+    case 'specimens': return { partTypes: qa('.modal select[name^=ptype]').map((x) => x.value) };
     case 'charity': return q('.modal select[name=units]') ? { units: Number(q('.modal select[name=units]').value) } : undefined;
     default: return undefined;
   }
@@ -530,8 +539,21 @@ function confirmOverlay() {
   return modal(esc(ui.modal.title), `<p>${esc(ui.modal.text)}</p>`, `<button data-act="close" class="ghost">Cancel</button><button data-act="confirm-yes" class="big danger">${esc(ui.modal.yes || 'Confirm')}</button>`);
 }
 
+// The Rules dialog shows the rulebook (assets/rulebook.md, spec 032).
+const RULEBOOK_URL = 'assets/rulebook.md';
+function loadRulebook() {
+  if (ui.rulebook) return;
+  ui.rulebook = { html: '<p class="muted">Loading the rulebook…</p>' };
+  fetch(RULEBOOK_URL)
+    .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.text(); })
+    .then((md) => { ui.rulebook = { html: renderMarkdown(md, { base: RULEBOOK_URL.replace(/[^/]*$/, '') }), done: true }; })
+    .catch((err) => { ui.rulebook = null; ui.rulebookError = err.message; })
+    .finally(() => { if (ui.modal && ui.modal.kind === 'rules') render(); });
+}
+
 function rulesOverlay() {
-  return modal('Rules summary', document.getElementById('rules-template').innerHTML, '<button data-act="close" class="big">Close</button>');
+  const body = ui.rulebook ? ui.rulebook.html : `<p class="warn">The rulebook could not be loaded (${esc(ui.rulebookError || 'unknown error')}).</p>`;
+  return modal('Rulebook', `<div class="rules rulebook">${body}</div>`, '<button data-act="print-and-play" class="ghost">Print and play</button><button data-act="close" class="big">Close</button>');
 }
 
 function debugOverlay() {
@@ -580,7 +602,7 @@ function renderMenu() {
         ${HAS_STORAGE ? '' : '<p class="warn">Browser storage is unavailable; use Export/Import to keep games.</p>'}
         ${ui.menuError ? `<p class="warn">${esc(ui.menuError)}</p>` : ''}
         <h2>Learn</h2>
-        <button data-act="rules">Rules summary</button>
+        <button data-act="rules">Rulebook</button>
         <button data-act="print-and-play">Print and play</button>
         <label class="debug-toggle"><input type="checkbox" id="debug" ${ui.debug ? 'checked' : ''}> Developer / debug mode <small>(reveals hidden information)</small></label>
       </section>
@@ -683,7 +705,7 @@ const handlers = {
   },
   import: () => importSave(),
   export: () => exportSave(),
-  rules() { ui.modal = { kind: 'rules' }; render(); },
+  rules() { ui.rulebookError = null; loadRulebook(); ui.modal = { kind: 'rules' }; render(); },
   'to-menu'() { ui.screen = 'menu'; ui.modal = null; render(); },
   restart() {
     askConfirm('Restart game?', 'This discards the current game and starts a new one with the same players. The current save will be overwritten.', 'Restart', () => {

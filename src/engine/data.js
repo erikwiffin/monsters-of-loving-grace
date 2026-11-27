@@ -2,8 +2,8 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.12.0';
-export const SCHEMA_VERSION = 8;
+export const ENGINE_VERSION = '0.13.0';
+export const SCHEMA_VERSION = 9;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
 export const ATTRIBUTES = ['vitality', 'humanity'];

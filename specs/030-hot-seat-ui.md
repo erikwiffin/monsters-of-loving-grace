@@ -7,7 +7,7 @@ The browser game is a local hot-seat prototype for 3–6 players sharing one dev
 - **New game**: choose 3–6 players (default 5), enter names (blank names get defaults), and choose who plays each seat (spec 031). In debug mode, a fixed seed and JSON configuration overrides can also be entered.
 - **Resume**: continue the game saved in this browser, if there is one.
 - **Import save**: load an exported save file.
-- **Rules summary**: the public rules, including every possible role and the designer rulings.
+- **Rulebook**: the rulebook (spec 032), which covers every possible role and the designer rulings.
 - **Developer / debug mode**: a checkbox, remembered per browser.
 
 ## Privacy screens
@@ -24,8 +24,8 @@ This is casual privacy, not protection against browser storage or developer tool
 The shared board always shows only public information:
 
 - the round and phase, and a plain suspicion meter showing value and maximum;
-- a turn bar showing the active player, a selector for their available workers, and the pass button;
-- every day and night action space, with its location, cost and effect text (including the odds of any discovery roll), its capacity at this player count, its worker permission (Igor, Igor only or Scientist only) and the workers occupying it. Spaces in the current phase are highlighted when the selected worker can legally take them. When a space is unavailable, it explains why;
+- a turn bar showing the active player, a selector for their available workers (an Igor is selected first, when one is available), and the pass button;
+- every day and night action space, with its location, cost and effect text (including the odds of any discovery roll), its capacity at this player count, any worker restriction ("No Scientist" or "No Igor", left blank when any worker may go there) and the workers occupying it. On a human's turn, spaces in the current phase that the selected worker cannot legally take are hatched out, and the rest are outlined. When a space is unavailable, it explains why;
 - the research market and deck count, plus the publication record;
 - one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), effective research (own copies, copies via publication, published marks), a body diagram, remaining control attempts and whether they are garrisoned, odds for a complete body, loose parts and Creatures;
 - the Chronicle, a readable log of public events.
@@ -37,7 +37,7 @@ The page switches between a light "day" palette and a dark "night" palette. It w
 Choosing a space opens a confirmation dialog for the action's choices:
 
 - market cards for research;
-- a variant picker for specimens;
+- a part-type picker for specimens;
 - loose parts for assemble and sell, and installed parts for experiment;
 - a summary for simple actions.
 
@@ -53,6 +53,8 @@ Subduing is a public decision, so there is no pass-the-device screen. While a hu
 
 ## Game controls
 
+- **Rules**: the rulebook, as in the main menu.
+- **Print**: opens the print view (spec 032) in a new tab.
 - **Export** and **Import**: spec 013.
 - **Restart**: asks for confirmation, then starts a new game with the same players and seat assignments.
 - **Menu**: return to the main menu.

@@ -1,4 +1,4 @@
-<!-- rules-fingerprint: a00f5d4d -->
+<!-- rules-fingerprint: 60a5ebf8 -->
 <!-- This rulebook describes the physical game. It is maintained by hand (spec 032): every change to gameplay — the 02x specs or the default configuration — updates it in the same commit, together with the fingerprint above. `npm test` prints the new fingerprint when it is out of date. -->
 
 ![Monsters of Loving Grace logo: a stitched heart struck by lightning](logo.png)
@@ -98,7 +98,7 @@ An action needs its full cost and every prerequisite. Money never goes below 0.
 |---|---|---|
 | **Practise medicine** | Hospital | Gain 3 money, plus 1 for each effective copy of Medical Expertise. |
 | **Conduct research** | University | Pay 2. Take a market card of a type you have not discovered and **publish** it (see *Research*). Refill the market from the deck at once. Then suspicion −1 for each effective copy of Public Lectures. |
-| **Buy specimens** | Anatomical supplier | Pay 2. Take any one body part of your choice from the supply. |
+| **Buy specimens** | Anatomical supplier | Pay 2. Choose a type of body part: arm, leg, chest or head. Roll for its variant on the table on your player sheet and take that part from the supply. |
 | **Donate to charity** | Town hall | Pay 3. Suspicion −2, and 1 more for each effective copy of Parish Benefactor, to a minimum of 0. Only allowed while suspicion is above 0. |
 | **Hire an Igor** | Tavern | Pay 4. Take one of your reserve Igors; it can act at once. At most 3 Igors each. |
 | **Garrison the watch** | Watch house | Igors only. No cost and no immediate effect. Until dawn, you may try to subdue other players' monsters (see *Control*). |
@@ -156,7 +156,7 @@ Each part may change the resurrection rolls:
 
 ### Random parts
 
-Each random part is drawn separately, from an unlimited supply. Roll for its type, then for its variant, using the table on your player sheet:
+Each random part is drawn separately, from an unlimited supply. Roll for its type, then for its variant, using the table on your player sheet. When you buy specimens you choose the type yourself and roll only for the variant:
 
 | Type (d6) | | Variant | |
 |---|---|---|---|
@@ -269,7 +269,7 @@ When the game ends, everyone reveals their objective, and the unseen card is tur
 
 The browser game handles some things automatically. At the table:
 
-- **Random parts** use the dice table on the player sheets.
+- **Random parts** use the dice table on the player sheets; specimens use only its variant column.
 - **Random salvage** is three parts drawn from the six shuffled face down.
 - **Experiment cards** are shown to everyone; only the kept card stays with you, face up in your experiment row.
 - **Odds** are not printed. Discovery rolls are printed on their spaces.

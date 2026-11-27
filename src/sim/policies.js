@@ -409,9 +409,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             const left = {};
             for (const t of Object.keys(open)) left[t] = stillNeeded(t);
             let v = 0;
-            for (const vid of c.choices.variantIds) {
-              v += partValue(vid, (t) => left[t]);
-              const t = cfg.partVariants[vid].type;
+            // The type is chosen; the variant is uniformly random.
+            for (const t of c.choices.partTypes) {
+              const vids = Object.keys(cfg.partVariants).filter((id) => cfg.partVariants[id].type === t);
+              v += vids.reduce((a, vid) => a + partValue(vid, (x) => left[x]), 0) / vids.length;
               if (left[t] > 0) left[t]--;
             }
             return v - specimenCost * moneyValue * 0.6 - sciTax + denial('specimens');
