@@ -285,9 +285,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const pUnleash = odds.pMonster * pUnleashed();
         const safeEnough = odds.pStable >= bar * Math.max(late ? 0.1 : 0.2, 1.5 * pUnleash);
         if (objective === 'prometheus') {
-          // Two stable Creatures lose for Prometheus: stay out if a rival who
-          // prepared is likely to succeed.
-          return safeEnough && pRivalStable < 0.25;
+          // A rival's attempt doesn't change the decision: if the rival
+          // stabilizes, Prometheus loses whether or not it attempted too; if
+          // not, this is an ordinary attempt. So judge only by its own odds.
+          return safeEnough;
         }
         if (objective === 'visionary') {
           // If a rival stabilizes alone, the Visionary loses anyway, so join any
@@ -465,11 +466,10 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
           case 'prepare':
             // Wait for assembly first if loose parts still fit the body.
             if (!me.bodyComplete) return -5;
-            if (visionaryWaiting) {
-              // Nothing to join yet. If preparing now is the last chance, commit
-              // only when several rivals are ready and so likely to try too.
-              return rivalsCouldPrepare >= 2 && me.resurrectionOdds.pStable >= 0.05 ? 0.3 : 0.1;
-            }
+            // Nothing to join yet. Committing first is a bad bet for the
+            // Visionary: its own Creature stabilizing alone loses for everyone,
+            // so it waits for a rival to commit.
+            if (visionaryWaiting) return -5;
             return shouldAttempt() ? 12 : -5;
           case 'rest': {
             // Going first matters when the day's capped spaces fill up.
