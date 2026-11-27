@@ -102,8 +102,6 @@ export function describeEvent(e, ctx) {
     case 'MONSTER_CREATED': return `${n(e.playerId)}'s Creature lives — but it is a <b class="danger">monster</b>! Who will subdue it?`;
     case 'SUBDUE_DECLINED': return `${n(e.playerId)} does not subdue the monster.`;
     case 'CONTROL_SKIPPED': return e.reason === 'not_garrisoned' ? `${n(e.playerId)} has no one in the garrison and cannot subdue it.` : e.reason === 'no_pursuit' ? `${n(e.playerId)} cannot give chase.` : `${n(e.playerId)} has no control attempts left.`;
-    case 'HUE_AND_CRY': return `The village raises the hue and cry: d20 ${e.result} + ${e.bonus} (suspicion ${e.suspicion}${e.watch ? `, ${e.watch} in the watch` : ''}) = ${e.score} vs ${e.threshold}: ${e.success ? 'the villagers corner the monster' : 'the monster slips away'}.`;
-    case 'MONSTER_BURNED': return `The villagers burn ${n(e.creatorId)}'s monster.`;
     case 'PURSUIT_BEGUN': return `The monster flees, pursued by ${e.playerIds.map(n).join(', ')}.`;
     case 'ATTRIBUTE_REROLLED': return `${n(e.playerId)} rerolls a failed ${e.attribute} (${e.firstScore}).`;
     case 'CONTROL_ROLLED': return `${n(e.playerId)} tries to subdue the monster: <b>${e.score}</b> vs ${e.threshold}+ ${e.success ? '✓' : '✗'}.`;
