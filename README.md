@@ -69,7 +69,7 @@ These rulings resolve ambiguities in the spec and are implemented in the engine:
 3. **Research copies stack.** A player's effective copies of a type are 1 for their own discovery, plus 1 for each publication of that type by *another* player. Every copy applies its effect:
    - Galvanic Mastery adds 1d6 per copy; Moral Philosophy adds +3 per copy.
    - Medical Expertise adds +1 money per copy.
-   - Discreet Methods reduces suspicion by 1 per copy.
+   - Discreet Methods adds 1 per copy to discovery rolls, making a discovery less likely.
    - Public Lectures lowers suspicion by 1 per copy when you conduct research; Parish Benefactor adds 1 to each charity unit's reduction per copy.
 
    Players still cannot buy a type they personally discovered.
@@ -227,7 +227,7 @@ Policies: `random`, `heuristic`, and the heuristic's `cautious` and `bold` style
 Every result also has an `uptake` record, aggregated as `uptake`:
 - each research type: how often it was acquired (by research or experiment), published and applied in rolls, with the win rate of the players who held it (a correlation, not a cause);
 - how often each part variant went into an attempted body;
-- suspicion saved by Discreet Methods, lowered by Public Lectures, and money from Medical Expertise;
+- suspicion avoided by Discreet Methods, lowered by Public Lectures, and money from Medical Expertise;
 - the share of Igor-rounds and Scientist phases left idle, by objective and policy;
 - `rarelyUsed`: research and actions the bots barely touched. A new card here is weak or not understood by the AI; fix that before reading its balance numbers.
 

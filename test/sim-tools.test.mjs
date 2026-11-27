@@ -8,6 +8,7 @@ import { verdicts, parsePolicySet } from '../src/sim/compare.js';
 import { runGame, aggregate } from '../src/sim/runner.js';
 import { heuristicPolicy, DEFAULT_WEIGHTS, OBJECTIVE_WEIGHTS } from '../src/sim/policies.js';
 import { renameResearch } from '../src/sim/metamorphic.js';
+import { researchWorth, expectedDiscovery } from '../src/sim/effect-values.js';
 import { resolveConfig } from '../src/engine/index.js';
 import { summarizeView, describeMove } from '../src/sim/llm-policy.js';
 import { getPlayerView, enumerateLegalCommands } from '../src/engine/index.js';
@@ -87,4 +88,21 @@ test('the LLM playtester describes the view and every legal move', () => {
   const view = getPlayerView(state, pid, { includeEvents: false });
   assert.match(summarizeView(view), /your secret objective is/);
   for (const c of enumerateLegalCommands(state, pid)) assert.ok(describeMove(view, c).length > 3);
+});
+
+test('effect values: Discreet Methods is valued from the configured discovery rolls', () => {
+  const at = (overrides) => researchWorth(resolveConfig({ playerCount: 4, ...overrides }), 'discretion', 'prometheus').want;
+  const base = at({});
+  assert.ok(base > 0);
+  // A bigger roll bonus avoids more suspicion, so it is worth more.
+  assert.ok(at({ research: { discretion: { effects: [{ kind: 'discoveryRollBonus', amount: 2 }] } } }) > base);
+  // With no discovery rolls that can be noticed, it is worth nothing.
+  const quiet = { die: 6, bands: [{ max: 6, amount: 0 }] };
+  assert.equal(at({ actions: { graves: { suspicion: quiet }, sell: { suspicion: quiet }, experiment: { suspicion: quiet } } }), 0);
+  // The Inquisitor wants suspicion: to it the card is worth less than nothing.
+  assert.ok(researchWorth(resolveConfig({ playerCount: 4 }), 'discretion', 'inquisitor').want < 0);
+  // The shared estimate: graves (1-4 of 6) with +1 is noticed on 1-3.
+  const cfg = resolveConfig({ playerCount: 4 });
+  assert.equal(expectedDiscovery(cfg.actions.graves, { rollBonus: 1 }), 0.5);
+  assert.equal(expectedDiscovery(cfg.actions.graves, { rollBonus: 4 }), 0);
 });

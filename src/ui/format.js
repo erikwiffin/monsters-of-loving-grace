@@ -91,7 +91,12 @@ export function describeEvent(e, ctx) {
     case 'RESEARCH_PUBLISHED': return `${n(e.playerId)} publishes <b>${esc(researchName(cfg, e.researchType))}</b> for all.`;
     case 'IGOR_HIRED': return `${n(e.playerId)} hires an Igor for ${e.cost}.`;
     case 'DIE_ROLLED': return e.purpose === 'discovery' ? `${n(e.playerId)} rolls d${e.die} for discovery: <b>${e.result}</b>.` : null;
-    case 'DISCOVERY_RESOLVED': return e.increase ? null : `${n(e.playerId)} goes unnoticed${e.baseSuspicion && e.reduction ? ' (Discreet Methods)' : ''}.`;
+    case 'DISCOVERY_RESOLVED': {
+      if (e.increase) return null;
+      // Discreet Methods helped if the roll alone would have been noticed.
+      const helped = (e.unmodifiedSuspicion && e.rollBonus) || (e.baseSuspicion && e.reduction);
+      return `${n(e.playerId)} goes unnoticed${helped ? ` (Discreet Methods${e.rollBonus ? `: ${e.roll} + ${e.rollBonus}` : ''})` : ''}.`;
+    }
     case 'SUSPICION_CHANGED': return `Suspicion ${e.delta >= 0 ? 'rises' : 'falls'} ${e.delta >= 0 ? '+' : '−'}${Math.abs(e.delta)} → <b>${e.value}/${e.max}</b> (${REASONS[e.reason] || e.reason}${e.playerId ? `, ${n(e.playerId)}` : ''}).`;
     case 'RESURRECTIONS_ANNOUNCED': return e.playerIds.length ? `Attempting resurrection: ${e.playerIds.map(n).join(', ')}.` : null;
     case 'RESURRECTION_CANCELLED': return `${n(e.playerId)}'s body is incomplete; the attempt is called off.`;

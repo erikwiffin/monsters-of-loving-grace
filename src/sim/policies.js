@@ -5,7 +5,7 @@
 // Policies may be async (return a Promise) — the async runner awaits them.
 
 import { seedState, randInt, nextUint32 } from '../engine/rng.js';
-import { effectMean, researchWorth } from './effect-values.js';
+import { effectMean, researchWorth, expectedDiscovery, discoveryReaches } from './effect-values.js';
 
 function makeRandom(seed) {
   const st = seedState(seed);
@@ -56,29 +56,10 @@ const STYLES = {
   bold: { suspicionCost: 0.6, attemptBar: 0.7 },
 };
 
-/** Expected suspicion from an action's discovery roll, after Discreet Methods. */
-function expectedSuspicion(def, reduction) {
-  const r = def && def.suspicion;
-  if (!r) return 0;
-  let total = 0;
-  for (let roll = 1; roll <= r.die; roll++) {
-    const band = r.bands.find((b) => roll <= b.max);
-    total += Math.max(0, (band ? band.amount : 0) - reduction);
-  }
-  return total / r.die;
-}
-
-/** Chance that an action's discovery roll adds at least `room` suspicion: the mob, if room is what is left. */
-function mobChance(def, reduction, room) {
-  const r = def && def.suspicion;
-  if (!r || room <= 0) return 0;
-  let hits = 0;
-  for (let roll = 1; roll <= r.die; roll++) {
-    const band = r.bands.find((b) => roll <= b.max);
-    if (Math.max(0, (band ? band.amount : 0) - reduction) >= room) hits += 1;
-  }
-  return hits / r.die;
-}
+// Discovery rolls are estimated by the shared helpers in effect-values.js,
+// with the player's roll bonus and flat reduction from research.
+const expectedSuspicion = (def, mods) => expectedDiscovery(def, mods);
+const mobChance = (def, mods, room) => discoveryReaches(def, mods, room);
 // What the mob forming is worth, in money: the game ends, lost for everyone
 // but the Inquisitor (and won for it). The smooth suspicion price misses this.
 const MOB_STAKE = 40;
@@ -217,11 +198,12 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const excess = Math.max(0, view.suspicion - dangerLine);
       // My total research bonus of an effect kind (one entry per effective copy).
       const bonus = (kind) => Object.entries(cfg.research).reduce((a, [t, d]) => a + (me.effectiveResearch[t] || 0) * d.effects.filter((e) => e.kind === kind).reduce((x, e) => x + (e.amount ?? 1), 0), 0);
-      const reduction = bonus('suspicionReduction');
+      // My discovery-roll modifiers: a roll bonus (Discreet Methods) and any flat cut.
+      const discovery = { rollBonus: bonus('discoveryRollBonus'), reduction: bonus('suspicionReduction') };
       // An action's suspicion cost: the expected rise at the current price,
       // plus the chance its roll brings the mob, which ends the game.
-      const riskCost = (def) => expectedSuspicion(def, reduction) * suspicionPrice
-        + (wantsSuspicion ? -1 : 1) * W.mobStake * mobChance(def, reduction, view.suspicionMax - view.suspicion);
+      const riskCost = (def) => expectedSuspicion(def, discovery) * suspicionPrice
+        + (wantsSuspicion ? -1 : 1) * W.mobStake * mobChance(def, discovery, view.suspicionMax - view.suspicion);
       const gravesParts = (cfg.actions.graves ? cfg.actions.graves.parts : 0) + bonus('gravesBonus');
       const sellGain = (cfg.actions.sell ? cfg.actions.sell.gain : 0) + bonus('sellBonus');
       const charityCut = (cfg.actions.charity ? cfg.actions.charity.reduction : 0) + bonus('charityBonus');

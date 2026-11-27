@@ -1,4 +1,4 @@
-<!-- rules-fingerprint: 60a5ebf8 -->
+<!-- rules-fingerprint: c00081f1 -->
 <!-- This rulebook describes the physical game. It is maintained by hand (spec 032): every change to gameplay — the 02x specs or the default configuration — updates it in the same commit, together with the fingerprint above. `npm test` prints the new fingerprint when it is out of date. -->
 
 ![Monsters of Loving Grace logo: a stitched heart struck by lightning](logo.png)
@@ -118,7 +118,7 @@ Night actions mirror day actions: graves for specimens, selling for medicine, ex
 
 ### Details
 
-**Discovery rolls.** Roll the die shown on the space. If the result is in the range shown, suspicion rises by 1. Each effective copy of Discreet Methods reduces that rise by 1, to a minimum of 0. Any rise can form the mob at once.
+**Discovery rolls.** Roll the die shown on the space and add 1 for each effective copy of Discreet Methods you have. If the total is in the range shown, suspicion rises by 1. For example, with one copy, robbing graves is noticed only on a roll of 1–3. Any rise can form the mob at once.
 
 **Rob graves.** Draw both random parts first (below), then make the discovery roll.
 
@@ -179,7 +179,7 @@ Research cards are permanent: they are never spent. There are nine types:
 | **Mesmerism** | Add 1d6 to control rolls |
 | **Restraining Apparatus** | Add +4 to control rolls |
 | **Moral Philosophy** | Add +3 to resurrection Humanity |
-| **Discreet Methods** | Reduce the suspicion from each discovery roll by 1, to a minimum of 0 |
+| **Discreet Methods** | Add 1 to each of your discovery rolls |
 | **Public Lectures** | When you conduct research, suspicion −1 after you publish |
 | **Parish Benefactor** | Each Donate to charity you make removes 1 more suspicion |
 

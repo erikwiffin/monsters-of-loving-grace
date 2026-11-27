@@ -40,7 +40,7 @@ Scientists and Igors may take every action, with two exceptions: **Garrison the 
 
 Every action that can raise suspicion uses a configurable discovery roll: a die size and an ordered list of bands, each with a highest roll and a suspicion amount. The first band whose highest roll is at least the result applies; a higher result adds nothing. A flat increase is one band covering every face.
 
-Each effective copy of Discreet Methods reduces the result by 1, to a minimum of 0. The roll and every adjustment are logged, and any increase checks the mob threshold immediately (spec 020).
+Each effective copy of Discreet Methods adds 1 to the result before the band is found, so a discovery is less likely; copies stack without limit, and a result above every band adds nothing. **Ruling:** this replaces the earlier rule, under which each copy took 1 off the suspicion a discovery adds: published copies stack, so that rule made night actions free of suspicion for the whole table once the card was out, and closed off the Inquisitor's route to the mob. The roll, the bonus, the result and every adjustment are logged, and any increase checks the mob threshold immediately (spec 020).
 
 ## Details
 

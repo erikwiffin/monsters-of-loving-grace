@@ -194,7 +194,7 @@ test('hire has a flat cost; lecture and the morgue are gone; three Igors at most
   assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-3`, actionId: 'hire' }).error.code, 'MAX_IGORS');
 });
 
-test('graves suspicion follows the d6 table and discretion reduces it', () => {
+test('graves suspicion follows the d6 table; each copy of Discreet Methods adds 1 to the roll', () => {
   for (let i = 0; i < 30; i++) {
     let s = createGame({ playerCount: 3 }, `graves-${i}`);
     s = passAllUntil(s, (x) => x.phase === 'night');
@@ -204,9 +204,42 @@ test('graves suspicion follows the d6 table and discretion reduces it', () => {
     assert.equal(r.state.suspicion, roll <= 4 ? 1 : 0);
     assert.equal(r.state.players.find((p) => p.id === pid).loose.length, 2);
 
+    // One copy: the same die roll, plus 1.
     s.players.find((p) => p.id === pid).research = ['discretion'];
     const r2 = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
-    assert.equal(r2.state.suspicion, 0);
+    const d2 = r2.events.find((e) => e.type === 'DISCOVERY_RESOLVED');
+    assert.equal(d2.roll, roll);
+    assert.equal(d2.rollBonus, 1);
+    assert.equal(r2.state.suspicion, roll + 1 <= 4 ? 1 : 0);
+    assert.equal(d2.unmodifiedSuspicion, roll <= 4 ? 1 : 0);
+  }
+});
+
+test('Discreet Methods stacks: published copies add to the roll', () => {
+  let s = createGame({ playerCount: 4 }, 'discretion-stack');
+  s = passAllUntil(s, (x) => x.phase === 'night');
+  const pid = s.activePlayerId;
+  const others = s.players.filter((p) => p.id !== pid);
+  s.players.find((p) => p.id === pid).research = ['discretion'];
+  // Three rivals published it: four effective copies, so a graves roll is 5 to 10 and never noticed.
+  for (const o of others) { o.research = ['discretion']; o.published = ['discretion']; s.publications.push({ playerId: o.id, type: 'discretion', round: 1 }); }
+  assert.equal(effectiveCopies(s, pid, 'discretion'), 4);
+  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
+  const d = r.events.find((e) => e.type === 'DISCOVERY_RESOLVED');
+  assert.equal(d.rollBonus, 4);
+  assert.equal(d.result, d.roll + 4);
+  assert.equal(r.state.suspicion, 0);
+});
+
+test('the old flat reduction still works for saved games and experiments', () => {
+  const config = { playerCount: 3, research: { discretion: { effects: [{ kind: 'suspicionReduction', amount: 1 }] } } };
+  for (let i = 0; i < 10; i++) {
+    let s = createGame(config, `flat-${i}`);
+    s = passAllUntil(s, (x) => x.phase === 'night');
+    const pid = s.activePlayerId;
+    s.players.find((p) => p.id === pid).research = ['discretion'];
+    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
+    assert.equal(r.state.suspicion, 0);
   }
 });
 

@@ -99,7 +99,7 @@ function validateConfig(cfg) {
 // copy; 'resurrection' and 'control' add dice or modifiers; 'reroll' and
 // 'noGarrison' are abilities.
 const RESEARCH_KINDS = new Set([
-  'medicineBonus', 'suspicionReduction', 'controlAttempts', 'control', 'resurrection',
+  'medicineBonus', 'suspicionReduction', 'discoveryRollBonus', 'controlAttempts', 'control', 'resurrection',
   'ferocity', 'gravesBonus', 'sellBonus', 'charityBonus', 'researchCalm', 'reroll', 'noGarrison',
   'specimenDiscount', 'quietFailure', 'pursuit', 'discoveryBoost',
 ]);
@@ -394,20 +394,26 @@ function checkLooseParts(p, partIds, min, max) {
 }
 
 /**
- * The discovery roll for an action with a `suspicion` table: roll the die, take
- * the first band whose max is at least the roll, then apply Discreet Methods.
+ * The discovery roll for an action with a `suspicion` table: roll the die, add
+ * the player's roll bonus (Discreet Methods), take the first band whose max is
+ * at least the result, then apply any flat reduction.
  */
 function rollActionSuspicion(s, p, def, actionId) {
   const r = def.suspicion;
   const roll = rollDie(s.rng, r.die);
-  const band = r.bands.find((b) => roll <= b.max);
+  const rollBonus = researchBonus(s, p.id, 'discoveryRollBonus');
+  const result = roll + rollBonus;
+  const band = r.bands.find((b) => result <= b.max);
   const base = band ? band.amount : 0;
+  // What the roll alone would have added: the bonus avoided the difference.
+  const unmodified = (r.bands.find((b) => roll <= b.max) || { amount: 0 }).amount;
+  // A flat cut per discovery (an older rule, still supported for saved games and experiments).
   const reduction = researchBonus(s, p.id, 'suspicionReduction');
   // Inflammatory research makes a discovery that is noticed worse.
   const boost = base > 0 ? researchBonus(s, p.id, 'discoveryBoost') : 0;
   const increase = Math.max(0, base + boost - reduction);
   emit(s, 'DIE_ROLLED', { playerId: p.id, purpose: 'discovery', actionId, die: r.die, result: roll });
-  emit(s, 'DISCOVERY_RESOLVED', { playerId: p.id, actionId, die: r.die, roll, baseSuspicion: base, reduction, increase });
+  emit(s, 'DISCOVERY_RESOLVED', { playerId: p.id, actionId, die: r.die, roll, rollBonus, result, unmodifiedSuspicion: unmodified, baseSuspicion: base, reduction, increase });
   if (increase > 0) changeSuspicion(s, increase, actionId, p.id);
 }
 

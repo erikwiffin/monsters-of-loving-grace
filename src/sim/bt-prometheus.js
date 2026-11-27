@@ -23,10 +23,10 @@
 
 import { selector, sequence, condition, action, guard } from './bt.js';
 import { heuristicPolicy } from './policies.js';
-import { researchWorthExcept } from './effect-values.js';
+import { researchWorth, researchWorthExcept, expectedDiscovery, maxDiscovery } from './effect-values.js';
 
 // Effect kinds the tree values itself, from its own odds and plan.
-const MODELLED_KINDS = ['resurrection', 'control', 'controlAttempts', 'suspicionReduction', 'medicineBonus'];
+const MODELLED_KINDS = ['resurrection', 'control', 'controlAttempts', 'suspicionReduction', 'discoveryRollBonus', 'medicineBonus'];
 
 // ---------------------------------------------------------------------------
 // Dice arithmetic over configuration effects
@@ -132,21 +132,12 @@ function buildBlackboard(view, legal, P) {
   bb.susp = view.suspicion;
   bb.max = view.suspicionMax;
   bb.recentRise = (view.suspicionHistory || []).filter((h) => h.round >= view.round - 1 && h.delta > 0).reduce((a, h) => a + h.delta, 0);
-  bb.reduction = researchEffects(cfg, me.effectiveResearch, (e) => e.kind === 'suspicionReduction').reduce((a, e) => a + (e.amount ?? 1), 0);
-  bb.expSusp = (id) => {
-    const r = cfg.actions[id] && cfg.actions[id].suspicion;
-    if (!r) return 0;
-    let tot = 0;
-    for (let roll = 1; roll <= r.die; roll++) {
-      const b = r.bands.find((x) => roll <= x.max);
-      tot += Math.max(0, (b ? b.amount : 0) - bb.reduction);
-    }
-    return tot / r.die;
-  };
-  bb.maxSusp = (id) => {
-    const r = cfg.actions[id] && cfg.actions[id].suspicion;
-    return r ? Math.max(0, ...r.bands.map((b) => b.amount - bb.reduction)) : 0;
-  };
+  // My discovery-roll modifiers from research: a roll bonus (Discreet Methods) and any flat cut.
+  const sumKind = (copies, kind) => researchEffects(cfg, copies, (e) => e.kind === kind).reduce((a, e) => a + (e.amount ?? 1), 0);
+  bb.discoveryMods = (copies = me.effectiveResearch) => ({ rollBonus: sumKind(copies, 'discoveryRollBonus'), reduction: sumKind(copies, 'suspicionReduction') });
+  bb.mods = bb.discoveryMods();
+  bb.expSusp = (id) => expectedDiscovery(cfg.actions[id], bb.mods);
+  bb.maxSusp = (id) => maxDiscovery(cfg.actions[id], bb.mods);
   // Room left before the mob.
   bb.room = bb.max - bb.susp;
 
@@ -245,8 +236,14 @@ function buildBlackboard(view, legal, P) {
     }
     for (const e of def.effects) {
       if (e.kind === 'controlAttempts') v += me.controlAttempts <= 1 ? 2 : 0.5;
-      // Discreet Methods makes my night work free of suspicion.
-      if (e.kind === 'suspicionReduction') v += bb.reduction > 0 ? 0.5 : bb.P.discretionValue;
+      // Research on discovery rolls: worth a lot if it makes robbing graves
+      // free of suspicion (my night work then costs nothing), otherwise what
+      // the suspicion it avoids is worth.
+      if (e.kind === 'suspicionReduction' || e.kind === 'discoveryRollBonus') {
+        const quietNow = maxDiscovery(cfg.actions.graves, bb.mods) === 0;
+        const quietWith = maxDiscovery(cfg.actions.graves, bb.discoveryMods(with1)) === 0;
+        v += !quietNow && quietWith ? bb.P.discretionValue : bb.P.tableScale * researchWorth({ ...cfg, research: { [type]: { effects: [e] } } }, type, 'prometheus').want;
+      }
       if (e.kind === 'medicineBonus') v += Math.max(0, 1.5 - view.round * 0.2);
     }
     // Every other effect kind is valued by the shared table (effect-values.js),
@@ -289,11 +286,12 @@ export const PARAMS = {
   researchMin: 1.5, // least value of a purchase...
   researchMinRich: 0.4, // ...or this, when holding richMoney or more
   richMoney: 8,
+  moneyEnough: 14, // stop practising medicine with this much money
   researchBuffer: 1, // money kept after research
   missingPartValue: 4, // a part the body still lacks, divided by its type's draw weight
   gainScale: 40, // value of one unit of body utility
   controlValue: 12, // value of a whole control chance, at five players
-  discretionValue: 6, // value of the first Discreet Methods
+  discretionValue: 6, // value of research that makes robbing graves free of suspicion
   tableScale: 0.5, // the shared effect table's money values, in the tree's units
   // Night work.
   gravesGain: 0.01, // least utility two random parts must add
@@ -399,7 +397,8 @@ const pass = (bb) => ({ type: 'PASS_TURN', playerId: bb.me.id });
 // The tree
 // ---------------------------------------------------------------------------
 
-const safe = (id) => (bb) => bb.room - bb.maxSusp(id) >= bb.P.riskRoom;
+// Safe: the roll can't add suspicion, or the mob stays far enough off even if it does.
+const safe = (id) => (bb) => bb.maxSusp(id) === 0 || bb.room - bb.maxSusp(id) >= bb.P.riskRoom;
 const quiet = (id) => (bb) => bb.maxSusp(id) === 0;
 const gravesUseful = (bb) => bb.missingTotal > 0 || quiet('graves')(bb) || (bb.planComplete
   && Object.entries(bb.cfg.partTypes).reduce((a, [t, d]) => a + d.weight * bb.typeGain(t), 0)
@@ -433,7 +432,8 @@ const dayTree = selector('day',
   guard('hire', (bb) => bb.igorCount < bb.cfg.maxIgors && bb.view.round <= bb.P.hireUntilRound && bb.me.money >= bb.cfg.actions.hire.cost,
     both('hire', (bb, k) => bb.place('hire', k))),
   both('buy', buyCmd),
-  both('medicine', (bb, k) => bb.place('medicine', k)),
+  // Earn only while money is short: beyond what the next rounds can spend, more is pointless.
+  guard('money short', (bb) => bb.me.money < bb.P.moneyEnough, both('medicine', (bb, k) => bb.place('medicine', k))),
   action('pass', pass),
 );
 

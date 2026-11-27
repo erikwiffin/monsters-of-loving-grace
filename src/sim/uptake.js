@@ -10,6 +10,8 @@
 // round, or a Scientist unused in a phase. Practising medicine is always
 // possible by day, so an idle day is a choice, not a lack of options.
 
+import { effectiveCopies } from '../engine/index.js';
+
 /** Per-game uptake and idleness. The runner may read authoritative state for metrics. */
 export function uptakeMetrics(state) {
   const cfg = state.config;
@@ -52,7 +54,20 @@ export function uptakeMetrics(state) {
         for (const d of e.dice) credit(d.source);
         for (const f of e.fixed) credit(f.source);
         break;
-      case 'DISCOVERY_RESOLVED': effects.suspicionSaved += Math.min(e.reduction, e.baseSuspicion); break;
+      case 'DISCOVERY_RESOLVED': {
+        // Saved by a roll bonus (the roll alone would have been noticed), and by a flat cut.
+        const byRoll = Math.max(0, (e.unmodifiedSuspicion ?? e.baseSuspicion) - e.baseSuspicion);
+        const byCut = Math.min(e.reduction, e.baseSuspicion);
+        effects.suspicionSaved += byRoll + byCut;
+        // Credit the research behind it as applied.
+        if (byRoll + byCut > 0) {
+          for (const [t, def] of Object.entries(cfg.research)) {
+            const kinds = [...(byRoll ? ['discoveryRollBonus'] : []), ...(byCut ? ['suspicionReduction'] : [])];
+            if (def.effects.some((x) => kinds.includes(x.kind)) && effectiveCopies(state, e.playerId, t) > 0) applied[t] = (applied[t] || 0) + 1;
+          }
+        }
+        break;
+      }
       case 'SUSPICION_CHANGED': if (e.reason === 'public_lecture') effects.researchCalm -= e.delta; break;
       case 'MONEY_CHANGED':
         if (e.reason === 'medicine' && cfg.actions.medicine) effects.medicineBonus += e.delta - cfg.actions.medicine.gain;
@@ -170,5 +185,5 @@ export function aggregateUptake(results, config) {
 // rolls" is meaningful for it.
 function isRollEffect(config, type) {
   const def = config && config.research[type];
-  return !!def && def.effects.some((e) => e.kind === 'resurrection' || e.kind === 'control');
+  return !!def && def.effects.some((e) => ['resurrection', 'control', 'discoveryRollBonus', 'suspicionReduction'].includes(e.kind));
 }

@@ -29,6 +29,46 @@ export function effectMean(e) {
   return 0;
 }
 
+/**
+ * The distribution of an action's discovery roll (its `suspicion` table): for
+ * each face, the suspicion added, after a roll bonus (Discreet Methods) and a
+ * flat reduction. The policies' estimate, from the configuration.
+ */
+export function discoveryOutcomes(def, { rollBonus = 0, reduction = 0 } = {}) {
+  const r = def && def.suspicion;
+  if (!r) return [];
+  const out = [];
+  for (let roll = 1; roll <= r.die; roll++) {
+    const band = r.bands.find((b) => roll + rollBonus <= b.max);
+    out.push(Math.max(0, (band ? band.amount : 0) - reduction));
+  }
+  return out;
+}
+/** Expected suspicion from an action's discovery roll. */
+export function expectedDiscovery(def, mods) {
+  const o = discoveryOutcomes(def, mods);
+  return o.length ? o.reduce((a, b) => a + b, 0) / o.length : 0;
+}
+/** Chance that a discovery roll adds at least `room` suspicion (the mob, if room is what is left). */
+export function discoveryReaches(def, mods, room) {
+  const o = discoveryOutcomes(def, mods);
+  return o.length && room > 0 ? o.filter((x) => x >= room).length / o.length : 0;
+}
+/** The most a discovery roll can add. */
+export const maxDiscovery = (def, mods) => Math.max(0, ...discoveryOutcomes(def, mods));
+
+// Night actions with discovery rolls a player takes over the rest of a game,
+// for valuing effects on those rolls.
+const DISCOVERY_ACTIONS_PER_GAME = 3;
+
+/** Suspicion a game's discovery rolls avoid with these modifiers, averaged over the configured discovery actions. */
+function discoverySaved(cfg, mods) {
+  const defs = Object.values(cfg.actions || {}).filter((d) => d.suspicion);
+  if (!defs.length) return 0;
+  const saved = defs.reduce((a, d) => a + expectedDiscovery(d) - expectedDiscovery(d, mods), 0) / defs.length;
+  return DISCOVERY_ACTIONS_PER_GAME * saved;
+}
+
 /** Units of an effect: mean points, uses, or its amount. */
 export function effectUnits(e) {
   if (e.kind === 'resurrection' || e.kind === 'control') return effectMean(e);
@@ -39,7 +79,8 @@ export function effectUnits(e) {
 }
 
 /**
- * Layer 1: quantities per unit of each effect kind. Quantities:
+ * Layer 1: quantities per unit of each effect kind (or, for a function, per
+ * copy, computed from the configuration). Quantities:
  *   vitality, humanity  points on my resurrection rolls
  *   control             points on my control rolls
  *   controlAttempts     extra control attempts
@@ -56,8 +97,10 @@ export const EFFECT_IMPACT = {
   controlAttempts: { controlAttempts: 1 },
   // One more money from each medicine action, over the medicine still to come.
   medicineBonus: { money: 2.5 },
-  // A point off each of my discovery rolls: about this much suspicion a game.
-  suspicionReduction: { calm: 1.5 },
+  // Effects on my discovery rolls are worth the suspicion they avoid over a
+  // game, computed from the configured rolls (per copy, so units are 1).
+  suspicionReduction: (e, cfg) => ({ calm: discoverySaved(cfg, { reduction: e.amount ?? 1 }) }),
+  discoveryRollBonus: (e, cfg) => ({ calm: discoverySaved(cfg, { rollBonus: e.amount ?? 1 }) }),
   researchCalm: { calm: 1.5 },
   charityBonus: { calm: 1 },
   quietFailure: { calm: 1 },
@@ -110,10 +153,11 @@ export function impactKey(e) {
 }
 
 /** Quantities an effect gives, per copy, for an objective's expectations. */
-export function effectQuantities(e, objective) {
-  const impact = EFFECT_IMPACT[impactKey(e)];
+export function effectQuantities(e, objective, cfg = {}) {
+  let impact = EFFECT_IMPACT[impactKey(e)];
   if (!impact) return {};
   let units = effectUnits(e);
+  if (typeof impact === 'function') { impact = impact(e, cfg); units = 1; }
   if (e.per === 'rivalPrepared') units *= RIVALS_PREPARING[objective] ?? RIVALS_PREPARING.default;
   return Object.fromEntries(Object.entries(impact).map(([q, x]) => [q, x * units]));
 }
@@ -126,7 +170,7 @@ export function researchWorth(cfg, type, objective) {
   let want = 0;
   let harm = 0;
   for (const e of cfg.research[type].effects) {
-    for (const [q, x] of Object.entries(effectQuantities(e, objective))) {
+    for (const [q, x] of Object.entries(effectQuantities(e, objective, cfg))) {
       want += x * priceOf(objective, q);
       harm += x * ((RIVAL_PRICE[objective] || {})[q] || 0);
     }
@@ -137,5 +181,5 @@ export function researchWorth(cfg, type, objective) {
 /** The same, leaving out effects of the given kinds (for a policy that values those itself). */
 export function researchWorthExcept(cfg, type, objective, skipKinds) {
   const def = cfg.research[type];
-  return researchWorth({ research: { [type]: { ...def, effects: def.effects.filter((e) => !skipKinds.includes(e.kind)) } } }, type, objective);
+  return researchWorth({ ...cfg, research: { [type]: { ...def, effects: def.effects.filter((e) => !skipKinds.includes(e.kind)) } } }, type, objective);
 }

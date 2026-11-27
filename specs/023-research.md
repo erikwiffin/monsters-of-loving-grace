@@ -14,7 +14,7 @@ There are nine research types, each with a persistent effect:
 | mesmerism | Mesmerism | Add 1d6 to control rolls (spec 025) |
 | restraint | Restraining Apparatus | Add a fixed +4 to control rolls (spec 025) |
 | philosophy | Moral Philosophy | Add a fixed +3 to the resurrection Humanity score |
-| discretion | Discreet Methods | Reduce the suspicion from each discovery roll (graves, sell, experiment) by 1, to a minimum of 0 |
+| discretion | Discreet Methods | Add 1 to each discovery roll (graves, sell, experiment), making a discovery less likely (spec 022) |
 | lectures | Public Lectures | When the player conducts research, suspicion falls by 1, to a minimum of 0, after the card is published |
 | benefactor | Parish Benefactor | Each charity unit the player buys removes 1 more suspicion |
 
@@ -49,7 +49,7 @@ Every effective copy applies its effect in full. For example:
 
 - With two copies of Galvanic Mastery, the player rolls two separate d6 for Vitality.
 - With three copies of Moral Philosophy, the player adds +9 to Humanity.
-- With two copies of Discreet Methods, discovery suspicion is reduced by 2.
+- With two copies of Discreet Methods, each discovery roll gets +2: robbing graves, noticed on 1–4 of a d6, is then noticed only on a natural 1 or 2.
 - With two copies of Neural Conditioning, the player has 2 more control attempts. Because another player's publication adds a copy, it can grant attempts partway through the game.
 
 Personal discoveries, by either route, are public, as are publications, so effective research counts are public and shown for every player.

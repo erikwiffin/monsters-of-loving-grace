@@ -115,6 +115,32 @@ for (const policy of BUILDERS) {
   });
 }
 
+/** Gives the subject Discreet Methods, and `published` rivals a published copy each. */
+const discretion = (published) => (st, me) => {
+  me.research.push('discretion');
+  for (const o of st.players.filter((x) => x.id !== me.id).slice(0, published)) {
+    o.research.push('discretion');
+    o.published.push('discretion');
+    st.publications.push({ playerId: o.id, type: 'discretion', round: 1 });
+  }
+};
+
+for (const policy of BUILDERS) {
+  // Four effective copies: a graves roll is 5 to 10, never noticed.
+  test(`${policy}: with Discreet Methods making graves unnoticeable, a Prometheus robs graves even with the mob one step away`, () => {
+    const { s, pid } = scenario({ phase: 'night', suspicion: 9, edit: discretion(3) });
+    const { cmds } = playPhase(s, pid, policy);
+    assert.ok(placed(cmds, 'graves').length >= 1, JSON.stringify(cmds));
+  });
+
+  // One copy: graves is noticed on 1 to 3, still a risk of the mob.
+  test(`${policy}: with one copy of Discreet Methods, graves is still too risky one step from the mob`, () => {
+    const { s, pid } = scenario({ phase: 'night', suspicion: 9, edit: discretion(0) });
+    const { cmds } = playPhase(s, pid, policy);
+    assert.equal(placed(cmds, 'graves').length, 0, JSON.stringify(cmds));
+  });
+}
+
 /** The first state of a simulated game where a player of `objective` decides on a monster. */
 function controlDecision({ objective, own, players = 5, tries = 300 }) {
   for (let i = 0; i < tries; i++) {

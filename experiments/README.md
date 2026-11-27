@@ -38,7 +38,7 @@ a stacking counter:
 | Galvanic Mastery | stacks | 4 | Vitality +1d6 |
 | Moral Philosophy | stacks | 4 | Humanity +3 (was +5) |
 | Medical Expertise | stacks | 4 | Medicine +1 money |
-| Discreet Methods | stacks | 4 | Discovery suspicion −1 |
+| Discreet Methods | stacks | 4 | Discovery roll +1 (was: discovery suspicion −1) |
 | Neural Conditioning | stacks | 4 | +1 control attempt |
 | Mesmerism | one-off | 4 | Control +1d10 (was 1d6, stacking) |
 | Restraining Apparatus | one-off | 4 | Control +8 (was +4, stacking) |
