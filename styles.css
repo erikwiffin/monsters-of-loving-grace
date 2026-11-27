@@ -92,6 +92,7 @@ pre { max-height: 300px; overflow: auto; background: var(--bg2); padding: .5em; 
 /* menu */
 .menu-screen { max-width: 980px; margin: 0 auto; padding: 32px 16px; }
 .menu-screen .title { text-align: center; margin: 2vh 0 28px; }
+.menu-screen .title .logo { display: block; width: clamp(96px, 22vw, 160px); height: auto; margin: 0 auto 6px; rotate: -3deg; }
 .menu-screen .title h1 { font-size: clamp(2.2rem, 6.5vw, 3.8rem); display: inline-block; rotate: -1deg; position: relative; }
 .menu-screen .title h1::after { content: ""; position: absolute; left: 4%; right: 2%; bottom: -.05em; height: 10px; background: var(--accent); -webkit-mask: var(--wave) repeat-x 0 0 / 48px 8px; mask: var(--wave) repeat-x 0 0 / 48px 8px; }
 .menu-screen .title p { color: var(--muted); font-size: 1.1rem; }

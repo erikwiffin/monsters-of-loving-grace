@@ -54,3 +54,4 @@ Tests are the automated safety net; the manual review against specs is required 
 | 025 | Resurrection |
 | 030 | Hot-seat browser interface |
 | 031 | In-browser AI seats |
+| 032 | Print and play: printable components and the rulebook |
