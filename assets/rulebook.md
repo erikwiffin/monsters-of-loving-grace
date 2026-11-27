@@ -1,6 +1,8 @@
 <!-- rules-fingerprint: 5b02bf91 -->
 <!-- This rulebook describes the physical game. It is maintained by hand (spec 032): every change to gameplay — the 02x specs or the default configuration — updates it in the same commit, together with the fingerprint above. `npm test` prints the new fingerprint when it is out of date. -->
 
+![Monsters of Loving Grace logo: a stitched heart struck by lightning](logo.png)
+
 # Monsters of Loving Grace — Rulebook
 
 *A game of resurrection, suspicion and secret ambition for 3–6 players. Print-and-play prototype.*
@@ -9,7 +11,7 @@ Each of you is a scientist in a nervous village. By day you earn money and buy w
 
 ## Components
 
-The print view prints everything except the dice.
+The print view prints everything except the dice and money.
 
 - **Rulebook** (this document).
 - **Village board**: the suspicion track (0–10), and spaces for the research deck and the four-card market.
@@ -19,7 +21,7 @@ The print view prints everything except the dice.
 - **28 research cards**: 4 copies of each of 7 types.
 - **Body part cards**: 13 named variants. The supply is meant to be unlimited; if a variant runs out, use any proxy.
 - **Worker tiles**: per colour, 1 Scientist and 3 Igors.
-- **Money**: coins worth 1 and 5. Money is unlimited; make change freely.
+- **Money (not printed)**: use coins, poker chips, or pencil and paper. Money is unlimited.
 - **Markers**: suspicion, first player, and one control-attempt marker per colour.
 - Everything prints single-sided. Use card stock or opaque sleeves so cards don't show through from the back.
 - **Dice (not printed)**: at least one d20, two d4, four d6 and one d8. If you are short of a die, roll it again and add the results.

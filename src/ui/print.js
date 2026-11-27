@@ -109,7 +109,7 @@ async function start() {
   try {
     const res = await fetch(RULEBOOK_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    rulebookHtml = renderMarkdown(await res.text());
+    rulebookHtml = renderMarkdown(await res.text(), { base: RULEBOOK_URL.replace(/[^/]*$/, '') });
   } catch (err) {
     rulebookHtml = `<p class="pp-error">The rulebook could not be loaded (${esc(err.message)}).</p>`;
   }

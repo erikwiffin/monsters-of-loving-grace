@@ -24,7 +24,6 @@ export const LAYOUTS = {
 const range = (n) => Array.from({ length: n }, (_, i) => i);
 const configFor = (cfg, playerCount) => ({ ...cfg, playerCount });
 const PART_COPIES_PER_SLOT = 4;
-const COINS = [{ value: 1, copies: 50 }, { value: 5, copies: 20 }];
 
 // ---------------------------------------------------------------------------
 // Dice tables: turn integer weights into a physical roll with the same odds.
@@ -294,7 +293,6 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
       render: (i) => workerTile(seat, i === 0 ? 'scientist' : 'igor'),
     })) },
     { id: 'tokens', name: 'Tokens', layout: 'token', components: [
-      ...COINS.map((c) => ({ id: `money:${c.value}`, name: `Money: ${c.value}s`, copies: c.copies, render: () => token(`<b>${c.value}</b><small>money</small>`, `pp-coin pp-coin-${c.value}`) })),
       { id: 'marker:suspicion', name: 'Suspicion marker', copies: 1, render: () => token('<b>!</b><small>suspicion</small>', 'pp-marker') },
       { id: 'marker:first', name: 'First-player marker', copies: 1, render: () => token('<b>1st</b><small>player</small>', 'pp-marker') },
       { id: 'marker:control', name: 'Control-attempt markers', copies: MAX_PLAYERS, render: (i) => token('<b>⚡</b><small>control</small>', 'pp-marker pp-seat', `--seat:${SEAT_COLOURS[i]}`) },

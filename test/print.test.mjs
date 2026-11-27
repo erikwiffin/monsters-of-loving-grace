@@ -35,7 +35,8 @@ test('there is a component for every action space, objective, research type and 
   for (const id of Object.keys(DEFAULT_CONFIG.research)) assert.ok(ids.includes(`research:${id}`), id);
   for (const id of Object.keys(DEFAULT_CONFIG.partVariants)) assert.ok(ids.includes(`part:${id}`), id);
   for (const id of Object.keys(OBJECTIVE_INFO)) assert.ok(ids.includes(`objective:${id}`), id);
-  for (const id of ['rulebook', 'village-board', 'player-sheets', 'workers:1', 'workers:6', 'money:1', 'money:5']) assert.ok(ids.includes(id), id);
+  for (const id of ['rulebook', 'village-board', 'player-sheets', 'workers:1', 'workers:6', 'marker:suspicion']) assert.ok(ids.includes(id), id);
+  assert.ok(!ids.some((id) => id.startsWith('money:')), 'money is not printed');
 });
 
 test('card counts come from the configuration and cover every player count', () => {
@@ -158,7 +159,11 @@ Some **bold**, *italic* and \`code\` with <script>.
   assert.match(html, /<ol><li>first<\/li><li>second<\/li><\/ol>/);
   assert.match(html, /<th>A<\/th><th style="text-align:right">B<\/th>/);
   assert.match(html, /<blockquote><p>note<\/p><\/blockquote>/);
-  const book = renderMarkdown(rulebook);
+  assert.match(renderMarkdown('![A logo](logo.png)', { base: 'assets/' }), /<img src="assets\/logo.png" alt="A logo">/);
+  assert.match(renderMarkdown('![x](https://example.com/a.png)', { base: 'assets/' }), /src="https:\/\/example.com\/a.png"/);
+  assert.doesNotMatch(renderMarkdown('![x](javascript:alert(1))'), /<img/);
+  const book = renderMarkdown(rulebook, { base: 'assets/' });
+  assert.match(book, /<img src="assets\/logo.png"/);
   assert.ok(!book.includes('rules-fingerprint'));
   assert.ok(!/^\s*\|/m.test(book), 'every table is rendered');
 });

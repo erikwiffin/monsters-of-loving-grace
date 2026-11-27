@@ -125,8 +125,6 @@ body.print-view { background: #8a8a8a; color: #1e1e1e; }
 .pp-grid > .pp-token { outline: none; border: .3mm dashed #999; border-radius: 50%; display: grid; place-content: center; text-align: center; line-height: 1.1; }
 .pp-token b { font: 700 13pt var(--hand); }
 .pp-token small { font-size: 6pt; }
-.pp-coin-1 { background: #fff3bf; }
-.pp-coin-5 { background: #ffd43b; }
 .pp-marker { background: #e9ecef; }
 .pp-grid > .pp-seat { background: var(--seat); color: #fff; }
 
@@ -141,6 +139,7 @@ body.print-view { background: #8a8a8a; color: #1e1e1e; }
 .pp-rulebook blockquote { margin: 2mm 0; padding: 1mm 4mm; border-left: 1mm solid #ffd43b; background: #fff9db; }
 .pp-rulebook code { font-size: 9pt; }
 .pp-rulebook li { margin: .5mm 0; }
+.pp-rulebook p > img:only-child { display: block; width: 55mm; height: auto; margin: 0 auto 4mm; }
 .pp-error { color: #c92a2a; }
 
 @media (max-width: 760px) {
