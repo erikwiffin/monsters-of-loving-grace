@@ -23,7 +23,7 @@ function isPlainObject(v) {
 
 // Keys whose values are replaced whole rather than merged, so an override's
 // capacity tiers never mix with the default tiers.
-const ATOMIC_KEYS = new Set(['capacity']);
+const ATOMIC_KEYS = new Set(['capacity', 'unleashers']);
 
 function deepMerge(base, over) {
   for (const [k, v] of Object.entries(over)) {
@@ -86,6 +86,9 @@ function validateConfig(cfg) {
       if (!Number.isInteger(a[k]) || a[k] < 1) throw new Error(`action ${id}: ${k} must be a positive integer`);
     }
   }
+  const unl = tierValue(cfg.unleashers, n);
+  const specials = unl + 1 + (n >= cfg.visionaryMinPlayers ? 1 : 0);
+  if (!Number.isInteger(unl) || unl < 1 || specials > n) throw new Error('unleashers must be a positive integer that leaves at least one Prometheus card in the objective deck');
   if (!cfg.actions.prepare) throw new Error('the prepare action is required: it is the only way to attempt a resurrection');
 }
 
@@ -126,6 +129,15 @@ function validateSuspicionRoll(r, id) {
     if (!Number.isInteger(b.amount) || b.amount < 0) throw new Error(`action ${id}: suspicion band amounts must be non-negative integers`);
     prev = b.max;
   }
+}
+
+/** A number, or the value of the tier for this player count (tiers keyed by smallest player count). */
+function tierValue(v, n) {
+  if (typeof v === 'number') return v;
+  let best = 0;
+  let bestKey = -1;
+  for (const [k, x] of Object.entries(v)) if (Number(k) <= n && Number(k) > bestKey) { bestKey = Number(k); best = x; }
+  return best;
 }
 
 /** Capacity of an action for this game's player count: a number, or null for unlimited. */
@@ -676,7 +688,8 @@ function hasLegalPlacement(s, p) {
  */
 export function objectiveDeckFor(cfg) {
   const n = cfg.playerCount;
-  const special = n >= cfg.visionaryMinPlayers ? ['visionary', 'inquisitor', 'unleasher'] : ['inquisitor', 'unleasher'];
+  const unl = tierValue(cfg.unleashers, n);
+  const special = [...(n >= cfg.visionaryMinPlayers ? ['visionary'] : []), 'inquisitor', ...Array(unl).fill('unleasher')];
   return [...Array(n + 1 - special.length).fill('prometheus'), ...special];
 }
 

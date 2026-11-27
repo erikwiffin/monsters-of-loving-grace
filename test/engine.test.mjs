@@ -783,9 +783,9 @@ test('only garrisoned players may subdue others\' monsters; the creator needs no
   assert.equal(s.suspicion, 2, 'the skipped player adds no suspicion');
 });
 
-test('garrison is a day action for Igors only, capacity 2/3, and lasts until dawn', () => {
+test('garrison is a day action for Igors only, capacity 3 at every player count, and lasts until dawn', () => {
   const g = createGame({}, 'garrison').config.actions.garrison;
-  assert.deepEqual([g.phase, g.igor, g.scientist, g.capacity], ['day', true, false, { 3: 2, 5: 3 }]);
+  assert.deepEqual([g.phase, g.igor, g.scientist, g.capacity], ['day', true, false, 3]);
   let s = createGame({ playerCount: 3 }, 'garrison2');
   const pid = s.activePlayerId;
   assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'garrison' }).error.code, 'SCIENTIST_NOT_PERMITTED');
@@ -1067,4 +1067,13 @@ test('research: per-hunter ferocity may skip the first hunters and never goes be
   assert.equal(controlThreshold(s, 'p1'), 20, 'the first hunter is free');
   garrison(s, 'p2', 'p3', 'p4');
   assert.equal(controlThreshold(s, 'p1'), 24);
+});
+
+test('objective deck: unleashers may be tiered by player count', () => {
+  const cfg = { unleashers: { 3: 1, 6: 2 } };
+  const count = (n) => createGame({ ...cfg, playerCount: n }, 'u').unseenObjectives.concat(Object.values(createGame({ ...cfg, playerCount: n }, 'u').objectives)).filter((o) => o === 'unleasher').length;
+  assert.equal(count(5), 1);
+  assert.equal(count(6), 2);
+  const s = createGame({ ...cfg, playerCount: 6 }, 'u');
+  assert.equal(Object.values(s.objectives).length + s.unseenObjectives.length, 7);
 });

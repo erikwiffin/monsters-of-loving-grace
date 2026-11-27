@@ -46,7 +46,8 @@ if (!isMainThread) {
       vals.none = none / g;
       for (const v of Object.values(vals)) { sq += (v - fair) ** 2; cnt++; worst = Math.max(worst, Math.abs(v - fair)); }
       const fmt = (o) => (vals[o] == null ? '  -  ' : vals[o].toFixed(2));
-      lines.push(`  ${n}p fair ${fair.toFixed(2)} | pro ${fmt('prometheus')} vis ${fmt('visionary')} inq ${fmt('inquisitor')} unl ${fmt('unleasher')} none ${fmt('none')} | med ${rounds.sort()[1]}`);
+      const vs = Object.values(vals);
+      lines.push(`  ${n}p fair ${fair.toFixed(2)} | pro ${fmt('prometheus')} vis ${fmt('visionary')} inq ${fmt('inquisitor')} unl ${fmt('unleasher')} none ${fmt('none')} | spread ${(Math.max(...vs) - Math.min(...vs)).toFixed(2)} med ${rounds.sort()[1]}`);
     }
     console.log(`${f.replace(/.*\//, '')}: rms ${Math.sqrt(sq / cnt).toFixed(3)} worst ${worst.toFixed(3)} inv ${inv} trunc ${trunc}`);
     console.log(lines.join('\n'));

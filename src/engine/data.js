@@ -37,6 +37,9 @@ export const DEFAULT_CONFIG = {
   playerCount: 5,
   // The Visionary card is only in the objective deck from this many players.
   visionaryMinPlayers: 4,
+  // Unleasher cards in the objective deck: a number, or tiers keyed by the
+  // smallest player count, like action capacities. They share a victory.
+  unleashers: 1,
   playerNames: [],
   startingMoney: 3,
   // The mob threshold, the same at every player count.
@@ -74,7 +77,7 @@ export const DEFAULT_CONFIG = {
     specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2, count: 1 },
     charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: { 3: 2, 5: 3 }, igor: true, cost: 3, reduction: 2, maxUnits: 1 },
     hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: { 3: 2, 5: 3 }, igor: true, cost: 4 },
-    garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: { 3: 2, 5: 3 }, igor: true, scientist: false },
+    garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: 3, igor: true, scientist: false },
     assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: null }, // max: null = any number of parts
     prepare: { phase: 'night', name: 'Prepare resurrection', location: 'Private laboratory', capacity: null, igor: false },
     sell: { phase: 'night', name: 'Sell parts', location: 'Back alley', capacity: { 3: 2, 5: 3 }, igor: true, gain: 7, parts: 2, suspicion: { die: 6, bands: [{ max: 2, amount: 1 }] } },
