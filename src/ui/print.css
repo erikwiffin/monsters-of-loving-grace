@@ -1,0 +1,160 @@
+/* Print-and-play view (spec 032). Pages are paper: always white, whatever the
+   screen palette. Sizes are in millimetres so components print true to size. */
+
+body.print-view { background: #8a8a8a; color: #1e1e1e; }
+.print-view .pp-view { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+.pp-controls {
+  position: sticky; top: 0; height: 100vh; overflow: auto; box-sizing: border-box;
+  padding: 16px; background: var(--bg, #fafaf7); color: var(--text, #1e1e1e); border-right: 1.5px solid var(--line, #444);
+}
+.pp-controls h1 { font-family: var(--hand); font-size: 1.6rem; margin: 0 0 .3em; }
+.pp-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.pp-back-link { color: inherit; }
+.pp-count { margin: 6px 0; }
+.pp-section { border: 1px dashed var(--line, #888); border-radius: 6px; margin: 10px 0; padding: 6px 10px 8px; }
+.pp-section legend { font-family: var(--hand); font-weight: 700; padding: 0 4px; }
+.pp-section legend small { font-weight: 400; color: var(--muted, #666); }
+.pp-section-btns { display: flex; gap: 6px; margin-bottom: 4px; }
+.pp-section-btns button { font-size: 12px; padding: .15em .6em; }
+.pp-check { display: flex; gap: 6px; align-items: baseline; margin: 2px 0; font-size: 13.5px; }
+.pp-check input { width: auto; }
+.pp-check small { color: var(--muted, #666); }
+.pp-pages { padding: 20px; display: grid; gap: 20px; justify-content: center; align-content: start; }
+.pp-empty { color: #fff; font-size: 1.2rem; }
+
+/* ---- pages ------------------------------------------------------------ */
+.pp-page {
+  width: 190mm; box-sizing: border-box; background: #fff; color: #1e1e1e;
+  font: 9.5pt/1.3 Georgia, "Times New Roman", serif; box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+.pp-page:not(.pp-flow) { height: 264mm; overflow: hidden; }
+.pp-page h2, .pp-page h3, .pp-page h4 { font-family: var(--hand); color: #1e1e1e; margin: 0 0 .25em; }
+.pp-grid { display: grid; justify-content: center; align-content: start; height: 100%; }
+.pp-L-sheet .pp-grid { grid-template-columns: 190mm; grid-template-rows: 264mm; }
+.pp-L-tile .pp-grid { grid-template-columns: repeat(2, 94mm); grid-auto-rows: 130mm; }
+.pp-L-half .pp-grid { grid-template-columns: 190mm; grid-auto-rows: 130mm; gap: 2mm 0; }
+.pp-L-card .pp-grid { grid-template-columns: repeat(3, 63mm); grid-auto-rows: 88mm; }
+.pp-L-mini .pp-grid { grid-template-columns: repeat(4, 44mm); grid-auto-rows: 63mm; }
+.pp-L-token .pp-grid { grid-template-columns: repeat(7, 26mm); grid-auto-rows: 26mm; }
+.pp-grid > * { box-sizing: border-box; overflow: hidden; outline: .3mm dashed #999; outline-offset: -.15mm; }
+.pp-blank { outline: none !important; }
+.pp-small { font-size: 8pt; color: #444; }
+.pp-brand { font-family: var(--hand); font-weight: 700; }
+.pp-kind { font: 7pt/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #666; }
+
+/* boxes and tracks */
+.pp-track { display: flex; flex-wrap: wrap; gap: 1.5mm; }
+.pp-box { width: 15mm; height: 15mm; border: .5mm solid #1e1e1e; border-radius: 2mm; display: grid; place-content: center; text-align: center; font: 700 12pt var(--hand); }
+.pp-box small { font: 6pt system-ui, sans-serif; }
+.pp-box-s { width: 12mm; height: 12mm; font-size: 10pt; }
+.pp-mob { background: #e03131; color: #fff; }
+.pp-start { background: #ffe066; }
+
+/* village board and player mats */
+.pp-board, .pp-mat { padding: 5mm 6mm; display: grid; gap: 4mm; align-content: start; }
+.pp-board h2, .pp-mat h2 { display: flex; justify-content: space-between; font-size: 16pt; border-bottom: .6mm solid var(--seat, #1e1e1e); padding-bottom: 2mm; }
+.pp-board h3 small, .pp-mat h3 small { font: 8pt Georgia, serif; color: #555; margin-left: 2mm; }
+.pp-market { display: grid; grid-template-columns: repeat(3, 58mm); grid-auto-rows: 78mm; gap: 3mm; justify-content: center; }
+.pp-cardslot { border: .5mm dashed #555; border-radius: 3mm; padding: 3mm; display: flex; flex-direction: column; gap: 2mm; text-align: center; justify-content: center; }
+.pp-cardslot b { font: 700 12pt var(--hand); }
+.pp-deck { background: #f1f3f5; }
+.pp-mat { --seat: #1e1e1e; }
+.pp-mat h2 span:last-child { color: var(--seat); }
+.pp-body { display: grid; grid-template-columns: repeat(3, 46mm); grid-auto-rows: 64mm; gap: 2mm; justify-content: center;
+  grid-template-areas: ". head ." "arm1 chest arm2" "leg1 . leg2"; }
+.pp-bodyslot { border: .6mm solid var(--seat); border-radius: 3mm; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #555; }
+.pp-bodyslot b { font: 700 13pt var(--hand); color: #1e1e1e; }
+
+/* action tiles */
+.pp-grid > .pp-tile { padding: 4mm; display: flex; flex-direction: column; gap: 2mm; }
+.pp-tile-head { display: flex; justify-content: space-between; font: 700 8pt system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; color: #555; }
+.pp-tile h3 { font-size: 15pt; }
+.pp-tile-meta { display: flex; justify-content: space-between; font: 700 9pt system-ui, sans-serif; }
+.pp-tile p { margin: 0; font-size: 10.5pt; }
+.pp-roll { background: #fff3bf; padding: 1.5mm 2mm; border-radius: 1.5mm; font-size: 9pt !important; }
+.pp-grid > .pp-night { background: linear-gradient(#e7eaf3, #fff 22mm); }
+.pp-grid > .pp-day { background: linear-gradient(#fff4d6, #fff 22mm); }
+.pp-slots { margin-top: auto; display: flex; gap: 3mm; flex-wrap: wrap; justify-content: center; }
+.pp-slot { width: 20mm; height: 20mm; border: .6mm solid #1e1e1e; border-radius: 50%; display: grid; place-content: center; text-align: center; }
+.pp-slot-more { border-style: dashed; }
+.pp-slot small { font: 6.5pt system-ui, sans-serif; color: #555; }
+.pp-unlimited { border: .6mm dashed #1e1e1e; border-radius: 3mm; padding: 6mm 3mm; font: 700 10pt var(--hand); }
+
+/* player aid */
+.pp-aid { padding: 4mm 5mm; border-top: 1.5mm solid var(--seat) !important; }
+.pp-aid h3 { font-size: 12pt; }
+.pp-aid h4 { font-size: 10pt; margin-top: 1.5mm; }
+.pp-aid-cols { display: grid; grid-template-columns: 1fr 62mm; gap: 5mm; font-size: 8.5pt; }
+.pp-aid ol, .pp-aid ul { margin: 0; padding-left: 4mm; }
+.pp-aid p { margin: 0 0 1mm; }
+.pp-dice { border-collapse: collapse; width: 100%; margin-bottom: 1.5mm; font-size: 8pt; }
+.pp-dice caption { text-align: left; font-weight: 700; }
+.pp-dice td { border-bottom: .2mm solid #ccc; padding: .3mm 1mm; }
+.pp-dice td:first-child { width: 12mm; font-weight: 700; }
+
+/* cards */
+.pp-grid > .pp-card { padding: 4mm; display: flex; flex-direction: column; gap: 2mm; }
+.pp-card h3 { font-size: 14pt; }
+.pp-card p { margin: 0; }
+.pp-summary { font-style: italic; }
+.pp-foot { margin-top: auto; font-size: 7pt; color: #777; text-align: center; }
+.pp-objective { background: linear-gradient(#f3e8ff, #fff 30mm); }
+.pp-research { background: linear-gradient(#e7f5ff, #fff 30mm); }
+.pp-grid > .pp-back { padding: 3mm; background: #2b2d42; color: #fff; }
+.pp-back > div { height: 100%; border: .6mm solid #fff; border-radius: 3mm; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3mm; text-align: center; }
+.pp-back b { font: 700 16pt var(--hand); }
+.pp-backs .pp-grid > * { outline-color: transparent; }
+
+/* mini cards: parts and workers */
+.pp-grid > .pp-mini { padding: 3mm; display: flex; flex-direction: column; gap: 1.5mm; }
+.pp-mini h4 { font-size: 11pt; }
+.pp-mini p { margin: 0; font-size: 11pt; font-weight: 700; }
+.pp-part-arm { background: linear-gradient(#ebfbee, #fff 18mm); }
+.pp-part-leg { background: linear-gradient(#fff4e6, #fff 18mm); }
+.pp-part-chest { background: linear-gradient(#ffe3e3, #fff 18mm); }
+.pp-part-head { background: linear-gradient(#e5dbff, #fff 18mm); }
+.pp-grid > .pp-worker { padding: 0; gap: 0; }
+.pp-worker > div { flex: 1; display: grid; place-content: center; text-align: center; background: var(--seat); color: #fff; }
+.pp-worker > div > div { display: grid; }
+.pp-worker b { font: 700 14pt var(--hand); }
+.pp-worker small { font-size: 8pt; }
+.pp-flip { rotate: 180deg; }
+.pp-fold { border-top: .3mm dashed #fff; }
+
+/* round tokens */
+.pp-grid > .pp-token { outline: none; border: .3mm dashed #999; border-radius: 50%; display: grid; place-content: center; text-align: center; line-height: 1.1; }
+.pp-token b { font: 700 13pt var(--hand); }
+.pp-token small { font-size: 6pt; }
+.pp-coin-1 { background: #fff3bf; }
+.pp-coin-5 { background: #ffd43b; }
+.pp-marker { background: #e9ecef; }
+.pp-grid > .pp-seat { background: var(--seat); color: #fff; }
+
+/* the rulebook */
+.pp-flow { padding: 12mm 14mm; font-size: 10.5pt; line-height: 1.45; }
+.pp-rulebook h1 { font: 700 24pt var(--hand); margin: 0 0 4mm; }
+.pp-rulebook h2 { font-size: 16pt; margin-top: 7mm; border-bottom: .4mm solid #1e1e1e; break-after: avoid; }
+.pp-rulebook h3 { font-size: 12.5pt; margin-top: 4mm; break-after: avoid; }
+.pp-rulebook table { border-collapse: collapse; margin: 2mm 0; break-inside: avoid; }
+.pp-rulebook th, .pp-rulebook td { border: .25mm solid #999; padding: 1mm 2mm; vertical-align: top; }
+.pp-rulebook th { background: #f1f3f5; }
+.pp-rulebook blockquote { margin: 2mm 0; padding: 1mm 4mm; border-left: 1mm solid #ffd43b; background: #fff9db; }
+.pp-rulebook code { font-size: 9pt; }
+.pp-rulebook li { margin: .5mm 0; }
+.pp-error { color: #c92a2a; }
+
+@media (max-width: 760px) {
+  .print-view .pp-view { grid-template-columns: 1fr; }
+  .pp-controls { position: static; height: auto; border-right: 0; }
+  .pp-pages { overflow-x: auto; justify-content: start; }
+}
+
+@media print {
+  body.print-view { background: #fff; }
+  .print-view .pp-view { display: block; }
+  .pp-controls { display: none; }
+  .pp-pages { display: block; padding: 0; }
+  .pp-page { box-shadow: none; break-after: page; margin: 0; }
+  .pp-page:last-child { break-after: auto; }
+  .pp-page, .pp-page * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

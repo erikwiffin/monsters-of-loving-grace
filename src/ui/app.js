@@ -581,6 +581,7 @@ function renderMenu() {
         ${ui.menuError ? `<p class="warn">${esc(ui.menuError)}</p>` : ''}
         <h2>Learn</h2>
         <button data-act="rules">Rules summary</button>
+        <button data-act="print-and-play">Print and play</button>
         <label class="debug-toggle"><input type="checkbox" id="debug" ${ui.debug ? 'checked' : ''}> Developer / debug mode <small>(reveals hidden information)</small></label>
       </section>
     </div>
@@ -761,6 +762,7 @@ const handlers = {
     act(cmd);
     render();
   },
+  'print-and-play'() { window.open('?print', '_blank', 'noopener'); },
   'debug-panel'() { ui.modal = { kind: 'debug' }; render(); },
   'dbg-dispatch'() {
     let cmd;

@@ -57,6 +57,10 @@
     </div>
   </template>
 
-  <script type="module" src="src/ui/app.js"></script>
+  <!-- index.html?print opens the print-and-play view (spec 032) instead of the game. -->
+  <script type="module">
+    if (new URLSearchParams(location.search).has('print')) import('./src/ui/print.js');
+    else import('./src/ui/app.js');
+  </script>
 </body>
 </html>
