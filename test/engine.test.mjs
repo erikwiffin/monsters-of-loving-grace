@@ -1057,3 +1057,14 @@ test('default research: Parish Benefactor adds 1 to each charity unit; Moral Phi
   s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' });
   assert.equal(s.suspicion, 2, 'charity -2, Benefactor -1');
 });
+
+test('research: per-hunter ferocity may skip the first hunters and never goes below zero', () => {
+  const research = { blood: { name: 'Transfusion', effects: [{ kind: 'ferocity', amount: 2, per: 'rivalHunters', beyond: 1 }] } };
+  const s = createGame({ playerCount: 4, research }, 'beyond');
+  player(s, 'p1').research = ['blood'];
+  assert.equal(controlThreshold(s, 'p1'), 20, 'no hunters');
+  garrison(s, 'p2');
+  assert.equal(controlThreshold(s, 'p1'), 20, 'the first hunter is free');
+  garrison(s, 'p2', 'p3', 'p4');
+  assert.equal(controlThreshold(s, 'p1'), 24);
+});

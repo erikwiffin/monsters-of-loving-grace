@@ -82,7 +82,7 @@ function effectKey(e) {
 }
 function effectUnits(e) {
   if (e.kind === 'resurrection' || e.kind === 'control') return effectValue(e);
-  if (e.per === 'rivalHunters') return (e.amount ?? 1) * 2; // about two hunters per monster
+  if (e.per === 'rivalHunters') return (e.amount ?? 1) * Math.max(0, 2 - (e.beyond || 0)); // about two hunters per monster
   if (e.kind === 'reroll' || e.kind === 'noGarrison' || e.kind === 'pursuit') return e.uses ?? 1;
   return e.amount ?? 1;
 }

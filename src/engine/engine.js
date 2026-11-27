@@ -71,6 +71,7 @@ function validateConfig(cfg) {
       if (e.per !== undefined && !RESEARCH_MULTIPLIERS.has(e.per)) throw new Error(`research ${id}: unknown multiplier ${e.per}`);
       if (e.kind === 'reroll' && !ATTRIBUTES.includes(e.attribute)) throw new Error(`research ${id}: reroll needs an attribute`);
       if (e.amount !== undefined && !Number.isInteger(e.amount)) throw new Error(`research ${id}: amount must be an integer`);
+      if (e.beyond !== undefined && (!Number.isInteger(e.beyond) || e.beyond < 0)) throw new Error(`research ${id}: beyond must be a non-negative integer`);
     }
   }
   for (const [id, a] of Object.entries(cfg.actions)) {
@@ -1082,7 +1083,8 @@ export function controlThreshold(s, creatorId = null) {
     if (!copies) continue;
     for (const e of def.effects) {
       if (e.kind !== 'ferocity') continue;
-      const times = e.per === 'rivalHunters' ? s.players.filter((x) => x.id !== creatorId && canSubdueOthers(s, x.id)).length : 1;
+      // Per hunter: once for each rival able to subdue the monster, after the first `beyond`.
+      const times = e.per === 'rivalHunters' ? Math.max(0, s.players.filter((x) => x.id !== creatorId && canSubdueOthers(s, x.id)).length - (e.beyond || 0)) : 1;
       ferocity += copies * e.amount * times;
     }
   }
