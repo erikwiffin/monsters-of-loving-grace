@@ -20,7 +20,7 @@ Effects are defined as data (spec 010), not scripts.
 
 ## Market and deck
 
-The research deck has four copies of each type, 28 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken from the market by the research action, the market refills immediately from the top of the deck while cards remain. There is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
+Each type has its own number of copies in the research deck, set by how much it affects the game: weak, stackable modifiers have four, rule-bending abilities may be singletons, and cards in between have two or three. A type with no count of its own uses the default of four. The default deck has four copies of each of the seven types above, 28 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken from the market by the research action, the market refills immediately from the top of the deck while cards remain. There is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
 
 Experiments draw from the top of the deck instead of the market, and put the cards they don't keep back at the bottom (spec 022). The deck order is hidden; only its size is public.
 

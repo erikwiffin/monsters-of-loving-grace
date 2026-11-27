@@ -58,7 +58,7 @@ Only these things raise suspicion:
 
 **Ruling:** a stable Creature adds no suspicion. A subdue destroys the monster before its +1 is added, so a mob formed by a subdue is an ordinary mob, won by the Inquisitor (spec 025).
 
-Only charity lowers it (−2). Specs 022 and 025 give the details. Suspicion never rises automatically, at dawn or over time, and dawn does not change it.
+Specs 022 and 025 give the details. Suspicion never rises automatically, at dawn or over time, and dawn does not change it.
 
 There is no individual suspicion per player in this version.
 
