@@ -121,3 +121,30 @@ the two remaining hunters about a quarter of the time. An unmodified body
 stabilizes 0.25% of the time, and Humanity has few sources (four copies of
 Moral Philosophy, each published copy helping every player equally), so no
 policy can count on winning before round 6, which a 90% win rate would need.
+
+## Best response, after the heuristic's repairs (main #8 and this branch)
+
+`node bin/best-response.mjs --games 300`: one seat of each role plays the
+challenger, everyone else the standard heuristic; same seeds for both.
+Win rate of that seat:
+
+| Role | Challenger | Standard | Challenger | Gap (95%) | 3p | 4p | 5p | 6p |
+|---|---|---:|---:|---|---|---|---|---|
+| Prometheus | tuned weights | 34.5% | 41.1% | +6.6 [2.7, 10.5] | 42.7→40.3 | 49.0→52.3 | 22.0→33.0 | 24.3→38.7 |
+| Prometheus | behaviour tree | 34.5% | 39.4% | +4.9 [1.1, 8.8] | 42.7→43.3 | 49.0→45.7 | 22.0→34.3 | 24.3→34.3 |
+| Visionary | tuned weights | 12.4% | 14.6% | +2.2 [−1.3, 5.6] | | 9.6→15.2 | 14.5→14.5 | 13.0→14.1 |
+| Inquisitor | tuned weights | 11.4% | 11.0% | −0.4 [−3.3, 2.4] | 2.7→1.4 | 0.8→1.7 | 25.2→24.0 | 15.7→15.7 |
+| Unleasher | tuned weights | 12.2% | 12.0% | −0.2 [−3.0, 2.6] | 39.1→36.9 | 8.2→7.8 | 4.8→4.4 | 1.3→3.0 |
+
+- The standard heuristic under-plays Prometheus at five and six players by
+  10–15 points, and two different challengers agree. Prometheus balance
+  numbers at those counts measure the AI as much as the rules.
+- The repaired heuristic has caught up with the behaviour tree at three and
+  four players; the tree's lead is now only at five and six.
+- Tuning found nothing measurable for the other roles. Their searches (six
+  generations of ten candidates, 160 games each, at four and five players)
+  are too noisy for roles that win 5–15% of the time: they need more games
+  per candidate, or tuning at the counts where the role wins most.
+- The tuned Prometheus never garrisons (`garrisonAlert` 8, above a whole
+  body) and values preparing higher. Worth checking whether garrisoning is
+  worth its Igor for a Prometheus at all.
