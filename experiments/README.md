@@ -74,3 +74,16 @@ one round (7 → 8), and resurrection attempts per game rise from 1–1.8 to
 
 Still open: the 3-player Unleasher (≈0.4), the Inquisitor's tilt (low at
 4, high at 5), and the 3-player no-winner share (≈0.1 vs 0.25).
+
+## The Hue and Cry (`hue-and-cry.json`, 3 players only)
+
+When no player subdues a monster at a table of at most `maxPlayers`, the
+villagers make one last roll: d20 + suspicion (+ `perGarrison` per Igor in
+the watch house, whoever owns it) against 20. A success burns the monster (no
+salvage) and adds `suspicion` (2), attributed to its creator. Inert unless
+`hueAndCry` is configured.
+
+3 players, 150 games per policy set (pro/inq/unl, truncated):
+baseline .38/.03/.30, 13%; candidate .38/.07/.25, 15%; with +1 per watch Igor
+.39/.06/.17, 21%; with +2 per watch Igor .41/.05/.11, 21%; candidate plus
+Arctic Pursuit .40/.06/.18, 18%. Awaiting the designer's decision; not in specs.

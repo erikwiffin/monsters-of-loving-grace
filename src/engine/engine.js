@@ -57,6 +57,12 @@ function validateConfig(cfg) {
   for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSuspicion', 'subdueSalvage']) {
     if (!Number.isInteger(cfg.control[k]) || cfg.control[k] < 0) throw new Error(`control.${k} must be a non-negative integer`);
   }
+  if (cfg.hueAndCry != null) {
+    const h = cfg.hueAndCry;
+    if (!isPlainObject(h) || !ALLOWED_DICE.includes(h.die)) throw new Error('hueAndCry.die must be a supported die');
+    for (const k of ['maxPlayers', 'threshold']) if (!Number.isInteger(h[k])) throw new Error(`hueAndCry.${k} must be an integer`);
+    for (const k of ['perSuspicion', 'perGarrison', 'suspicion']) if (h[k] !== undefined && (!Number.isInteger(h[k]) || h[k] < 0)) throw new Error(`hueAndCry.${k} must be a non-negative integer`);
+  }
   for (const [id, v] of Object.entries(cfg.partVariants)) {
     if (!cfg.partTypes[v.type]) throw new Error(`part variant ${id} has unknown type ${v.type}`);
     for (const e of v.effects) validateEffect(e, `part variant ${id}`);
@@ -924,6 +930,8 @@ function advance(s) {
             continue;
           }
         }
+        // Experimental: at small tables the village itself raises the hue and cry.
+        if (hueAndCry(s)) continue;
         unleash(s, 'no_one_subdued');
         continue;
       }
@@ -1186,6 +1194,41 @@ function declineSubdue(s, pid) {
   if (k.pursuit) return;
   // The mob cannot stop a monster: if it forms now, the monster is unleashed.
   changeSuspicion(s, s.config.control.declineSuspicion, 'monster_not_subdued', pid, mobCannotStopMonster);
+}
+
+/**
+ * Experimental (config.hueAndCry, inert unless set): when a monster is about
+ * to be unleashed at a table of at most `maxPlayers`, the villagers make one
+ * last roll against it: d`die` + `perSuspicion` x suspicion + `perGarrison` x
+ * Igors in the watch house (whoever owns them) >= `threshold`. On a success the
+ * monster is destroyed and burned (no salvage) and suspicion rises by
+ * `suspicion`, attributed to its creator. Returns whether it was destroyed.
+ */
+function hueAndCry(s) {
+  const h = s.config.hueAndCry;
+  const k = s.control;
+  if (!h || s.players.length > h.maxPlayers || k.hueAndCry) return false;
+  k.hueAndCry = true;
+  const watch = (s.occupancy.day.garrison || []).filter((wid) => s.workers[wid] && s.workers[wid].kind === 'igor').length;
+  const base = rollDie(s.rng, h.die);
+  const bonus = (h.perSuspicion || 0) * s.suspicion + (h.perGarrison || 0) * watch;
+  const score = base + bonus;
+  const success = score >= h.threshold;
+  emit(s, 'DIE_ROLLED', { playerId: null, purpose: 'hue_and_cry', source: { kind: 'village' }, die: h.die, sign: 1, result: base });
+  emit(s, 'HUE_AND_CRY', { creatureId: k.creatureId, suspicion: s.suspicion, watch, result: base, bonus, score, threshold: h.threshold, success });
+  k.record.hueAndCry = { score, threshold: h.threshold, success };
+  if (!success) return false;
+  const c = s.creatures[k.creatureId];
+  c.status = 'destroyed';
+  c.disposition = 'subdued';
+  c.subduedBy = 'village';
+  k.record.outcome = 'subdued';
+  k.record.subduedBy = 'village';
+  s.resurrections.push(k.record);
+  s.control = null;
+  emit(s, 'MONSTER_BURNED', { creatorId: c.ownerId, creatureId: c.id });
+  if (h.suspicion) changeSuspicion(s, h.suspicion, 'hue_and_cry', c.ownerId);
+  return true;
 }
 
 function unleash(s, cause) {

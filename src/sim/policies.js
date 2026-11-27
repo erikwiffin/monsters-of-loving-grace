@@ -265,7 +265,17 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const vs = (p) => (p.controlChanceVs ? p.controlChanceVs[me.id] : p.controlChance);
         let escape = me.controlAttempts > 0 ? 1 - vs(me) : 1;
         for (const p of rivals) if ((p.canSubdueOthers ?? p.garrisoned) && p.controlAttempts > 0) escape *= 1 - 0.8 * vs(p);
-        return escape;
+        return escape * (1 - hueAndCryChance());
+      };
+      // Experimental hue and cry: the village's last roll, at the suspicion a
+      // decline or two would leave (spec-free; inert unless configured).
+      const hueAndCryChance = () => {
+        const h = cfg.hueAndCry;
+        if (!h || view.players.length > h.maxPlayers) return 0;
+        const watch = Object.values((view.occupancy.day || {}).garrison || []).length;
+        const sus = Math.min(view.suspicionMax - 1, view.suspicion + cfg.control.declineSuspicion);
+        const need = h.threshold - (h.perSuspicion || 0) * sus - (h.perGarrison || 0) * watch;
+        return Math.min(1, Math.max(0, (h.die - need + 1) / h.die));
       };
       const preparedRivals = rivals.filter((p) => (view.prepared || []).includes(p.id));
       // Chance that at least one rival who has prepared tonight stabilizes.
@@ -444,7 +454,8 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             // A garrisoned worker lets its owner subdue rivals' monsters; for
             // the Unleasher, filling the space keeps others from doing so.
             if (!rivalsNearlyReady) return -0.2;
-            if (objective === 'unleasher') return 3.5;
+            // Unless the watch hunts for the village, whoever posted it there.
+            if (objective === 'unleasher') return cfg.hueAndCry && cfg.hueAndCry.perGarrison && view.players.length <= cfg.hueAndCry.maxPlayers ? -0.5 : 3.5;
             if (me.garrisoned || me.canSubdueOthers || me.controlAttempts === 0) return -0.2;
             // Take a scarce garrison slot before an Unleasher can fill it.
             const gCap = (view.capacities || {}).garrison;
