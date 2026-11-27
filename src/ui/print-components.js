@@ -86,6 +86,11 @@ function capacities(cfg, actionId) {
   });
 }
 
+/** Copies of a research type in the deck: its own count, or the default (spec 023). */
+export function researchCopiesOf(cfg, type) {
+  return cfg.research[type].copies ?? cfg.researchCopies;
+}
+
 /** The most copies of each objective that any player count's deck needs. */
 export function objectiveCopies(cfg) {
   const most = {};
@@ -129,7 +134,7 @@ const brand = '<span class="pp-brand">Monsters of Loving Grace</span>';
 function villageBoard(cfg) {
   const track = range(cfg.suspicionMax + 1).map((v) => `<span class="pp-box${v === cfg.suspicionMax ? ' pp-mob' : ''}">${v}${v === cfg.suspicionMax ? '<small>MOB</small>' : ''}</span>`).join('');
   const market = range(cfg.marketSize).map((i) => `<div class="pp-cardslot"><b>Market</b><small>slot ${i + 1}</small></div>`).join('');
-  const deckSize = Object.keys(cfg.research).length * cfg.researchCopies;
+  const deckSize = Object.keys(cfg.research).reduce((a, t) => a + researchCopiesOf(cfg, t), 0);
   return `<div class="pp-board">
     <h2>${brand}<span>The village</span></h2>
     <section><h3>Suspicion <small>starts at 0 · the mob forms at ${cfg.suspicionMax}</small></h3><div class="pp-track pp-track-line">${track}</div></section>
@@ -157,7 +162,9 @@ function actionTile(cfg, id, def) {
 
 function playerSheet(cfg, seat) {
   const slot = (s) => `<div class="pp-bodyslot" style="grid-area:${s}"><b>${esc(cfg.partTypes[s.replace(/\d$/, '')]?.name || s)}</b></div>`;
-  const attemptsMax = cfg.control.startingAttempts + cfg.researchCopies;
+  // Every printed copy of an extra-attempt card could end up counting for one player.
+  const attemptsMax = cfg.control.startingAttempts + Object.keys(cfg.research).reduce((a, t) => a + researchCopiesOf(cfg, t)
+    * cfg.research[t].effects.filter((e) => e.kind === 'controlAttempts').reduce((x, e) => x + e.amount, 0), 0);
   const attempts = range(attemptsMax + 1).map((v) => `<span class="pp-box pp-box-s${v === cfg.control.startingAttempts ? ' pp-start' : ''}">${v}</span>`).join('');
   const t = partDrawTables(cfg);
   const r = cfg.resurrection;
@@ -280,7 +287,7 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
       })) },
     { id: 'research', name: 'Research cards', layout: 'card', components:
       Object.keys(cfg.research).map((id) => ({
-        id: `research:${id}`, name: cfg.research[id].name, copies: cfg.researchCopies, render: () => researchCard(cfg, id),
+        id: `research:${id}`, name: cfg.research[id].name, copies: researchCopiesOf(cfg, id), render: () => researchCard(cfg, id),
       })) },
     { id: 'parts', name: 'Body parts', layout: 'part', components:
       Object.keys(cfg.partVariants).map((id) => ({

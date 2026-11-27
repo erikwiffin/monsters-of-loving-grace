@@ -40,20 +40,68 @@ function variantValue(cfg, variantId, objective) {
   return cfg.partVariants[variantId].effects.reduce((a, e) => a + effectValue(e) * (e.attribute === 'vitality' ? 1 : humanityWeight), 0);
 }
 
-// How much each objective wants a research type, in money.
-const RESEARCH_WANT = {
-  unleasher: { galvanism: 4.5, neurology: 0.5, philosophy: 0.5, mesmerism: 0.5, restraint: 0.5, medicine: 2.5, discretion: 1.5 },
-  inquisitor: { galvanism: 0.5, neurology: 1, philosophy: 1, mesmerism: 1.5, restraint: 1.5, medicine: 3, discretion: 0 },
-  default: { galvanism: 4, neurology: 3.5, philosophy: 4.5, mesmerism: 4, restraint: 4, medicine: 2.5, discretion: 1.5 },
+// How much each objective wants one unit of each research effect, in money.
+// A unit is a mean point for dice and modifiers, or one of the effect's amount.
+// Values come from the configuration's effects, so new research types are
+// valued without a per-type table (spec 016).
+const EFFECT_WANT = {
+  vitality: { default: 1.15, unleasher: 1.3, inquisitor: 0.15 },
+  humanity: { default: 0.9, visionary: 1.0, unleasher: -0.3, inquisitor: 0.2 },
+  control: { default: 1.0, unleasher: 0.12, inquisitor: 0.37 },
+  controlAttempts: { default: 3.5, unleasher: 0.5, inquisitor: 1 },
+  medicineBonus: { default: 2.5, inquisitor: 3 },
+  suspicionReduction: { default: 1.5, inquisitor: 0 },
+  ferocity: { default: -0.3, unleasher: 1.0, inquisitor: 0.1 },
+  rerollvitality: { default: 4, unleasher: 4.5, inquisitor: 0.3 },
+  rerollhumanity: { default: 3.5, unleasher: -1, inquisitor: 0.3 },
+  noGarrison: { default: 3, unleasher: 0, inquisitor: 0.5 },
+  researchCalm: { default: 1.5, inquisitor: -2 },
+  gravesBonus: { default: 2, inquisitor: 1.5 },
+  sellBonus: { default: 0.4 },
+  charityBonus: { default: 1, inquisitor: 0 },
+  specimenDiscount: { default: 1.2, inquisitor: 0.3 },
+  quietFailure: { default: 1, inquisitor: -0.5 },
+  pursuit: { default: 2.5, unleasher: 0, inquisitor: 0.3 },
+  discoveryBoost: { default: -1.5, inquisitor: 3 },
 };
-// Conducting research publishes the card. Types an objective would rather keep
-// from rivals cost it this much to publish.
-const PUBLISH_PENALTY = {
-  prometheus: { philosophy: 1.5, galvanism: 1 },
+// Conducting research publishes the card, giving every rival a copy. What one
+// unit in rivals' hands costs each objective (negative: it gains).
+const PUBLISH_HARM = {
+  prometheus: { vitality: 0.3, humanity: 0.3 },
   visionary: {},
-  inquisitor: { discretion: 2, philosophy: 1.5 },
-  unleasher: { philosophy: 2, neurology: 1.5, mesmerism: 1.5, restraint: 1.5 },
+  inquisitor: { discoveryBoost: -2, suspicionReduction: 2, researchCalm: 2, charityBonus: 1, humanity: 0.3, quietFailure: 1 },
+  unleasher: { humanity: 0.4, control: 0.4, controlAttempts: 1.5, noGarrison: 2, ferocity: -1, rerollhumanity: 1.5, pursuit: 2 },
 };
+// How many rivals a Visionary-style effect expects to share a round with.
+const RIVALS_PREPARING = { default: 0.4, visionary: 1.2, prometheus: 0.2, unleasher: 0.3, inquisitor: 0 };
+
+function effectKey(e) {
+  if (e.kind === 'resurrection') return e.attribute;
+  if (e.kind === 'reroll') return `reroll${e.attribute}`;
+  return e.kind;
+}
+function effectUnits(e) {
+  if (e.kind === 'resurrection' || e.kind === 'control') return effectValue(e);
+  if (e.per === 'rivalHunters') return (e.amount ?? 1) * Math.max(0, 2 - (e.beyond || 0)); // about two hunters per monster
+  if (e.kind === 'reroll' || e.kind === 'noGarrison' || e.kind === 'pursuit') return e.uses ?? 1;
+  return e.amount ?? 1;
+}
+const pick = (table, objective) => (table ? (table[objective] ?? table.default ?? 0) : 0);
+
+/** What a research type is worth to an objective, and what publishing it costs. */
+function researchWorth(cfg, type, objective) {
+  const def = cfg.research[type];
+  let want = 0;
+  let harm = 0;
+  for (const e of def.effects) {
+    const key = effectKey(e);
+    let units = effectUnits(e);
+    if (e.per === 'rivalPrepared') units *= pick(RIVALS_PREPARING, objective);
+    want += units * pick(EFFECT_WANT[key], objective);
+    harm += units * ((PUBLISH_HARM[objective] || {})[key] || 0);
+  }
+  return { want, harm };
+}
 const UNLEASHER_MAX_STABLE = 0.05;
 const VISIONARY_MIN_RIVALS = 3;
 const GARRISON_ALERT_PARTS = 5; // installed plus fitting loose parts
@@ -94,7 +142,17 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const me = view.players.find((p) => p.id === view.viewerId);
       const objective = view.private.objective;
       const cfg = view.config;
-      const want = RESEARCH_WANT[objective] || RESEARCH_WANT.default;
+      // A special ability (stacks: false) is worthless to a player who already
+      // has it through a rival's publication.
+      const want = {};
+      const publishPenalty = {};
+      for (const t of Object.keys(cfg.research)) {
+        const w = researchWorth(cfg, t, objective);
+        const redundant = cfg.research[t].stacks === false && (me.effectiveResearch[t] || 0) >= 1;
+        want[t] = redundant ? 0 : w.want;
+        // Rivals who already have a special ability lose nothing more.
+        publishPenalty[t] = w.harm * (cfg.research[t].stacks === false ? 0.6 : 1);
+      }
 
       if (view.pendingPick) {
         // Keep the drawn research card this objective wants most.
@@ -111,7 +169,13 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const declineBringsMob = view.suspicion + cfg.control.declineSuspicion >= view.suspicionMax;
         let doSubdue;
         if (objective === 'unleasher') doSubdue = false;
-        else if (objective === 'inquisitor') doSubdue = last || declineBringsMob; // a mob during the chain frees the monster
+        else if (objective === 'inquisitor') {
+          // An unleashing loses for the Inquisitor. It declines (adding suspicion)
+          // only if another player able to subdue, not the creator, comes after
+          // it, or never if declining would bring the mob (which frees the monster).
+          const otherHunter = k.upcoming.some((pid) => pid !== k.creatorId);
+          doSubdue = !otherHunter || declineBringsMob;
+        }
         else if (objective === 'prometheus') doSubdue = k.creatorId === me.id || last || declineBringsMob || me.controlAttempts > 1;
         else doSubdue = true;
         return legal.find((c) => c.subdue === doSubdue) || legal[0];
@@ -132,7 +196,13 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       // threshold minus the rise over the last full round (at least 2).
       const dangerLine = view.suspicionMax - Math.max(2, recentRise) - 1 - (st.suspicionCost > 1 ? 1 : 0);
       const excess = Math.max(0, view.suspicion - dangerLine);
-      const reduction = me.effectiveResearch.discretion * ((cfg.research.discretion && cfg.research.discretion.effects[0].amount) || 0);
+      // My total research bonus of an effect kind (one entry per effective copy).
+      const bonus = (kind) => Object.entries(cfg.research).reduce((a, [t, d]) => a + (me.effectiveResearch[t] || 0) * d.effects.filter((e) => e.kind === kind).reduce((x, e) => x + (e.amount ?? 1), 0), 0);
+      const reduction = bonus('suspicionReduction');
+      const gravesParts = (cfg.actions.graves ? cfg.actions.graves.parts : 0) + bonus('gravesBonus');
+      const sellGain = (cfg.actions.sell ? cfg.actions.sell.gain : 0) + bonus('sellBonus');
+      const charityCut = (cfg.actions.charity ? cfg.actions.charity.reduction : 0) + bonus('charityBonus');
+      const specimenCost = Math.max(0, (cfg.actions.specimens ? cfg.actions.specimens.cost : 0) - bonus('specimenDiscount'));
       // Money matters less the more of it a player already holds.
       let moneyValue = me.money < 4 ? 1.5 : me.money < 10 ? 1 : me.money < 20 ? 0.5 : 0.2;
       // The Inquisitor builds nothing: money matters only for hiring more
@@ -182,7 +252,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       };
       const rivalsNearlyReady = rivals.filter((p) => installedPlusLoose(p) >= GARRISON_ALERT_PARTS).length;
       const unknownTypes = Object.keys(cfg.research).filter((t) => !me.research.includes(t));
-      const meanWant = unknownTypes.length ? unknownTypes.reduce((a, t) => a + (want[t] || 1), 0) / unknownTypes.length : 0;
+      const meanWant = unknownTypes.length ? unknownTypes.reduce((a, t) => a + Math.max(0, want[t] ?? 1), 0) / unknownTypes.length : 0;
       const remaining = Math.max(0, EXPECTED_ROUNDS - view.round);
 
       // Whether to commit to a resurrection tonight (preparing is public and binding).
@@ -192,8 +262,9 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       // an attempt), then every garrisoned rival with an attempt, each of whom
       // might also decline (an Unleasher would).
       const pUnleashed = () => {
-        let escape = me.controlAttempts > 0 ? 1 - me.controlChance : 1;
-        for (const p of rivals) if (p.garrisoned && p.controlAttempts > 0) escape *= 1 - 0.8 * p.controlChance;
+        const vs = (p) => (p.controlChanceVs ? p.controlChanceVs[me.id] : p.controlChance);
+        let escape = me.controlAttempts > 0 ? 1 - vs(me) : 1;
+        for (const p of rivals) if ((p.canSubdueOthers ?? p.garrisoned) && p.controlAttempts > 0) escape *= 1 - 0.8 * vs(p);
         return escape;
       };
       const preparedRivals = rivals.filter((p) => (view.prepared || []).includes(p.id));
@@ -226,7 +297,8 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
           return false;
         }
         if (objective === 'unleasher') {
-          const pEscape = pUnleashed() / (me.controlAttempts > 0 ? 1 - me.controlChance : 1); // it won't subdue its own
+          const mine = me.controlChanceVs ? me.controlChanceVs[me.id] : me.controlChance;
+          const pEscape = pUnleashed() / (me.controlAttempts > 0 ? 1 - mine : 1); // it won't subdue its own
           return pEscape >= 0.5
             ? odds.pMonster * pEscape > odds.pStable
             : odds.pMonster > odds.pStable * 4 && odds.pStable <= UNLEASHER_MAX_STABLE;
@@ -251,7 +323,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         // Everyone plans graves when it pays (parts that don't fit can be sold).
         // Graves fill only about a third of rounds, so the Inquisitor plans on
         // every slot; builders, who also bear the suspicion, plan on fewer.
-        const gravesValue = g ? g.parts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
+        const gravesValue = g ? gravesParts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
         for (let i = 0; g && i < (wantsSuspicion ? capOf('graves') : slots('graves')); i++) jobs.push(gravesValue);
         const sl = cfg.actions.sell;
         // Spare parts on hand (plus, for the Inquisitor, tonight's grave haul)
@@ -265,7 +337,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
           spareCount -= 1;
         }
         if (sl) {
-          const sellValue = sl.gain * moneyValue - sl.parts * (wantsSuspicion ? 0.3 : spareValue) - expectedSuspicion(sl, reduction) * suspicionPrice;
+          const sellValue = sellGain * moneyValue - sl.parts * (wantsSuspicion ? 0.3 : spareValue) - expectedSuspicion(sl, reduction) * suspicionPrice;
           for (let i = 0; i < Math.min(slots('sell'), Math.floor(Math.max(0, spareCount) / sl.parts)); i++) jobs.push(sellValue);
         }
         if (me.bodyComplete && shouldAttempt()) jobs.push(12); // the Scientist prepares
@@ -321,8 +393,8 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
           case 'medicine': return (def.gain + me.effectiveResearch.medicine) * moneyValue * 0.8 - sciTax;
           case 'research': {
             const card = view.market.find((k) => k.id === c.choices.researchCardId);
-            const pen = (PUBLISH_PENALTY[objective] || {})[card.type] || 0;
-            return (want[card.type] || 1) - pen - def.cost * moneyValue * 0.6 - sciTax + denial('research');
+            const pen = publishPenalty[card.type] || 0;
+            return (want[card.type] ?? 1) - pen - def.cost * moneyValue * 0.6 - sciTax + denial('research');
           }
           case 'experiment': {
             // Draw one card per discarded part; keep the best eligible one,
@@ -342,18 +414,18 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
               const t = cfg.partVariants[vid].type;
               if (left[t] > 0) left[t]--;
             }
-            return v - def.cost * moneyValue * 0.6 - sciTax + denial('specimens');
+            return v - specimenCost * moneyValue * 0.6 - sciTax + denial('specimens');
           }
           case 'graves':
-            return def.parts * randomPartValue - susCost - sciTax;
+            return gravesParts * randomPartValue - susCost - sciTax;
           case 'sell': {
             const lost = c.choices.partIds.reduce((acc, id) => acc + partValue(me.loose.find((x) => x.id === id).variantId), 0);
-            return def.gain * moneyValue - lost - susCost - sciTax;
+            return sellGain * moneyValue - lost - susCost - sciTax;
           }
           case 'hire': return def.cost > me.money ? -1 : (cfg.actions.medicine ? cfg.actions.medicine.gain : 2) * Math.min(remaining, 5) * 0.35 - def.cost * moneyValue * 0.6 - sciTax;
           case 'charity': {
             const units = (c.choices && c.choices.units) || 1;
-            const cut = Math.min(units * def.reduction, view.suspicion);
+            const cut = Math.min(units * charityCut, view.suspicion);
             const pay = units * def.cost * moneyValue * 0.6;
             if (wantsSuspicion) {
               // The Inquisitor takes a scarce charity slot as cheaply as it can,
@@ -372,12 +444,12 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             // the Unleasher, filling the space keeps others from doing so.
             if (!rivalsNearlyReady) return -0.2;
             if (objective === 'unleasher') return 3.5;
-            if (me.garrisoned || me.controlAttempts === 0) return -0.2;
+            if (me.garrisoned || me.canSubdueOthers || me.controlAttempts === 0) return -0.2;
             // Take a scarce garrison slot before an Unleasher can fill it.
             const gCap = (view.capacities || {}).garrison;
             const gLeft = gCap == null ? Infinity : gCap - ((view.occupancy.day || {}).garrison || []).length;
-            // The Inquisitor rarely subdues, so a garrison is worth little to it.
-            return (objective === 'inquisitor' ? 0.8 : 4.5 + (gLeft <= 1 ? 1 : 0));
+            // An unleashing loses for the Inquisitor too, so it garrisons like anyone else.
+            return 4.5 + (gLeft <= 1 ? 1 : 0);
           }
           case 'assemble': {
             if (wantsSuspicion) return 0.2;

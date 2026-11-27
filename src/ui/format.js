@@ -26,12 +26,12 @@ export const researchName = (cfg, t) => (cfg.research[t] ? cfg.research[t].name 
 export function actionText(id, def, cfg) {
   switch (id) {
     case 'medicine': return `Gain ${def.gain} money. +1 per Medical Expertise copy.`;
-    case 'research': return `Pay ${def.cost}: take an eligible research card from the market and publish it for everyone.`;
+    case 'research': return `Pay ${def.cost}: take an eligible research card from the market and publish it for everyone.${cfg.research.lectures ? ' −1 suspicion per Public Lectures copy.' : ''}`;
     case 'specimens': return `Pay ${def.cost}: choose ${def.count === 1 ? 'any named body part' : `any ${def.count} named body parts`}.`;
     case 'hire': return `Pay ${def.cost}: hire an Igor who can work at once (max ${cfg.maxIgors} Igors).`;
     case 'charity': return (def.maxUnits || 1) > 1
-      ? `Pay ${def.cost} per unit, up to ${def.maxUnits} units: suspicion −${def.reduction} per unit.`
-      : `Pay ${def.cost}: suspicion −${def.reduction}.`;
+      ? `Pay ${def.cost} per unit, up to ${def.maxUnits} units: suspicion −${def.reduction} per unit${cfg.research.benefactor ? ', −1 more per Parish Benefactor copy' : ''}.`
+      : `Pay ${def.cost}: suspicion −${def.reduction}.${cfg.research.benefactor ? ' −1 more per Parish Benefactor copy.' : ''}`;
     case 'garrison': return 'Lets you subdue other players\' monsters this round.';
     case 'graves': return `Gain ${def.parts} random parts. ${suspicionText(def.suspicion)}.`;
     case 'sell': return `Sell ${def.parts} loose parts for ${def.gain} money. ${suspicionText(def.suspicion)}.`;
@@ -101,7 +101,9 @@ export function describeEvent(e, ctx) {
     case 'CREATURE_STABILIZED': return `${n(e.playerId)}'s Creature lives — and is <b>${e.disposition.replace(/_/g, ' ')}</b>!`;
     case 'MONSTER_CREATED': return `${n(e.playerId)}'s Creature lives — but it is a <b class="danger">monster</b>! Who will subdue it?`;
     case 'SUBDUE_DECLINED': return `${n(e.playerId)} does not subdue the monster.`;
-    case 'CONTROL_SKIPPED': return e.reason === 'not_garrisoned' ? `${n(e.playerId)} has no one in the garrison and cannot subdue it.` : `${n(e.playerId)} has no control attempts left.`;
+    case 'CONTROL_SKIPPED': return e.reason === 'not_garrisoned' ? `${n(e.playerId)} has no one in the garrison and cannot subdue it.` : e.reason === 'no_pursuit' ? `${n(e.playerId)} cannot give chase.` : `${n(e.playerId)} has no control attempts left.`;
+    case 'PURSUIT_BEGUN': return `The monster flees, pursued by ${e.playerIds.map(n).join(', ')}.`;
+    case 'ATTRIBUTE_REROLLED': return `${n(e.playerId)} rerolls a failed ${e.attribute} (${e.firstScore}).`;
     case 'CONTROL_ROLLED': return `${n(e.playerId)} tries to subdue the monster: <b>${e.score}</b> vs ${e.threshold}+ ${e.success ? '✓' : '✗'}.`;
     case 'MONSTER_SUBDUED': return `${n(e.playerId)} subdues and destroys the monster (${e.attemptsLeft} control attempt${e.attemptsLeft === 1 ? '' : 's'} left), salvaging ${e.salvagedParts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
     case 'CREATURE_UNLEASHED': return `${n(e.playerId)}'s monster is <b class="danger">UNLEASHED</b>!`;

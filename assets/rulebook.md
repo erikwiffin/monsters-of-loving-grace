@@ -1,4 +1,4 @@
-<!-- rules-fingerprint: 5b02bf91 -->
+<!-- rules-fingerprint: a00f5d4d -->
 <!-- This rulebook describes the physical game. It is maintained by hand (spec 032): every change to gameplay — the 02x specs or the default configuration — updates it in the same commit, together with the fingerprint above. `npm test` prints the new fingerprint when it is out of date. -->
 
 ![Monsters of Loving Grace logo: a stitched heart struck by lightning](logo.png)
@@ -17,8 +17,8 @@ The print view prints everything except the dice and money.
 - **Village board**: the suspicion track (0–10), and spaces for the research deck and the four-card market.
 - **Action board**: one page with the 6 day spaces on the left and the 6 night spaces on the right. If a single space changes, reprint it and glue it over the old one.
 - **6 player sheets**, one per colour, each with six body slots, a control-attempt track, the random body-part table and a summary of the rules.
-- **7 objective cards**: 4 Prometheus, 1 Visionary, 1 Inquisitor, 1 Unleasher.
-- **28 research cards**: 4 copies of each of 7 types.
+- **7 objective cards**: 3 Prometheus, 1 Visionary, 1 Inquisitor, 2 Unleashers.
+- **36 research cards**: 4 copies of each of 9 types.
 - **Body part cards**: 13 named variants. The supply is meant to be unlimited; if a variant runs out, use any proxy.
 - **Worker tiles**: per colour, 1 Scientist and 3 Igors.
 - **Money (not printed)**: use coins, poker chips, or pencil and paper. Money is unlimited.
@@ -44,7 +44,7 @@ Everything is public except the objective cards and the order of the research de
 1. **Seats.** Sit in a circle. Each player takes a colour, its player sheet, its Scientist and 3 Igors, and its control-attempt marker.
 2. **Starting resources.** Each player places their Scientist and **one** Igor in front of them, ready to work. The other two Igors stay beside the sheet until hired. Each player takes **3 money** and sets their control-attempt marker on **3**.
 3. **The village.** Put the village board in the middle. Place the suspicion marker on **0**. Put the action board beside it. Sort the body part cards into a face-up supply by variant, and put the money beside it.
-4. **Research.** Shuffle the 28 research cards into a face-down deck on the village board. Deal the top **4** face up into the market.
+4. **Research.** Shuffle the 36 research cards into a face-down deck on the village board. Deal the top **4** face up into the market.
 5. **Objectives.** Build the objective deck for your player count, shuffle it, and deal one card face down to each player. Look at your own card secretly. Set the remaining card aside, unseen and face down.
 
    | Players | Prometheus | Visionary | Inquisitor | Unleasher | Cards |
@@ -52,7 +52,7 @@ Everything is public except the objective cards and the order of the research de
    | 3 | 2 | — | 1 | 1 | 4 |
    | 4 | 2 | 1 | 1 | 1 | 5 |
    | 5 | 3 | 1 | 1 | 1 | 6 |
-   | 6 | 4 | 1 | 1 | 1 | 7 |
+   | 6 | 3 | 1 | 1 | 2 | 7 |
 
 6. **First player.** Choose a first player at random and give them the first-player marker.
 
@@ -65,9 +65,9 @@ Your objective is secret. It gives you no special actions: everyone plays by the
 | **Prometheus** — *Create life.* | Your Creature is the **only** Creature that became stable this round. Checked at dawn. |
 | **Visionary** — *Witness a new age.* | **Two or more** Creatures became stable in the same round, whoever made them. Checked at dawn. Not used with 3 players. |
 | **Inquisitor** — *Expose the blasphemers.* | Suspicion reaches the mob threshold (10). |
-| **Unleasher** — *Let the monster loose.* | Any monster is unleashed, whoever made it. |
+| **Unleasher** — *Let the monster loose.* | Any monster is unleashed, whoever made it. With 6 players there are two Unleashers: they win together, though neither knows who the other is. |
 
-At most one player can win. If the role that matches the ending was not dealt to anyone, for example because it is the unseen card, everyone loses together.
+At most one player can win, except that two Unleashers win together. If the role that matches the ending was not dealt to anyone, for example because it is the unseen card, everyone loses together.
 
 ## Workers
 
@@ -88,7 +88,7 @@ At the start of night, everyone who passed is back in, and the turn returns to t
 
 ### Capacity
 
-Each action space shows a worker slot per capacity. Most spaces hold **2 workers with 3–4 players** and **3 with 5–6 players**; the dashed slot is used only with 5–6 players. *Practise medicine*, *Assemble body* and *Prepare resurrection* have no limit. *Rest* holds one worker. Workers stay on their spaces until dawn, and which workers are where is public.
+Each action space shows a worker slot per capacity. Most spaces hold **2 workers with 3–4 players** and **3 with 5–6 players**; the dashed slot is used only with 5–6 players. *Garrison the watch* holds 3 at every player count. *Practise medicine*, *Assemble body* and *Prepare resurrection* have no limit. *Rest* holds one worker. Workers stay on their spaces until dawn, and which workers are where is public.
 
 An action needs its full cost and every prerequisite. Money never goes below 0.
 
@@ -97,9 +97,9 @@ An action needs its full cost and every prerequisite. Money never goes below 0.
 | Space | Location | Effect |
 |---|---|---|
 | **Practise medicine** | Hospital | Gain 3 money, plus 1 for each effective copy of Medical Expertise. |
-| **Conduct research** | University | Pay 2. Take a market card of a type you have not discovered and **publish** it (see *Research*). Refill the market from the deck at once. |
+| **Conduct research** | University | Pay 2. Take a market card of a type you have not discovered and **publish** it (see *Research*). Refill the market from the deck at once. Then suspicion −1 for each effective copy of Public Lectures. |
 | **Buy specimens** | Anatomical supplier | Pay 2. Take any one body part of your choice from the supply. |
-| **Donate to charity** | Town hall | Pay 3. Suspicion −2, to a minimum of 0. Only allowed while suspicion is above 0. |
+| **Donate to charity** | Town hall | Pay 3. Suspicion −2, and 1 more for each effective copy of Parish Benefactor, to a minimum of 0. Only allowed while suspicion is above 0. |
 | **Hire an Igor** | Tavern | Pay 4. Take one of your reserve Igors; it can act at once. At most 3 Igors each. |
 | **Garrison the watch** | Watch house | Igors only. No cost and no immediate effect. Until dawn, you may try to subdue other players' monsters (see *Control*). |
 
@@ -169,7 +169,7 @@ The player sheet's table is generated from the game's data, so if the two ever d
 
 ## Research
 
-Research cards are permanent: they are never spent. There are seven types:
+Research cards are permanent: they are never spent. There are nine types:
 
 | Research | Effect of each effective copy |
 |---|---|
@@ -178,8 +178,10 @@ Research cards are permanent: they are never spent. There are seven types:
 | **Neural Conditioning** | +1 control attempt |
 | **Mesmerism** | Add 1d6 to control rolls |
 | **Restraining Apparatus** | Add +4 to control rolls |
-| **Moral Philosophy** | Add +5 to resurrection Humanity |
+| **Moral Philosophy** | Add +3 to resurrection Humanity |
 | **Discreet Methods** | Reduce the suspicion from each discovery roll by 1, to a minimum of 0 |
+| **Public Lectures** | When you conduct research, suspicion −1 after you publish |
+| **Parish Benefactor** | Each Donate to charity you make removes 1 more suspicion |
 
 **Two ways to discover research.** Conducting research takes a card from the market and **publishes** it. An experiment keeps a card from the deck **privately**: it is still face up for all to see, but never published. Keep published cards in one row above your player sheet and experiment discoveries in another.
 
@@ -190,7 +192,7 @@ Research cards are permanent: they are never spent. There are seven types:
 - **1** if you have that card in front of you, plus
 - **1 for each other player** who has **published** that type (a card in their published row).
 
-Your own publication doesn't count twice. Every effective copy applies in full: two copies of Galvanic Mastery roll two d6, and three of Moral Philosophy add +15. Because other players' publications count, a publication can give you new control attempts in the middle of the game: move your control marker up when it happens.
+Your own publication doesn't count twice. Every effective copy applies in full: two copies of Galvanic Mastery roll two d6, and three of Moral Philosophy add +9. Because other players' publications count, a publication can give you new control attempts in the middle of the game: move your control marker up when it happens.
 
 **The market.** The market holds 4 face-up cards. Refill it from the top of the deck as soon as a card is taken. There is no reshuffle. When the deck is empty, the market shrinks.
 
@@ -235,7 +237,7 @@ Suspicion is one shared track from 0 to 10. Only these raise it:
 - subduing a monster (+1);
 - letting a monster pass when you could have tried (+2).
 
-Only Donate to charity lowers it (−2). It never changes on its own, and a stable Creature adds none. Suspicion can't go below 0 or above 10.
+Donate to charity lowers it (−2, more with Parish Benefactor), and so does conducting research with Public Lectures. It never changes on its own, and a stable Creature adds none. Suspicion can't go below 0 or above 10.
 
 **When suspicion reaches 10, the mob forms** and arrests every scientist: the game ends at once.
 
@@ -252,7 +254,7 @@ If any Creature became stable this round, the game ends (see below). Otherwise:
 The game ends immediately, in any phase, when:
 
 - **The mob forms.** The Inquisitor wins, if that card was dealt.
-- **A monster is unleashed.** The Unleasher wins, if that card was dealt. If a player's decision to let a monster pass brings the mob while the monster is still loose, the mob can't stop it: the monster is unleashed, and the game ends as an unleashing, not a mob.
+- **A monster is unleashed.** Every Unleasher who was dealt a card wins. If a player's decision to let a monster pass brings the mob while the monster is still loose, the mob can't stop it: the monster is unleashed, and the game ends as an unleashing, not a mob.
 
 Nothing else happens after a catastrophe: no more actions or rolls, and unresolved resurrections are lost. Everyone else loses, even someone who stabilized a Creature this round.
 
@@ -286,3 +288,4 @@ These rulings clarify the original v0.3 design and are part of the rules above:
 7. **Every player starts with 3 control attempts**; subduing another player's monster needs an Igor in the garrison, and the creator needs none.
 8. **The mob can't stop a monster** that is waiting to be subdued.
 9. **The mob forms at 10** at every player count. The Visionary is used only with 4 or more players.
+10. **Six players deal two Unleashers**, who win together without knowing each other.

@@ -23,7 +23,7 @@ function isPlainObject(v) {
 
 // Keys whose values are replaced whole rather than merged, so an override's
 // capacity tiers never mix with the default tiers.
-const ATOMIC_KEYS = new Set(['capacity']);
+const ATOMIC_KEYS = new Set(['capacity', 'unleashers']);
 
 function deepMerge(base, over) {
   for (const [k, v] of Object.entries(over)) {
@@ -62,9 +62,16 @@ function validateConfig(cfg) {
     for (const e of v.effects) validateEffect(e, `part variant ${id}`);
   }
   for (const [id, r] of Object.entries(cfg.research)) {
+    if (r.copies !== undefined && (!Number.isInteger(r.copies) || r.copies < 0)) throw new Error(`research ${id}: copies must be a non-negative integer`);
+    if (r.stacks !== undefined && typeof r.stacks !== 'boolean') throw new Error(`research ${id}: stacks must be a boolean`);
     for (const e of r.effects) {
+      if (!RESEARCH_KINDS.has(e.kind)) throw new Error(`research ${id}: unknown effect kind ${e.kind}`);
       if (e.kind === 'resurrection') validateEffect(e, `research ${id}`);
       if (e.kind === 'control') validateEffect({ ...e, attribute: ATTRIBUTES[0] }, `research ${id}`);
+      if (e.per !== undefined && !RESEARCH_MULTIPLIERS.has(e.per)) throw new Error(`research ${id}: unknown multiplier ${e.per}`);
+      if (e.kind === 'reroll' && !ATTRIBUTES.includes(e.attribute)) throw new Error(`research ${id}: reroll needs an attribute`);
+      if (e.amount !== undefined && !Number.isInteger(e.amount)) throw new Error(`research ${id}: amount must be an integer`);
+      if (e.beyond !== undefined && (!Number.isInteger(e.beyond) || e.beyond < 0)) throw new Error(`research ${id}: beyond must be a non-negative integer`);
     }
   }
   for (const [id, a] of Object.entries(cfg.actions)) {
@@ -79,8 +86,23 @@ function validateConfig(cfg) {
       if (!Number.isInteger(a[k]) || a[k] < 1) throw new Error(`action ${id}: ${k} must be a positive integer`);
     }
   }
+  const unl = tierValue(cfg.unleashers, n);
+  const specials = unl + 1 + (n >= cfg.visionaryMinPlayers ? 1 : 0);
+  if (!Number.isInteger(unl) || unl < 1 || specials > n) throw new Error('unleashers must be a positive integer that leaves at least one Prometheus card in the objective deck');
   if (!cfg.actions.prepare) throw new Error('the prepare action is required: it is the only way to attempt a resurrection');
 }
+
+// Research effect kinds (spec 023). Numeric kinds add `amount` per effective
+// copy; 'resurrection' and 'control' add dice or modifiers; 'reroll' and
+// 'noGarrison' are abilities.
+const RESEARCH_KINDS = new Set([
+  'medicineBonus', 'suspicionReduction', 'controlAttempts', 'control', 'resurrection',
+  'ferocity', 'gravesBonus', 'sellBonus', 'charityBonus', 'researchCalm', 'reroll', 'noGarrison',
+  'specimenDiscount', 'quietFailure', 'pursuit', 'discoveryBoost',
+]);
+// Resurrection effects may apply once per qualifying rival instead of once.
+// Ferocity may apply once per rival able to subdue the monster ('rivalHunters').
+const RESEARCH_MULTIPLIERS = new Set(['rivalPrepared', 'rivalHunters']);
 
 function validateCapacity(c, id) {
   if (c === null) return;
@@ -107,6 +129,15 @@ function validateSuspicionRoll(r, id) {
     if (!Number.isInteger(b.amount) || b.amount < 0) throw new Error(`action ${id}: suspicion band amounts must be non-negative integers`);
     prev = b.max;
   }
+}
+
+/** A number, or the value of the tier for this player count (tiers keyed by smallest player count). */
+function tierValue(v, n) {
+  if (typeof v === 'number') return v;
+  let best = 0;
+  let bestKey = -1;
+  for (const [k, x] of Object.entries(v)) if (Number(k) <= n && Number(k) > bestKey) { bestKey = Number(k); best = x; }
+  return best;
 }
 
 /** Capacity of an action for this game's player count: a number, or null for unlimited. */
@@ -186,12 +217,26 @@ export function researchCount(s, pid, type) {
   return n;
 }
 
-function researchBonus(s, pid, kind) {
+/**
+ * Copies of a type whose effects apply: every copy for a stacking modifier,
+ * at most one for a special ability (`stacks: false`).
+ */
+export function effectiveCopies(s, pid, type) {
+  const n = researchCount(s, pid, type);
+  return s.config.research[type].stacks === false ? Math.min(1, n) : n;
+}
+
+/** Whether a player holds any effective research with an effect of this kind. */
+function hasAbility(s, pid, kind) {
+  return researchBonus(s, pid, kind, 1) > 0;
+}
+
+function researchBonus(s, pid, kind, dflt = 0) {
   let total = 0;
   for (const [type, def] of Object.entries(s.config.research)) {
-    const copies = researchCount(s, pid, type);
+    const copies = effectiveCopies(s, pid, type);
     if (!copies) continue;
-    for (const e of def.effects) if (e.kind === kind) total += copies * e.amount;
+    for (const e of def.effects) if (e.kind === kind) total += copies * (e.amount ?? dflt);
   }
   return total;
 }
@@ -314,6 +359,10 @@ function addWorker(s, w) {
 // apply(s,p,w,def,c)         -> mutates state
 // ---------------------------------------------------------------------------
 
+function specimenCost(s, p, def) {
+  return Math.max(0, def.cost - researchBonus(s, p.id, 'specimenDiscount'));
+}
+
 function needMoney(p, amount) {
   return p.money < amount ? err('INSUFFICIENT_MONEY', `Requires ${amount} money; you have ${p.money}.`) : null;
 }
@@ -346,7 +395,9 @@ function rollActionSuspicion(s, p, def, actionId) {
   const band = r.bands.find((b) => roll <= b.max);
   const base = band ? band.amount : 0;
   const reduction = researchBonus(s, p.id, 'suspicionReduction');
-  const increase = Math.max(0, base - reduction);
+  // Inflammatory research makes a discovery that is noticed worse.
+  const boost = base > 0 ? researchBonus(s, p.id, 'discoveryBoost') : 0;
+  const increase = Math.max(0, base + boost - reduction);
   emit(s, 'DIE_ROLLED', { playerId: p.id, purpose: 'discovery', actionId, die: r.die, result: roll });
   emit(s, 'DISCOVERY_RESOLVED', { playerId: p.id, actionId, die: r.die, roll, baseSuspicion: base, reduction, increase });
   if (increase > 0) changeSuspicion(s, increase, actionId, p.id);
@@ -392,13 +443,15 @@ export const HANDLERS = {
       acquireMarketResearch(s, p, c.researchCardId, 'research');
       // Conducting research always publishes the discovery (spec 023).
       publish(s, p, type);
+      const calm = researchBonus(s, p.id, 'researchCalm');
+      if (calm > 0 && s.suspicion > 0) changeSuspicion(s, -calm, 'public_lecture', p.id);
     },
   },
   specimens: {
     choiceKeys: ['variantIds'],
     numbers: ['cost'],
     positive: ['count'],
-    prereq: (s, p, w, def) => needMoney(p, def.cost),
+    prereq: (s, p, w, def) => needMoney(p, specimenCost(s, p, def)),
     checkChoices(s, p, w, def, c) {
       const v = c.variantIds;
       if (!Array.isArray(v) || v.length !== def.count) return err('INVALID_CHOICE', `variantIds must list exactly ${def.count} variants.`);
@@ -407,7 +460,8 @@ export const HANDLERS = {
     },
     constraints: (s, p, w, def) => ({ variantIds: { type: 'multiset', count: def.count, values: Object.keys(s.config.partVariants) } }),
     apply(s, p, w, def, c) {
-      changeMoney(s, p, -def.cost, 'specimens');
+      const cost = specimenCost(s, p, def);
+      if (cost) changeMoney(s, p, -cost, 'specimens');
       const parts = c.variantIds.map((id) => makePart(s, id));
       p.loose.push(...parts);
       emit(s, 'PARTS_GAINED', { playerId: p.id, source: 'specimens', parts: clone(parts) });
@@ -453,7 +507,7 @@ export const HANDLERS = {
     apply(s, p, w, def, c) {
       const units = c.units || 1;
       changeMoney(s, p, -def.cost * units, 'charity');
-      changeSuspicion(s, -def.reduction * units, 'charity', p.id);
+      changeSuspicion(s, -(def.reduction + researchBonus(s, p.id, 'charityBonus')) * units, 'charity', p.id);
     },
   },
   garrison: {
@@ -470,7 +524,8 @@ export const HANDLERS = {
     apply(s, p, w, def) {
       // The random parts are drawn first, then the discovery die is rolled.
       const parts = [];
-      for (let i = 0; i < def.parts; i++) parts.push(drawRandomPart(s));
+      const n = def.parts + researchBonus(s, p.id, 'gravesBonus');
+      for (let i = 0; i < n; i++) parts.push(drawRandomPart(s));
       p.loose.push(...parts);
       emit(s, 'PARTS_GAINED', { playerId: p.id, source: 'graves', parts: clone(parts) });
       rollActionSuspicion(s, p, def, 'graves');
@@ -486,7 +541,7 @@ export const HANDLERS = {
     apply(s, p, w, def, c) {
       const sold = c.partIds.map((id) => p.loose.splice(p.loose.findIndex((x) => x.id === id), 1)[0]);
       emit(s, 'PARTS_SPENT', { playerId: p.id, reason: 'sell', parts: clone(sold) });
-      changeMoney(s, p, def.gain, 'sell');
+      changeMoney(s, p, def.gain + researchBonus(s, p.id, 'sellBonus'), 'sell');
       rollActionSuspicion(s, p, def, 'sell');
     },
   },
@@ -597,6 +652,11 @@ export function garrisoned(s, pid) {
   return (s.occupancy.day.garrison || []).some((wid) => s.workers[wid] && s.workers[wid].ownerId === pid);
 }
 
+/** Whether a player may subdue other players' monsters this round: a garrison, or a research ability that waives it. */
+export function canSubdueOthers(s, pid) {
+  return garrisoned(s, pid) || hasAbility(s, pid, 'noGarrison');
+}
+
 /** Prerequisite check for placing a worker on an action, ignoring choices. */
 function placementError(s, p, w, actionId) {
   const def = s.config.actions[actionId];
@@ -628,7 +688,8 @@ function hasLegalPlacement(s, p) {
  */
 export function objectiveDeckFor(cfg) {
   const n = cfg.playerCount;
-  const special = n >= cfg.visionaryMinPlayers ? ['visionary', 'inquisitor', 'unleasher'] : ['inquisitor', 'unleasher'];
+  const unl = tierValue(cfg.unleashers, n);
+  const special = [...(n >= cfg.visionaryMinPlayers ? ['visionary'] : []), 'inquisitor', ...Array(unl).fill('unleasher')];
   return [...Array(n + 1 - special.length).fill('prometheus'), ...special];
 }
 
@@ -680,7 +741,7 @@ export function createGame(config = {}, seed) {
   for (let i = 0; i < n; i++) {
     const id = `p${i + 1}`;
     const name = (cfg.playerNames && cfg.playerNames[i]) || `Scientist ${i + 1}`;
-    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, controlAttemptsUsed: 0, passed: false });
+    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, controlAttemptsUsed: 0, rerollsUsed: 0, passed: false });
     addWorker(s, { id: `scientist-${id}`, kind: 'scientist', ownerId: id, active: true });
     for (let k = 1; k <= cfg.startingIgors; k++) addWorker(s, { id: `igor-${id}-${k}`, kind: 'igor', ownerId: id, active: true });
   }
@@ -694,7 +755,8 @@ export function createGame(config = {}, seed) {
 
   let k = 0;
   for (const type of Object.keys(cfg.research).sort()) {
-    for (let c = 0; c < cfg.researchCopies; c++) s.deck.push({ id: `card-${++k}`, type });
+    const copies = cfg.research[type].copies ?? cfg.researchCopies;
+    for (let c = 0; c < copies; c++) s.deck.push({ id: `card-${++k}`, type });
   }
   shuffle(s.rng, s.deck);
   s.market = s.deck.splice(0, cfg.marketSize);
@@ -755,9 +817,22 @@ function startResolution(s) {
   s.resolution = { order, resolved: 0 };
 }
 
-/** Whether a player may subdue the current monster: an attempt left, and a garrisoned worker unless they created it. */
+/** Pursuits a player has left: once per game per pursuit ability. */
+function pursuitsLeft(s, pid) {
+  const p = getPlayer(s, pid);
+  let n = 0;
+  for (const [type, def] of Object.entries(s.config.research)) {
+    if (!effectiveCopies(s, pid, type)) continue;
+    for (const e of def.effects) if (e.kind === 'pursuit') n += e.uses ?? 1;
+  }
+  return Math.max(0, n - (p.pursuitsUsed || 0));
+}
+
+/** Whether a player may subdue the current monster: an attempt left, and a garrisoned worker unless they created it. In a pursuit, a pursuit left instead of a garrison. */
 function canSubdue(s, pid) {
-  return controlAttempts(s, pid) > 0 && (pid === s.control.creatorId || garrisoned(s, pid));
+  if (controlAttempts(s, pid) <= 0) return false;
+  if (s.control.pursuit) return pursuitsLeft(s, pid) > 0;
+  return pid === s.control.creatorId || canSubdueOthers(s, pid);
 }
 
 /** The next player in a control chain who could subdue the monster, skipping (and logging) those with no attempts left. */
@@ -766,7 +841,8 @@ function nextController(s) {
   while (k.position < k.chain.length) {
     const pid = k.chain[k.position];
     const reason = controlAttempts(s, pid) <= 0 ? 'no_control_attempts'
-      : pid !== k.creatorId && !garrisoned(s, pid) ? 'not_garrisoned' : null;
+      : k.pursuit ? (pursuitsLeft(s, pid) > 0 ? null : 'no_pursuit')
+        : pid !== k.creatorId && !canSubdueOthers(s, pid) ? 'not_garrisoned' : null;
     if (!reason) return pid;
     emit(s, 'CONTROL_SKIPPED', { playerId: pid, creatureId: k.creatureId, reason });
     k.position += 1;
@@ -830,6 +906,15 @@ function advance(s) {
       if (s.control) {
         const pid = nextController(s);
         if (pid) { s.activePlayerId = pid; return; }
+        // A one-off pursuit ability gives its holders one more chance, in chain order.
+        if (!s.control.pursuit) {
+          const pursuers = s.control.chain.filter((x) => controlAttempts(s, x) > 0 && pursuitsLeft(s, x) > 0);
+          if (pursuers.length) {
+            Object.assign(s.control, { pursuit: true, chain: pursuers, position: 0 });
+            emit(s, 'PURSUIT_BEGUN', { creatureId: s.control.creatureId, playerIds: [...pursuers] });
+            continue;
+          }
+        }
         unleash(s, 'no_one_subdued');
         continue;
       }
@@ -868,6 +953,43 @@ function applyEffect(s, e, source, acc) {
   }
 }
 
+/** How many times a research effect applies, beyond its copies: e.g. once per rival who prepared this round. */
+function effectMultiplier(s, pid, e) {
+  if (e.per === 'rivalPrepared') {
+    const prepared = new Set((s.occupancy.night.prepare || []).map((wid) => s.workers[wid].ownerId));
+    prepared.delete(pid);
+    return prepared.size;
+  }
+  return 1;
+}
+
+/** Research effects on a resurrection attribute, in type order, one entry per application. */
+function resurrectionResearch(s, pid, attr) {
+  const out = [];
+  for (const type of Object.keys(s.config.research).sort()) {
+    const copies = effectiveCopies(s, pid, type);
+    for (let i = 0; i < copies; i++) {
+      for (const e of s.config.research[type].effects) {
+        if (e.kind !== 'resurrection' || e.attribute !== attr) continue;
+        const times = effectMultiplier(s, pid, e);
+        for (let j = 0; j < times; j++) out.push({ e, source: { kind: 'research', researchType: type, copy: i + 1 } });
+      }
+    }
+  }
+  return out;
+}
+
+/** Rerolls of a failed attribute a player has left: once per game per ability. */
+function rerollsLeft(s, pid, attr) {
+  const p = getPlayer(s, pid);
+  let n = 0;
+  for (const [type, def] of Object.entries(s.config.research)) {
+    if (!effectiveCopies(s, pid, type)) continue;
+    for (const e of def.effects) if (e.kind === 'reroll' && e.attribute === attr) n += e.uses ?? 1;
+  }
+  return Math.max(0, n - (p.rerollsUsed || 0));
+}
+
 function rollAttribute(s, pid, attr, parts) {
   const rc = s.config.resurrection;
   const acc = { dice: [], fixed: [], thresholdAdjustments: [] };
@@ -880,14 +1002,7 @@ function rollAttribute(s, pid, attr, parts) {
       if (e.attribute === attr) applyEffect(s, e, { kind: 'part', slot, partId: part.id, variantId: part.variantId }, acc);
     }
   }
-  for (const type of Object.keys(s.config.research).sort()) {
-    const copies = researchCount(s, pid, type);
-    for (let i = 0; i < copies; i++) {
-      for (const e of s.config.research[type].effects) {
-        if (e.kind === 'resurrection' && e.attribute === attr) applyEffect(s, e, { kind: 'research', researchType: type, copy: i + 1 }, acc);
-      }
-    }
-  }
+  for (const { e, source } of resurrectionResearch(s, pid, attr)) applyEffect(s, e, source, acc);
   const score = acc.dice.reduce((a, d) => a + d.value, 0) + acc.fixed.reduce((a, f) => a + f.amount, 0);
   const baseThreshold = rc.thresholds[attr];
   const threshold = baseThreshold + acc.thresholdAdjustments.reduce((a, t) => a + t.amount, 0);
@@ -901,7 +1016,15 @@ function resurrect(s, pid) {
   p.body = emptyBody();
   emit(s, 'RESURRECTION_STARTED', { playerId: pid, parts: SLOT_ORDER.map((slot) => ({ slot, partId: parts[slot].id, variantId: parts[slot].variantId })) });
   const attributes = {};
-  for (const attr of ATTRIBUTES) attributes[attr] = rollAttribute(s, pid, attr, parts);
+  for (const attr of ATTRIBUTES) {
+    attributes[attr] = rollAttribute(s, pid, attr, parts);
+    // A one-off ability may reroll a failed attribute once.
+    if (!attributes[attr].success && rerollsLeft(s, pid, attr) > 0) {
+      p.rerollsUsed = (p.rerollsUsed || 0) + 1;
+      emit(s, 'ATTRIBUTE_REROLLED', { playerId: pid, attribute: attr, firstScore: attributes[attr].score });
+      attributes[attr] = { ...rollAttribute(s, pid, attr, parts), rerolled: true };
+    }
+  }
   for (const attr of ATTRIBUTES) {
     const a = attributes[attr];
     for (const d of a.dice) emit(s, 'DIE_ROLLED', { playerId: pid, purpose: 'resurrection', attribute: attr, source: d.source, die: d.die, sign: d.sign, result: d.result });
@@ -922,7 +1045,8 @@ function resurrect(s, pid) {
     record.outcome = 'failed';
     s.resurrections.push(record);
     emit(s, 'RESURRECTION_FAILED', { playerId: pid, refundedParts: clone(refund), lostParts: clone(pool) });
-    changeSuspicion(s, s.config.resurrection.failedVitalitySuspicion, 'failed_resurrection', pid);
+    const failSus = Math.max(0, s.config.resurrection.failedVitalitySuspicion - researchBonus(s, pid, 'quietFailure'));
+    if (failSus > 0) changeSuspicion(s, failSus, 'failed_resurrection', pid);
     return;
   }
   s.counters.creature += 1;
@@ -957,16 +1081,33 @@ function mobCannotStopMonster(s) {
 function controlEffects(s, pid) {
   const out = [];
   for (const type of Object.keys(s.config.research).sort()) {
-    const copies = researchCount(s, pid, type);
+    const copies = effectiveCopies(s, pid, type);
     for (let i = 0; i < copies; i++) for (const e of s.config.research[type].effects) if (e.kind === 'control') out.push({ e, source: { kind: 'research', researchType: type, copy: i + 1 } });
   }
   return out;
 }
 
-/** Exact chance that a player's control roll succeeds. Pure: consumes no RNG. */
-export function estimateControl(s, pid) {
+/** The control threshold against a creator's monsters: the base, plus their Ferocity research. */
+export function controlThreshold(s, creatorId = null) {
+  if (!creatorId) return s.config.control.threshold;
+  let ferocity = 0;
+  for (const [type, def] of Object.entries(s.config.research)) {
+    const copies = effectiveCopies(s, creatorId, type);
+    if (!copies) continue;
+    for (const e of def.effects) {
+      if (e.kind !== 'ferocity') continue;
+      // Per hunter: once for each rival able to subdue the monster, after the first `beyond`.
+      const times = e.per === 'rivalHunters' ? Math.max(0, s.players.filter((x) => x.id !== creatorId && canSubdueOthers(s, x.id)).length - (e.beyond || 0)) : 1;
+      ferocity += copies * e.amount * times;
+    }
+  }
+  return s.config.control.threshold + ferocity;
+}
+
+/** Exact chance that a player's control roll succeeds against a creator's monster (default: an ordinary one). Pure: consumes no RNG. */
+export function estimateControl(s, pid, creatorId = null) {
   const cc = s.config.control;
-  return successChance([{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, pid).map((x) => x.e)], cc.threshold);
+  return successChance([{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, pid).map((x) => x.e)], controlThreshold(s, creatorId));
 }
 
 function successChance(effects, threshold) {
@@ -988,16 +1129,18 @@ function attemptControl(s, pid) {
   const p = getPlayer(s, pid);
   const cc = s.config.control;
   p.controlAttemptsUsed += 1;
+  if (k.pursuit) p.pursuitsUsed = (p.pursuitsUsed || 0) + 1;
   const acc = { dice: [], fixed: [], thresholdAdjustments: [] };
   const base = rollDie(s.rng, cc.baseDie);
   acc.dice.push({ source: { kind: 'base' }, die: cc.baseDie, sign: 1, result: base, value: base });
   for (const { e, source } of controlEffects(s, pid)) applyEffect(s, e, source, acc);
   const score = acc.dice.reduce((a, d) => a + d.value, 0) + acc.fixed.reduce((a, f) => a + f.amount, 0);
-  const success = score >= cc.threshold;
+  const threshold = controlThreshold(s, k.creatorId);
+  const success = score >= threshold;
   for (const d of acc.dice) emit(s, 'DIE_ROLLED', { playerId: pid, purpose: 'control', source: d.source, die: d.die, sign: d.sign, result: d.result });
-  const roll = { dice: acc.dice, fixed: acc.fixed, threshold: cc.threshold, score, success };
+  const roll = { dice: acc.dice, fixed: acc.fixed, threshold, score, success };
   emit(s, 'CONTROL_ROLLED', { playerId: pid, creatureId: k.creatureId, attemptsLeft: controlAttempts(s, pid), ...clone(roll) });
-  k.record.controlDecisions.push({ playerId: pid, subdue: true, score, threshold: cc.threshold, success });
+  k.record.controlDecisions.push({ playerId: pid, subdue: true, score, threshold, success });
   if (success) { subdue(s, pid); return; }
   // A failed attempt adds no suspicion; the monster passes on.
   k.position += 1;
@@ -1029,7 +1172,9 @@ function declineSubdue(s, pid) {
   const k = s.control;
   k.record.controlDecisions.push({ playerId: pid, subdue: false });
   k.position += 1;
-  emit(s, 'SUBDUE_DECLINED', { playerId: pid, creatureId: k.creatureId });
+  emit(s, 'SUBDUE_DECLINED', { playerId: pid, creatureId: k.creatureId, pursuit: !!k.pursuit });
+  // Letting a monster you are chasing get away is not noticed.
+  if (k.pursuit) return;
   // The mob cannot stop a monster: if it forms now, the monster is unleashed.
   changeSuspicion(s, s.config.control.declineSuspicion, 'monster_not_subdued', pid, mobCannotStopMonster);
 }
@@ -1059,12 +1204,13 @@ export function estimateResurrection(s, pid) {
   for (const attr of ATTRIBUTES) {
     const effects = [{ op: 'die', die: rc.baseDie, sign: 1 }];
     for (const slot of SLOT_ORDER) for (const e of s.config.partVariants[p.body[slot].variantId].effects) if (e.attribute === attr) effects.push(e);
-    for (const type of Object.keys(s.config.research).sort()) {
-      const copies = researchCount(s, pid, type);
-      for (let i = 0; i < copies; i++) for (const e of s.config.research[type].effects) if (e.kind === 'resurrection' && e.attribute === attr) effects.push(e);
-    }
+    for (const { e } of resurrectionResearch(s, pid, attr)) effects.push(e);
     const threshold = rc.thresholds[attr] + effects.filter((e) => e.op === 'threshold').reduce((a, e) => a + e.amount, 0);
-    out[attr] = { threshold, success: successChance(effects, rc.thresholds[attr]) };
+    let success = successChance(effects, rc.thresholds[attr]);
+    // One reroll at most per attribute per attempt; rerolls are spent in attribute order.
+    const rerollAvail = rerollsLeft(s, pid, attr) > 0;
+    if (rerollAvail) success = 1 - (1 - success) * (1 - success);
+    out[attr] = { threshold, success, reroll: rerollAvail };
   }
   const pv = out.vitality.success;
   const ph = out.humanity.success;
@@ -1413,11 +1559,15 @@ function publicPlayer(s, p) {
     research: [...p.research], published: [...p.published], igorsHired: p.igorsHired,
     nextIgorCost: igorCount(s, p) < s.config.maxIgors ? nextIgorCost(s) : null,
     passed: p.passed,
-    effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, researchCount(s, p.id, t)])),
+    effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, effectiveCopies(s, p.id, t)])),
+    rerollsUsed: p.rerollsUsed || 0,
     assembleCapacity: assembleCapacity(s, p.id),
     controlAttempts: controlAttempts(s, p.id),
     controlChance: estimateControl(s, p.id),
+    controlChanceVs: Object.fromEntries(s.players.map((c) => [c.id, estimateControl(s, p.id, c.id)])),
+    controlThreshold: controlThreshold(s, p.id),
     garrisoned: garrisoned(s, p.id),
+    canSubdueOthers: canSubdueOthers(s, p.id),
     resurrectionOdds: estimateResurrection(s, p.id),
     workers: playerWorkers(s, p.id).map((w) => ({ ...clone(w), availableNow: (s.phase === 'day' || s.phase === 'night') ? workerAvailable(s, w) : false })),
   };
@@ -1449,7 +1599,7 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     pendingPick: s.pendingPick ? clone(s.pendingPick) : null,
     control: s.control ? {
       creatorId: s.control.creatorId, creatureId: s.control.creatureId, chain: [...s.control.chain], position: s.control.position,
-      deciderId: s.control.chain[s.control.position] || null, decisions: clone(s.control.record.controlDecisions),
+      deciderId: s.control.chain[s.control.position] || null, pursuit: !!s.control.pursuit, decisions: clone(s.control.record.controlDecisions),
       // Players after the current decider who could still subdue this monster.
       upcoming: s.control.chain.slice(s.control.position + 1).filter((pid) => canSubdue(s, pid)),
     } : null,
