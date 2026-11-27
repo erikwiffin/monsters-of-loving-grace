@@ -21,7 +21,7 @@ Scientists and Igors may take every action, with two exceptions: **Garrison the 
 | medicine | Practise medicine | Hospital | unlimited | Gain 3 money. Medical Expertise adds +1 per effective copy. |
 | research | Conduct research | University | 2/3 | Pay 2. Take a market card of a type you haven't discovered, and publish it (spec 023). |
 | specimens | Buy specimens | Anatomical supplier | 2/3 | Pay 2. Choose any one body part by named variant. |
-| charity | Donate to charity | Town hall | 2/3 | Buy 1 unit: pay 3, suspicion −2, minimum 0. Only legal while suspicion is above 0. |
+| charity | Donate to charity | Town hall | 2/3 | Buy 1 unit: pay 3, suspicion −2 (more with Parish Benefactor), minimum 0. Only legal while suspicion is above 0. |
 | hire | Hire an Igor | Tavern | 2/3 | Pay 4. Gain one Igor, who can act at once. At most three Igors per player, counting the starting one. |
 | garrison | Garrison the watch | Watch house | 2/3 | Igors only. No cost or immediate effect. Lets the player subdue other players' monsters this round (spec 025). |
 

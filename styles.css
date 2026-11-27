@@ -166,6 +166,7 @@ body.night .meeple { color: #1c1d20; border-color: transparent; }
 .rcard b { font-size: 13.5px; justify-self: start; background: linear-gradient(transparent 62%, color-mix(in srgb, var(--rc) 40%, transparent) 62% 94%, transparent 94%); }
 .r-galvanism { --rc: #f59f00; } .r-neurology { --rc: #1c7ed6; } .r-philosophy { --rc: #9c36b5; }
 .r-anatomy { --rc: #e03131; } .r-medicine { --rc: #2f9e44; } .r-discretion { --rc: #868e96; }
+.r-lectures { --rc: #0c8599; } .r-benefactor { --rc: #e8590c; }
 .pubs { margin: 0; padding-left: 1.2em; font-size: 13px; list-style: "→ "; }
 .log { padding: 10px 14px; rotate: -.3deg; }
 .log h2 { margin: 0; }

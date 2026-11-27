@@ -2,7 +2,7 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.11.0';
+export const ENGINE_VERSION = '0.12.0';
 export const SCHEMA_VERSION = 8;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
@@ -106,7 +106,11 @@ export const DEFAULT_CONFIG = {
   },
   // Research effect kinds: medicineBonus, suspicionReduction, controlAttempts,
   // control ({ op: 'die' | 'fixed', ... } added to control rolls),
-  // resurrection (same shape as part effects). Every effective copy applies.
+  // resurrection (same shape as part effects), researchCalm (suspicion lowered
+  // when the holder conducts research), charityBonus (extra reduction per
+  // charity unit). Every effective copy applies. A type may set `copies`
+  // (default researchCopies); the engine also supports experimental kinds and
+  // `stacks: false` for configuration overrides (see experiments/).
   research: {
     discretion: { name: 'Discreet Methods', text: 'Reduce suspicion from each graves, sell or experiment action by 1 (floor 0).', effects: [{ kind: 'suspicionReduction', amount: 1 }] },
     galvanism: { name: 'Galvanic Mastery', text: 'Add 1d6 to resurrection Vitality.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
@@ -114,6 +118,8 @@ export const DEFAULT_CONFIG = {
     neurology: { name: 'Neural Conditioning', text: '+1 control attempt for subduing monsters.', effects: [{ kind: 'controlAttempts', amount: 1 }] },
     mesmerism: { name: 'Mesmerism', text: 'Add 1d6 to control rolls.', effects: [{ kind: 'control', op: 'die', die: 6, sign: 1 }] },
     restraint: { name: 'Restraining Apparatus', text: 'Add +4 to control rolls.', effects: [{ kind: 'control', op: 'fixed', amount: 4 }] },
-    philosophy: { name: 'Moral Philosophy', text: 'Add +5 to resurrection Humanity.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'fixed', amount: 5 }] },
+    philosophy: { name: 'Moral Philosophy', text: 'Add +3 to resurrection Humanity.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'fixed', amount: 3 }] },
+    lectures: { name: 'Public Lectures', text: 'When you conduct research, suspicion −1.', effects: [{ kind: 'researchCalm', amount: 1 }] },
+    benefactor: { name: 'Parish Benefactor', text: 'Your charity removes 1 more suspicion per unit.', effects: [{ kind: 'charityBonus', amount: 1 }] },
   },
 };

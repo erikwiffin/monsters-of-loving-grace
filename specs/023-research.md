@@ -4,7 +4,7 @@ Research is persistent technology for building an engine. It is never spent and 
 
 ## Research cards
 
-There are seven research types, each with a persistent effect:
+There are nine research types, each with a persistent effect:
 
 | ID | Name | Effect per effective copy |
 |---|---|---|
@@ -13,14 +13,16 @@ There are seven research types, each with a persistent effect:
 | neurology | Neural Conditioning | +1 control attempt for subduing monsters (spec 025) |
 | mesmerism | Mesmerism | Add 1d6 to control rolls (spec 025) |
 | restraint | Restraining Apparatus | Add a fixed +4 to control rolls (spec 025) |
-| philosophy | Moral Philosophy | Add a fixed +5 to the resurrection Humanity score |
+| philosophy | Moral Philosophy | Add a fixed +3 to the resurrection Humanity score |
 | discretion | Discreet Methods | Reduce the suspicion from each discovery roll (graves, sell, experiment) by 1, to a minimum of 0 |
+| lectures | Public Lectures | When the player conducts research, suspicion falls by 1, to a minimum of 0, after the card is published |
+| benefactor | Parish Benefactor | Each charity unit the player buys removes 1 more suspicion |
 
 Effects are defined as data (spec 010), not scripts.
 
 ## Market and deck
 
-Each type has its own number of copies in the research deck, set by how much it affects the game: weak, stackable modifiers have four, rule-bending abilities may be singletons, and cards in between have two or three. A type with no count of its own uses the default of four. The default deck has four copies of each of the seven types above, 28 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken from the market by the research action, the market refills immediately from the top of the deck while cards remain. There is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
+Each type has its own number of copies in the research deck, set by how much it affects the game: weak, stackable modifiers have four, rule-bending abilities may be singletons, and cards in between have two or three. A type with no count of its own uses the default of four. The default deck has four copies of each of the nine types above, 36 cards, shuffled at setup. Four cards are dealt face up as the market. When a card is taken from the market by the research action, the market refills immediately from the top of the deck while cards remain. There is no reshuffle and no market cycling in this version. Once the deck is empty, the market shrinks as cards are taken.
 
 Experiments draw from the top of the deck instead of the market, and put the cards they don't keep back at the bottom (spec 022). The deck order is hidden; only its size is public.
 
@@ -46,7 +48,7 @@ A player's own publication does not count again for themselves: it was already c
 Every effective copy applies its effect in full. For example:
 
 - With two copies of Galvanic Mastery, the player rolls two separate d6 for Vitality.
-- With three copies of Moral Philosophy, the player adds +15 to Humanity.
+- With three copies of Moral Philosophy, the player adds +9 to Humanity.
 - With two copies of Discreet Methods, discovery suspicion is reduced by 2.
 - With two copies of Neural Conditioning, the player has 2 more control attempts. Because another player's publication adds a copy, it can grant attempts partway through the game.
 

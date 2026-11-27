@@ -57,7 +57,7 @@ The in-game **Rules** button shows the same summary.
   - Vitality fails → three parts are salvaged and suspicion rises by 1.
   - Vitality and Humanity succeed → a stable Creature.
   - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to try to subdue it — everyone except the creator needs an Igor in the garrison that round. A try rolls d20 + control research (Mesmerism +1d6, Restraining Apparatus +4 per copy) and needs 20+. Success destroys the monster, gives the subduer 3 of its parts at random and adds 1 suspicion; failure adds nothing and the monster passes on. Each player who could try but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
-- **Suspicion** comes only from discovery rolls on graves, sell and experiments, failed resurrections, subdued monsters (+1) and monsters left unsubdued (+2 per decline). Charity lowers it (by 2).
+- **Suspicion** comes only from discovery rolls on graves, sell and experiments, failed resurrections, subdued monsters (+1) and monsters left unsubdued (+2 per decline). Charity lowers it (by 2, plus 1 per Parish Benefactor), and so does conducting research with Public Lectures (1 per copy).
 
 ### Designer rulings (clarifications to spec v0.3)
 
@@ -66,9 +66,10 @@ These rulings resolve ambiguities in the spec and are implemented in the engine:
 1. **Publishing** happens only through the research action, which always publishes the card taken. There is no free publishing. Experiment discoveries are never published.
 2. **Resurrection is prepared, not secretly committed.** Placing your Scientist on *Prepare resurrection* is public and binding; the body must be complete when the attempt resolves.
 3. **Research copies stack.** A player's effective copies of a type are 1 for their own discovery, plus 1 for each publication of that type by *another* player. Every copy applies its effect:
-   - Galvanic Mastery adds 1d6 per copy; Moral Philosophy adds +5 per copy.
+   - Galvanic Mastery adds 1d6 per copy; Moral Philosophy adds +3 per copy.
    - Medical Expertise adds +1 money per copy.
    - Discreet Methods reduces suspicion by 1 per copy.
+   - Public Lectures lowers suspicion by 1 per copy when you conduct research; Parish Benefactor adds 1 to each charity unit's reduction per copy.
 
    Players still cannot buy a type they personally discovered.
 4. **A stable Creature ends the game.** At the dawn of any round in which a Creature becomes stable, the game ends. If exactly one became stable and its owner is a Prometheus, that player wins. If two or more became stable, the Visionary wins if dealt. Otherwise everyone loses. Two Prometheus players stabilizing in the same round both lose. There are no Creature workers.

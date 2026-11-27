@@ -55,7 +55,7 @@ test('setup follows section 3', () => {
       assert.deepEqual(p.research, []);
     }
     assert.equal(s.market.length, 4);
-    assert.equal(s.deck.length, 24, '7 research types x 4 copies, minus the market');
+    assert.equal(s.deck.length, 32, '9 research types x 4 copies, minus the market');
     assert.equal(s.suspicion, 0);
     assert.equal(s.phase, 'day');
     assert.equal(s.activePlayerId, s.players[s.firstPlayerIndex].id);
@@ -353,7 +353,7 @@ test('conducting research takes a market card, publishes it and refills; there i
   assert.equal(p.money, 8);
   for (const q of s.players) assert.ok(!getLegalCommands(s, q.id).some((c) => c.type === 'PUBLISH_RESEARCH'));
   assert.equal(s.market.length, 4);
-  assert.equal(s.deck.length, 23);
+  assert.equal(s.deck.length, 31);
   const dupe = s.market.find((c) => c.type === card.type);
   if (dupe) {
     assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: s.activePlayerId, workerId: sci(s.activePlayerId), actionId: 'research', choices: { researchCardId: 'card-999' } }).ok, false);
@@ -495,7 +495,7 @@ test('resurrection rolls are fully itemised and consistent', () => {
   assert.equal(v.score, v.dice.reduce((a, d) => a + d.value, 0) - 2);
   const h = rolled.attributes.humanity;
   assert.equal(h.threshold, 23);
-  assert.deepEqual(h.fixed.map((f) => f.amount), [5]);
+  assert.deepEqual(h.fixed.map((f) => f.amount), [3]);
   for (const a of Object.values(rolled.attributes)) assert.equal(a.success, a.score >= a.threshold);
 });
 
@@ -955,7 +955,7 @@ test('experiment: a loose part and an installed part of the same variant are dif
 // Experimental research effect kinds (inert in the default configuration).
 test('research: stacks false caps effective copies at one; copies sets the deck count', () => {
   const s = createGame({ playerCount: 3, research: { restraint: { stacks: false, copies: 2 } } }, 'special');
-  assert.equal(s.deck.length + s.market.length, 6 * 4 + 2);
+  assert.equal(s.deck.length + s.market.length, 8 * 4 + 2);
   player(s, 'p1').research = ['restraint'];
   s.publications.push({ playerId: 'p2', type: 'restraint', round: 1 }, { playerId: 'p3', type: 'restraint', round: 1 });
   assert.equal(researchCount(s, 'p1', 'restraint'), 3);
@@ -1046,4 +1046,14 @@ test('research: rivalHunters ferocity grows with each rival able to subdue; disc
   player(t, pid).research = ['pamph'];
   t = ok(t, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
   assert.equal(t.suspicion, 2);
+});
+
+test('default research: Parish Benefactor adds 1 to each charity unit; Moral Philosophy is +3', () => {
+  assert.equal(createGame({}, 'cat').config.research.philosophy.effects[0].amount, 3);
+  let s = createGame({ playerCount: 3 }, 'benefactor');
+  s.suspicion = 5;
+  const pid = s.activePlayerId;
+  player(s, pid).research = ['benefactor'];
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' });
+  assert.equal(s.suspicion, 2, 'charity -2, Benefactor -1');
 });
