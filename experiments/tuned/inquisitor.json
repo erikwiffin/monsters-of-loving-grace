@@ -1,0 +1,72 @@
+{
+  "objective": "inquisitor",
+  "weights": {
+    "suspicionCost": 0.801,
+    "suspicionCurve": 10.707,
+    "suspicionPace": 2.68,
+    "mobStake": 59.256,
+    "moneyScale": 1.236,
+    "spendFactor": 0.859,
+    "partBase": 1.966,
+    "partQuality": 0.154,
+    "completionBonus": 1.933,
+    "researchScale": 0.9,
+    "publishHarm": 1.264,
+    "denyScale": 0.624,
+    "hireValue": 1.385,
+    "expectedRounds": 9,
+    "igorReserve": 1.058,
+    "charityScale": 1.322,
+    "garrisonValue": 3.968,
+    "garrisonAlert": 5,
+    "assembleValue": 2.911,
+    "prepareValue": 16.874,
+    "attemptMinStable": 0.244,
+    "attemptLate": 0.071,
+    "unleashFactor": 0.944
+  },
+  "history": [
+    {
+      "generation": 0,
+      "meanCandidateRate": 0.12598425196850394,
+      "best": 0.16535433070866143,
+      "eliteMean": 0.1548556430446194
+    },
+    {
+      "generation": 1,
+      "meanCandidateRate": 0.1297709923664122,
+      "best": 0.1450381679389313,
+      "eliteMean": 0.14249363867684478
+    },
+    {
+      "generation": 2,
+      "meanCandidateRate": 0.18604651162790697,
+      "best": 0.18604651162790697,
+      "eliteMean": 0.1808785529715762
+    },
+    {
+      "generation": 3,
+      "meanCandidateRate": 0.15555555555555556,
+      "best": 0.17037037037037037,
+      "eliteMean": 0.16790123456790126
+    },
+    {
+      "generation": 4,
+      "meanCandidateRate": 0.11764705882352941,
+      "best": 0.13970588235294118,
+      "eliteMean": 0.1372549019607843
+    },
+    {
+      "generation": 5,
+      "meanCandidateRate": 0.09448818897637795,
+      "best": 0.11023622047244094,
+      "eliteMean": 0.10498687664041995
+    }
+  ],
+  "settings": {
+    "players": "4,5",
+    "games": 80,
+    "generations": 6,
+    "population": 10
+  }
+}

@@ -38,7 +38,7 @@ a stacking counter:
 | Galvanic Mastery | stacks | 4 | Vitality +1d6 |
 | Moral Philosophy | stacks | 4 | Humanity +3 (was +5) |
 | Medical Expertise | stacks | 4 | Medicine +1 money |
-| Discreet Methods | stacks | 4 | Discovery suspicion −1 |
+| Discreet Methods | stacks | 4 | Discovery roll +1 (was: discovery suspicion −1) |
 | Neural Conditioning | stacks | 4 | +1 control attempt |
 | Mesmerism | one-off | 4 | Control +1d10 (was 1d6, stacking) |
 | Restraining Apparatus | one-off | 4 | Control +8 (was +4, stacking) |
@@ -74,3 +74,131 @@ one round (7 → 8), and resurrection attempts per game rise from 1–1.8 to
 
 Still open: the 3-player Unleasher (≈0.4), the Inquisitor's tilt (low at
 4, high at 5), and the 3-player no-winner share (≈0.1 vs 0.25).
+
+# Behaviour-tree Prometheus
+
+An alternative policy architecture: `src/sim/bt.js` is a small behaviour-tree
+library (selector, sequence, condition, action, guard), and
+`src/sim/bt-prometheus.js` a tree that plays the Prometheus objective (it
+defers to the heuristic for any other objective). It is not one of the
+built-in policies of spec 014.
+
+`experiments/bt-prometheus.mjs` gives the first seat dealt Prometheus the
+policy under test and the heuristic to every other seat, and reports that
+seat's win rate per player count, how the games it lost ended, and the odds of
+its attempts. `experiments/bt-trace.mjs` prints one such game, decision by
+decision.
+
+```
+node experiments/bt-prometheus.mjs --games 500
+node experiments/bt-prometheus.mjs --games 500 --policy heuristic   # baseline
+node experiments/bt-prometheus.mjs --games 100 --params '{"attemptMinStable":0.2}'
+node experiments/bt-trace.mjs 5 12
+```
+
+Win rate of that one Prometheus seat, 500 games per player count, seeds
+`btp-N-i`, 60-round budget:
+
+| Players | Heuristic | BT |
+|---:|---:|---:|
+| 3 | 33.2% | 52.6% |
+| 4 | 41.0% | 62.4% |
+| 5 | 16.8% | 43.2% |
+| 6 | 17.2% | 39.6% |
+
+The ideas that mattered, roughly in order: planning the body from installed
+and loose parts together, and discarding installed parts the plan replaces by
+experiment; keeping every worker busy; buying research and specimens on one
+value scale; taking Discreet Methods early, which makes graves, selling and
+experiments free of suspicion and nearly removes the mob; and taking capped
+spaces before unlimited ones. Threshold tuning moves the results by less
+than the noise of a 100-game batch.
+
+What is left is mostly outside one player's control. Rival Prometheus wins
+start around round 8, a Visionary alone, or two Creatures in one round, end
+another 10–15% of games, and at three players an Unleasher's monster escapes
+the two remaining hunters about a quarter of the time. An unmodified body
+stabilizes 0.25% of the time, and Humanity has few sources (four copies of
+Moral Philosophy, each published copy helping every player equally), so no
+policy can count on winning before round 6, which a 90% win rate would need.
+
+## Best response, after the heuristic's repairs (main #8 and this branch)
+
+`node bin/best-response.mjs --games 300`: one seat of each role plays the
+challenger, everyone else the standard heuristic; same seeds for both.
+Win rate of that seat:
+
+| Role | Challenger | Standard | Challenger | Gap (95%) | 3p | 4p | 5p | 6p |
+|---|---|---:|---:|---|---|---|---|---|
+| Prometheus | tuned weights | 34.5% | 41.1% | +6.6 [2.7, 10.5] | 42.7→40.3 | 49.0→52.3 | 22.0→33.0 | 24.3→38.7 |
+| Prometheus | behaviour tree | 34.5% | 39.4% | +4.9 [1.1, 8.8] | 42.7→43.3 | 49.0→45.7 | 22.0→34.3 | 24.3→34.3 |
+| Visionary | tuned weights | 12.4% | 14.6% | +2.2 [−1.3, 5.6] | | 9.6→15.2 | 14.5→14.5 | 13.0→14.1 |
+| Inquisitor | tuned weights | 11.4% | 11.0% | −0.4 [−3.3, 2.4] | 2.7→1.4 | 0.8→1.7 | 25.2→24.0 | 15.7→15.7 |
+| Unleasher | tuned weights | 12.2% | 12.0% | −0.2 [−3.0, 2.6] | 39.1→36.9 | 8.2→7.8 | 4.8→4.4 | 1.3→3.0 |
+
+- The standard heuristic under-plays Prometheus at five and six players by
+  10–15 points, and two different challengers agree. Prometheus balance
+  numbers at those counts measure the AI as much as the rules.
+- The repaired heuristic has caught up with the behaviour tree at three and
+  four players; the tree's lead is now only at five and six.
+- Tuning found nothing measurable for the other roles. Their searches (six
+  generations of ten candidates, 160 games each, at four and five players)
+  are too noisy for roles that win 5–15% of the time: they need more games
+  per candidate, or tuning at the counts where the role wins most.
+- The tuned Prometheus never garrisons (`garrisonAlert` 8, above a whole
+  body) and values preparing higher. Worth checking whether garrisoning is
+  worth its Igor for a Prometheus at all.
+
+## Tuning for a default: every seat of the role
+
+A best response is not a default. The single-seat tuned Prometheus weights
+won 3.8 points more in one seat on fresh seeds (29.1% → 33.0%, p = 0.009),
+but with every Prometheus playing them, all-heuristic balance shifted hard
+(800 games per player count): the Unleasher rose from 32.1% to 49.2% at
+three players and from 4.1% to 13.9% at six, and the Inquisitor halved at
+five and six. The tuned weights never garrison, which pays while others
+hunt monsters. They stay here as a challenger, not a default.
+
+`bin/tune.mjs --objective prometheus --deviators all --players 3,4,5,6
+--games 60` puts every Prometheus seat on each candidate. After three
+generations no candidate beat the standard weights (33.7% per Prometheus
+seat): the best were 32.6% and 33.5%, and the search mean fell to
+29.9–31.8%. The run was stopped there. The standard weights look close to
+the best for Prometheus as a whole field, so they remain the defaults.
+
+## Discreet Methods: +1 to the discovery roll (engine 0.14.0)
+
+The card used to take 1 off each discovery's suspicion; one published copy
+made night work free for the whole table (about 11 suspicion avoided per
+game at five players). It now adds 1 per effective copy to the discovery
+roll, stacking.
+
+How the bots adapted (heuristic, 300 games, seeds `disc-N-i`):
+
+| | 3p old | 3p new, AI not updated | 3p new | 5p old | 5p new, AI not updated | 5p new |
+|---|---:|---:|---:|---:|---:|---:|
+| Discreet Methods researched per game | 1.36 | 0.33 | 0.92 | 1.84 | 0.20 | 0.86 |
+| Suspicion it avoided per game | 10.5 | 2.5 | 3.6 | 11.0 | 0.9 | 1.8 |
+
+Before the AI knew the new effect kind, the uptake report showed the card
+abandoned except where experiments forced it. After the update (one layer-1
+entry, computed from the configured rolls, and the roll bonus in the shared
+discovery estimate) the bots research it again, about half as often as the
+stronger old card.
+
+Old rule against new (`bin/compare.mjs`, 800 games per arm and policy set):
+no clear effect at three and four players. At five and six the Inquisitor
+gains under two of three policy sets and loses under none: +5.0 and +6.4
+points all-heuristic, +9.3 and +10.1 with noisy players, +2.4 (not
+significant) with cautious and bold players, who pay for charity.
+Prometheus loses about 3 points with noisy players.
+
+Balance under the new rule, standard heuristic, 1,000 games per player
+count (win rate per player dealt the role, 95% interval):
+
+| Players | Prometheus | Visionary | Inquisitor | Unleasher | No winner | Fair share | Median rounds | Truncated |
+|---:|---|---|---|---|---|---:|---:|---:|
+| 3 | 41.8% (39.3–44.3) | — | 2.3% (1.4–3.6) | 35.7% (32.3–39.2) | 9.0% (7.4–10.9) | 25.0% | 9 | 23 |
+| 4 | 42.2% (39.8–44.7) | 11.3% (9.3–13.7) | 0.7% (0.3–1.6) | 8.8% (7.0–11.0) | 16.7% (14.5–19.1) | 20.0% | 10 | 17 |
+| 5 | 20.2% (18.7–21.8) | 12.5% (10.5–15.0) | 30.2% (27.1–33.4) | 4.5% (3.3–6.2) | 10.1% (8.4–12.1) | 16.7% | 8 | 3 |
+| 6 | 22.2% (20.7–23.9) | 14.1% (11.9–16.5) | 21.5% (18.9–24.4) | 4.5% (3.6–5.6) | 8.4% (6.8–10.3) | 14.3% | 9 | 4 |

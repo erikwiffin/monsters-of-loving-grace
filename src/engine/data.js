@@ -2,7 +2,7 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.13.0';
+export const ENGINE_VERSION = '0.14.0';
 export const SCHEMA_VERSION = 9;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
@@ -69,7 +69,8 @@ export const DEFAULT_CONFIG = {
   //   { 3: 2, 5: 3 } = 2 slots with 3-4 players, 3 slots with 5-6.
   // igor: false = Scientist only; scientist: false = Igor only.
   // suspicion: a discovery roll. Roll `die`; the first band whose `max` is at
-  //   least the roll adds its `amount` (before Discreet Methods); a roll above
+  //   least the roll plus the player's discovery roll bonus (Discreet Methods)
+  //   adds its `amount`; a result above
   //   every band adds nothing.
   actions: {
     medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: null, igor: true, gain: 3 },
@@ -107,7 +108,8 @@ export const DEFAULT_CONFIG = {
     scholar_brain: { name: 'Brain of a scholar', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 6, sign: 1 }] },
     poet_brain: { name: 'Brain of a poet', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
   },
-  // Research effect kinds: medicineBonus, suspicionReduction, controlAttempts,
+  // Research effect kinds: medicineBonus, discoveryRollBonus (added to discovery
+  // rolls), suspicionReduction (a flat cut per discovery), controlAttempts,
   // control ({ op: 'die' | 'fixed', ... } added to control rolls),
   // resurrection (same shape as part effects), researchCalm (suspicion lowered
   // when the holder conducts research), charityBonus (extra reduction per
@@ -115,7 +117,7 @@ export const DEFAULT_CONFIG = {
   // (default researchCopies); the engine also supports experimental kinds and
   // `stacks: false` for configuration overrides (see experiments/).
   research: {
-    discretion: { name: 'Discreet Methods', text: 'Reduce suspicion from each graves, sell or experiment action by 1 (floor 0).', effects: [{ kind: 'suspicionReduction', amount: 1 }] },
+    discretion: { name: 'Discreet Methods', text: 'Add 1 to the discovery roll of each graves, sell or experiment action.', effects: [{ kind: 'discoveryRollBonus', amount: 1 }] },
     galvanism: { name: 'Galvanic Mastery', text: 'Add 1d6 to resurrection Vitality.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
     medicine: { name: 'Medical Expertise', text: '+1 money on medicine, for any worker.', effects: [{ kind: 'medicineBonus', amount: 1 }] },
     neurology: { name: 'Neural Conditioning', text: '+1 control attempt for subduing monsters.', effects: [{ kind: 'controlAttempts', amount: 1 }] },

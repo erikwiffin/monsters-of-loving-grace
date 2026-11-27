@@ -69,7 +69,7 @@ These rulings resolve ambiguities in the spec and are implemented in the engine:
 3. **Research copies stack.** A player's effective copies of a type are 1 for their own discovery, plus 1 for each publication of that type by *another* player. Every copy applies its effect:
    - Galvanic Mastery adds 1d6 per copy; Moral Philosophy adds +3 per copy.
    - Medical Expertise adds +1 money per copy.
-   - Discreet Methods reduces suspicion by 1 per copy.
+   - Discreet Methods adds 1 per copy to discovery rolls, making a discovery less likely.
    - Public Lectures lowers suspicion by 1 per copy when you conduct research; Parish Benefactor adds 1 to each charity unit's reduction per copy.
 
    Players still cannot buy a type they personally discovered.
@@ -108,13 +108,21 @@ src/engine/               pure rules engine (no DOM, storage, timers or Math.ran
   engine.js               state machine, command bus, legal moves, views, save/replay
   index.js                public API
 src/ui/                   browser adapter (rendering + localStorage); calls only engine APIs
-src/sim/                  policies and headless runner
+src/sim/                  policies, headless runner and AI quality tools
 bin/simulate.mjs          batch playtest CLI
+bin/quick-check.mjs       sanity check of a rule change in about 30 seconds
+bin/compare.mjs           two arms (rules or policies) on the same seeds, with intervals
+bin/ai-checks.mjs         metamorphic checks of the AI policies
+bin/explain.mjs           one decision's scored options; disagreements between policies
+bin/tune.mjs              tune the heuristic's weights for one role
+bin/best-response.mjs     each role's headroom over the standard heuristic
+bin/llm-playtest.mjs      Claude plays one seat from the rulebook
 bin/sweep.mjs             parameter sweep CLI (spec 016)
 sweeps/                   sweep definitions
 bin/agent-stdio.mjs       JSON-lines driver for external agents
 bin/serve.mjs             static dev server (no game logic)
 test/engine.test.mjs      rules, determinism, privacy and simulation tests
+test/policy-scenarios.test.mjs  how the bots should behave in set situations
 ```
 
 All balance values and catalogs live in `DEFAULT_CONFIG` (`src/engine/data.js`) and are copied into each game's state.
@@ -215,7 +223,14 @@ Games that hit `--max-commands` or `--max-rounds` are reported as `truncated: tr
 
 A bot holding more than 25 money or 25 loose parts is no longer playing realistically, so the runner stops the game there and flags it (`truncationReason: "hoarding"` and the `hoarding` record above). Aggregates count stops by reason (`truncatedByReason`) and hoarders by objective and resource (`hoardingBy`). Change the limits with `--hoard-money` and `--hoard-parts`, or turn the stop off with `--no-hoard-limit` (`hoardLimit` in `runGame`/`runBatch`; `null` disables it). Seats played by the `random` policy are exempt, since random play is not meant to be realistic.
 
-Policies: `random`, `heuristic`, and the heuristic's `cautious` and `bold` styles.
+Policies: `random`, `heuristic`, and the heuristic's `cautious` and `bold` styles, plus, for robustness checks, `noisy` (picks at random among options near its best) and `bt` (the behaviour-tree Prometheus in `src/sim/bt-prometheus.js`, the heuristic for other roles). Names resolve through `src/sim/registry.js`, which also takes specs such as `{"policy":"heuristic","options":{"weights":{...}}}` and seatings such as `{"default":"heuristic","byObjective":{"prometheus":"bt"}}` (only the first Prometheus seat deviates unless `"deviators":"all"`).
+
+Every result also has an `uptake` record, aggregated as `uptake`:
+- each research type: how often it was acquired (by research or experiment), published and applied in rolls, with the win rate of the players who held it (a correlation, not a cause);
+- how often each part variant went into an attempted body;
+- suspicion avoided by Discreet Methods, lowered by Public Lectures, and money from Medical Expertise;
+- the share of Igor-rounds and Scientist phases left idle, by objective and policy;
+- `rarelyUsed`: research and actions the bots barely touched. A new card here is weak or not understood by the AI; fix that before reading its balance numbers.
 
 ### Parameter sweeps
 
@@ -230,6 +245,51 @@ node bin/sweep.mjs sweeps/sensitivity.json --games 40 --players 3,5
 ```
 
 Variables are dotted config paths (`actions.medicine.gain`, `actions.research.capacity.5`, `actions.graves.suspicion.bands.0.max`); paths joined with `|` share one value. Samplers are `oat`, `grid`, `random` and `lhs`.
+
+### AI quality tools
+
+Balance numbers are only as good as the bots producing them. These tools check that a result comes from the rules, not from how the AI plays.
+
+```bash
+# first: a quick sanity check of a rule change (about 30 seconds)
+node bin/quick-check.mjs change.json
+
+# then, if it flags something or before relying on a change: the full comparison,
+# under several policy sets, with confidence intervals (--max-games keeps adding
+# games until each difference is significant or known to within 3 points)
+node bin/compare.mjs --candidate change.json --policies 'heuristic;cautious,bold;noisy' --games 400 --max-games 800
+
+# a policy change under the same rules
+node bin/compare.mjs --base-policies heuristic --candidate-policies bt --players 4,5
+
+# metamorphic checks: changes with a known effect on a sensible player (about 1.5 minutes;
+# --exact for the move-for-move ones only, --scale 3 for more statistical power)
+npm run ai-checks
+
+# why did the bot do that: the heuristic's scored options at one decision
+node bin/explain.mjs --seed s1 --players 4 --at 120
+
+# where two policies disagree most, with replayable examples
+node bin/explain.mjs --disagree --actor heuristic --shadow bt --objectives prometheus
+
+# tune the heuristic's weights for one role, then measure each role's headroom
+node bin/tune.mjs --objective unleasher
+node bin/best-response.mjs
+
+# an LLM plays one seat from the rulebook and reports on the rules (costs money; --dry-run is free)
+node bin/llm-playtest.mjs --objective visionary --players 5
+```
+
+- **Quick check** (`bin/quick-check.mjs`): the scenario tests and the exact metamorphic checks under the changed rules, a screening comparison (standard heuristic, 3 and 5 players, 200 games per arm, so changes of about ±7 points show), and the uptake of the content the change touches. It lists what it flagged and what to run next. It is for catching big effects and AI blind spots before a full run, not for balance numbers.
+- **Compare** (`src/sim/compare.js`): both arms play the same seeds. For each player count and policy set it reports each objective's win rate in both arms, the change with a 95% interval and a p-value, and how many marks chance alone would give. Its verdict per objective is *robust* (every policy set agrees), *policy-dependent* (sets disagree significantly: the effect comes from the AI), or *no clear effect*.
+- **Metamorphic checks** (`src/sim/metamorphic.js`): cheaper or safer actions are not used less; a research card with no effect is not bought (except by an Inquisitor blocking a slot); renaming every research type, or the players, changes no game at all, move for move, so the AI depends on effects, not IDs. A failure is an AI flaw to fix before trusting balance numbers.
+- **Scenario tests** (`test/policy-scenarios.test.mjs`, part of `npm test`): set up a situation, let a policy play the phase, and check what it did. They state how the bots should behave.
+- **Explanations** (`src/sim/disagree.js`): the heuristic takes an `explain` callback that receives every option's score, split into value, suspicion risk, Scientist tax and Igor reserve.
+- **Effect values** (`src/sim/effect-values.js`): every policy values research from one two-layer table. Layer 1 (`EFFECT_IMPACT`) says what each effect kind does in a few game quantities (Vitality and Humanity points, control points and attempts, money, suspicion kept off the table, parts, ferocity, hunting); it is the same for every role. Layer 2 prices each quantity per role, for itself (`QUANTITY_PRICE`) and in a rival's hands (`RIVAL_PRICE`, which prices publishing and denial). A new card that uses existing effect kinds needs no code. A new effect kind needs one layer-1 entry, and a new quantity only for a genuinely new kind of benefit, priced once per role. The behaviour tree models resurrection and control odds itself and takes every other kind from the table.
+- **Occasional tools**, too slow or too uncertain for routine use: tuning, best response and the LLM playtest.
+- **Tuning and best response** (`src/sim/tune.js`): the heuristic's numbers are `DEFAULT_WEIGHTS` in `src/sim/policies.js`, with per-role defaults in `OBJECTIVE_WEIGHTS` (Prometheus uses tuned weights), overridable with the `weights` option. `bin/tune.mjs` searches them for one objective with the cross-entropy method, as a best response to standard opponents, and saves them under `experiments/tuned/`. `bin/best-response.mjs` puts one seat of each role on its best known policy against a standard field: a large gap over the standard heuristic means that role's balance numbers measure AI skill as much as rules.
+- **LLM playtest** (`src/sim/llm-policy.js`): Claude (`claude-opus-5-5`, low effort, with server-side refusal fallbacks) plays one seat from `assets/rulebook.md`, one API call per decision, and writes a transcript of its moves and reasons and its feedback on unclear rules and unused content to `playtests/`. It needs `npm install @anthropic-ai/sdk` and credentials. Use it for qualitative checks of new content, not for statistics.
+- **Statistics** (`src/sim/stats.js`): Wilson intervals, two-proportion tests and `gamesForHalfWidth`. At a 50% rate, 100 games give about ±10 points and 500 about ±4.4.
 
 ### Writing a policy
 
@@ -265,7 +325,7 @@ For each decision belonging to a seat on stdin, the driver writes `{"type":"deci
 
 ## Tests
 
-`npm test` runs `node --test` on `test/engine.test.mjs`. The suite covers:
+`npm test` runs `node --test` on every `test/*.test.mjs`. Besides the print view and the policy scenarios, the engine suite covers:
 
 - setup and deck composition
 - rejected commands leaving state unchanged

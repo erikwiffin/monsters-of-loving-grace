@@ -6,6 +6,7 @@
 //        [--config overrides.json] [--commands] [--out results.json] [--jsonl]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { runGame, aggregate, DEFAULT_HOARD_LIMIT } from '../src/sim/runner.js';
+import { resolveConfig } from '../src/engine/index.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -43,7 +44,7 @@ for (let i = 0; i < games; i++) {
   results.push(summary);
   if (flag('jsonl')) process.stdout.write(`${JSON.stringify(summary)}\n`);
 }
-const agg = aggregate(results);
+const agg = aggregate(results, resolveConfig(config));
 const out = opt('out');
 if (out) writeFileSync(out, JSON.stringify({ options: { ...runOpts, games, seedPrefix }, aggregate: agg, results }, null, 2));
 else if (!flag('jsonl')) process.stdout.write(`${JSON.stringify({ aggregate: agg, results }, null, 2)}\n`);
