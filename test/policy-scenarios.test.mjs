@@ -9,6 +9,17 @@ import { createGame, dispatch, getPlayerView, enumerateLegalCommands } from '../
 import { makePolicy } from '../src/sim/registry.js';
 import { runGame } from '../src/sim/runner.js';
 
+// Rules to test under: the defaults, or a candidate change given as JSON
+// overrides in MOLG_SCENARIO_CONFIG (bin/quick-check.mjs sets it). Each
+// scenario's own settings go on top.
+const BASE = process.env.MOLG_SCENARIO_CONFIG ? JSON.parse(process.env.MOLG_SCENARIO_CONFIG) : {};
+const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+const merge = (a, b) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b || {})) out[k] = isObj(v) && isObj(a[k]) ? merge(a[k], v) : v;
+  return out;
+};
+
 const GOOD_BODY = { arm1: 'labourer_arm', arm2: 'labourer_arm', leg1: 'athlete_leg', leg2: 'athlete_leg', chest: 'robust_chest', head: 'scholar_brain' };
 const POOR_BODY = { arm1: 'damaged_arm', arm2: 'damaged_arm', leg1: 'frail_leg', leg2: 'frail_leg', chest: 'scarred_chest', head: 'criminal_brain' };
 
@@ -28,7 +39,7 @@ function pass(s) {
  * subject) set up as described. Rivals keep their starting position.
  */
 function scenario({ players = 4, seed = 'scenario', phase = 'day', config = {}, objective = 'prometheus', money, body, loose = [], research = [], suspicion, edit } = {}) {
-  let s = createGame({ playerCount: players, ...config }, seed);
+  let s = createGame(merge(BASE, { playerCount: players, ...config }), seed);
   if (phase === 'night') while (s.phase !== 'night') s = pass(s);
   const pid = s.activePlayerId;
   const p = s.players.find((x) => x.id === pid);
@@ -157,7 +168,7 @@ function controlDecision({ objective, own, players = 5, tries = 300 }) {
         },
       };
     };
-    runGame({ seed, config: { playerCount: players }, policies, includeCommands: false });
+    runGame({ seed, config: merge(BASE, { playerCount: players }), policies, includeCommands: false });
     if (found) return found;
   }
   throw new Error(`no ${objective} control decision found`);
@@ -165,7 +176,7 @@ function controlDecision({ objective, own, players = 5, tries = 300 }) {
 
 /** Replays a game up to a decision point and asks a policy for its choice there. */
 function decideAt({ seed, pid, commands }, policySpec, players = 5) {
-  const { state } = runGame({ seed, config: { playerCount: players }, policies: 'heuristic', includeCommands: true, maxCommands: commands });
+  const { state } = runGame({ seed, config: merge(BASE, { playerCount: players }), policies: 'heuristic', includeCommands: true, maxCommands: commands });
   assert.equal(state.activePlayerId, pid);
   const policy = makePolicy(policySpec, `decide:${pid}`);
   return policy.decide({ playerId: pid, view: getPlayerView(state, pid, { includeEvents: false }), legal: enumerateLegalCommands(state, pid) });

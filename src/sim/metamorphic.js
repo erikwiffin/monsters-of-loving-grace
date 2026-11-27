@@ -7,11 +7,14 @@
 // one relation:
 //   - an action made strictly cheaper or safer is not used less;
 //   - a research card with no effect is not bought;
-//   - renaming every research type changes nothing beyond noise (the AI must
-//     not depend on IDs, only on effects);
-//   - renaming players changes nothing at all.
+//   - renaming every research type, or the players, changes nothing at all:
+//     the same seeds give the same games, move for move (the AI must depend
+//     on effects, never on IDs).
+//
+// The exact checks need only a few games; the statistical ones (not-less,
+// rare) default to 150 and scale with `scale`.
 
-import { DEFAULT_CONFIG } from '../engine/index.js';
+import { DEFAULT_CONFIG, resolveConfig } from '../engine/index.js';
 import { runGames } from './parallel.js';
 import { compareRates, normalP } from './stats.js';
 
@@ -26,10 +29,10 @@ function meanSe(xs) {
 }
 const perPlayerRound = (actionId) => (r) => (r.economy.actions[actionId] ? r.economy.actions[actionId].placements : 0) / Math.max(1, r.rounds * r.playerCount);
 
-/** Renames every research type (x → prefix + x), retiring the old names from the deck. */
-export function renameResearch(prefix = 'renamed_') {
+/** Renames every research type of a configuration (x → prefix + x), retiring the old names from the deck. */
+export function renameResearch(prefix = 'renamed_', cfg = DEFAULT_CONFIG) {
   const research = {};
-  for (const [t, def] of Object.entries(DEFAULT_CONFIG.research)) {
+  for (const [t, def] of Object.entries(cfg.research)) {
     research[prefix + t] = clone(def);
     research[t] = { copies: 0 };
   }
@@ -41,51 +44,66 @@ export const CHECKS = [
     id: 'cheaper-specimens',
     text: 'Buying specimens at half price is not done less often',
     config: { actions: { specimens: { cost: 1 } } },
-    relation: 'not-less', stat: perPlayerRound('specimens'),
+    relation: 'not-less', games: 150, stat: perPlayerRound('specimens'),
   },
   {
     id: 'cheaper-research',
     text: 'Research at half price is not done less often',
     config: { actions: { research: { cost: 1 } } },
-    relation: 'not-less', stat: perPlayerRound('research'),
+    relation: 'not-less', games: 150, stat: perPlayerRound('research'),
   },
   {
     id: 'quiet-graves',
     text: 'Graves that never raise suspicion are not robbed less often',
     config: { actions: { graves: { suspicion: { die: 6, bands: [{ max: 6, amount: 0 }] } } } },
-    relation: 'not-less', stat: perPlayerRound('graves'),
+    relation: 'not-less', games: 150, stat: perPlayerRound('graves'),
   },
   {
     id: 'blank-research',
     // The Inquisitor may buy it to block a research slot, which is a reason.
     text: 'A research card with no effect is not bought, except to block a slot',
     config: { research: { blank: { name: 'Blank', text: 'No effect.', effects: [] } } },
-    relation: 'rare', limit: 0.05,
+    relation: 'rare', limit: 0.05, games: 100,
     stat: (r) => (((r.uptake.acquiredBy.blank || {}).research) || []).filter((pid) => r.objectives[pid] !== 'inquisitor').length,
   },
   {
     id: 'renamed-research',
-    text: 'Renaming every research type changes no win rate and no action use',
-    config: renameResearch(),
-    relation: 'unchanged',
+    // Retired names keep their place with no copies, and the new names sort
+    // in the same order, so the deck and every roll are the same: any
+    // difference is the AI reading an ID.
+    text: 'Renaming every research type changes nothing at all',
+    // A function of the rules under test, so a changed card is renamed as changed.
+    config: (cfg) => renameResearch('renamed_', cfg),
+    relation: 'identical', games: 20, exact: true,
   },
   {
     id: 'renamed-players',
     text: 'Renaming the players changes nothing at all',
     config: { playerNames: ['Ada', 'Byron', 'Clerval', 'Dora', 'Elizabeth', 'Felix'] },
-    relation: 'identical',
+    relation: 'identical', games: 20, exact: true,
   },
 ];
 
-function jobs(config, n, policies, games, seedPrefix) {
-  return Array.from({ length: games }, (_, i) => ({ seed: `${seedPrefix}-${n}-${i}`, config: { ...config, playerCount: n }, policies, maxRounds: 60 }));
+function jobs(config, n, policies, games, seedPrefix, includeCommands = false) {
+  return Array.from({ length: games }, (_, i) => ({ seed: `${seedPrefix}-${n}-${i}`, config: { ...config, playerCount: n }, policies, maxRounds: 60, includeCommands }));
 }
 
-/** Runs one check under one policy set and player count. */
-export async function runCheck(check, { players = 4, policies = 'heuristic', games = 300, alpha = 0.01, seedPrefix = 'meta', threads } = {}) {
+const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+/** Overrides on top of overrides, merged deeply (arrays replaced), as the engine merges them. */
+export function mergeOverrides(a, b) {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b || {})) out[k] = isObj(v) && isObj(a[k]) ? mergeOverrides(a[k], v) : v;
+  return out;
+}
+
+/** Runs one check under one policy set and player count; `base` is the rules to start from (a candidate change). */
+export async function runCheck(check, { players = 4, policies = 'heuristic', games: forced, scale = 1, alpha = 0.01, seedPrefix = 'meta', threads, base: rules = {} } = {}) {
+  // Exact checks need few games; statistical ones scale.
+  const games = forced ?? (check.exact ? check.games : Math.round((check.games || 150) * scale));
+  const transform = typeof check.config === 'function' ? check.config(resolveConfig({ ...rules, playerCount: players })) : check.config;
   const [base, cand] = await Promise.all([
-    runGames(jobs({}, players, policies, games, seedPrefix), { threads }),
-    runGames(jobs(check.config, players, policies, games, seedPrefix), { threads }),
+    runGames(jobs(rules, players, policies, games, seedPrefix, !!check.exact), { threads }),
+    runGames(jobs(mergeOverrides(rules, transform), players, policies, games, seedPrefix, !!check.exact), { threads }),
   ]);
   const out = { id: check.id, text: check.text, players, policies, games };
   if (check.relation === 'not-less') {
@@ -129,7 +147,8 @@ export async function runCheck(check, { players = 4, policies = 'heuristic', gam
     return { ...out, pass: !fails.length, detail: fails.length ? fails.join('; ') : `${tests.length} quantities unchanged` };
   }
   if (check.relation === 'identical') {
-    const key = (r) => JSON.stringify([r.winners, r.rounds, r.commandCount, r.finalSuspicion]);
+    // Move for move: the same commands, in the same order.
+    const key = (r) => JSON.stringify([r.winners, r.rounds, r.commandCount, r.finalSuspicion, r.commands]);
     const diff = base.filter((r, i) => key(r) !== key(cand[i])).length;
     return { ...out, pass: diff === 0, detail: `${diff} of ${games} games differ` };
   }

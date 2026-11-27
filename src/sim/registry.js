@@ -2,7 +2,7 @@
 // who plays which seat as plain data (for worker threads and result files).
 //
 // A policy spec is one of:
-//   - a name: 'heuristic', 'random', 'cautious', 'bold', 'noisy', 'greedy', 'bt';
+//   - a name: 'heuristic', 'random', 'cautious', 'bold', 'noisy', 'bt';
 //   - { policy: name, options: {...} }, passed to the factory (for example a
 //     tuned heuristic: { policy: 'heuristic', options: { weights: {...} } });
 //   - an object with decide(), used as is.
@@ -20,10 +20,9 @@ import { btPrometheusPolicy } from './bt-prometheus.js';
 export const POLICY_FACTORIES = {
   ...POLICIES,
   // A weaker heuristic that picks at random among options within one unit of
-  // its best, and one without noise: similar structure, different skill, for
-  // robustness checks. (More uniform noise makes it hoard: idle options win.)
+  // its best: similar structure, different skill, for robustness checks.
+  // (More uniform noise makes it hoard: idle options win.)
   noisy: (seed, opts = {}) => ({ ...heuristicPolicy(seed, { margin: 1, ...opts }), name: 'noisy' }),
-  greedy: (seed, opts = {}) => ({ ...heuristicPolicy(seed, { noise: 0, ...opts }), name: 'greedy' }),
   // The behaviour-tree policy: its own tree as Prometheus, the heuristic otherwise.
   bt: (seed, opts = {}) => btPrometheusPolicy(seed, opts),
 };

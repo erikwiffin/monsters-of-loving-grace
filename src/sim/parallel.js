@@ -1,6 +1,6 @@
 // Runs many games across worker threads (Node only; the browser never loads
 // this). Each job is plain data: { seed, config, policies, maxRounds,
-// maxCommands, hoardLimit }, where `policies` is a seating (registry.js).
+// maxCommands, hoardLimit, includeCommands }, where `policies` is a seating (registry.js).
 // Results come back in job order, so the thread count never changes them.
 
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
@@ -8,7 +8,8 @@ import { availableParallelism } from 'node:os';
 import { runGame } from './runner.js';
 
 function play(job) {
-  const { summary } = runGame({ ...job, includeCommands: false });
+  // Commands only when a job asks for them (exact comparisons): they are large.
+  const { summary } = runGame({ ...job, includeCommands: !!job.includeCommands });
   // Trim what batch tools never read, to keep messages small.
   delete summary.suspicionHistory;
   return summary;

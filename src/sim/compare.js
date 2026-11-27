@@ -4,9 +4,10 @@
 // A rule change compares two configurations under the same policies; a
 // policy change compares two seatings under the same rules. For every player
 // count and policy set the comparison reports each objective's win rate in
-// both arms, the difference with a 95% interval, and a p-value. It plays more
-// games, doubling, until every difference is either significant or known to
-// within the requested precision, or the game budget runs out.
+// both arms, the difference with a 95% interval, and a p-value. With a game
+// budget above `games` (maxGames), it plays more games, doubling, until every
+// difference is either significant or known to within the requested
+// precision, or the budget runs out; by default it plays `games` and stops.
 //
 // Across policy sets it gives a verdict per objective and player count:
 //   robust          every set that shows a significant change agrees on its direction
@@ -37,7 +38,7 @@ function jobsFor(arm, n, set, from, to, seedPrefix, maxRounds) {
   return jobs;
 }
 
-function tally(results) {
+export function tally(results) {
   const dealt = {};
   const wins = {};
   let none = 0;
@@ -49,7 +50,7 @@ function tally(results) {
   return { dealt, wins, none, games: results.length, truncated: results.filter((r) => r.truncated).length };
 }
 
-function diffs(ta, tb) {
+export function diffs(ta, tb) {
   const out = {};
   for (const o of Object.keys({ ...ta.dealt, ...tb.dealt }).sort()) out[o] = compareRates(ta.wins[o] || 0, ta.dealt[o] || 0, tb.wins[o] || 0, tb.dealt[o] || 0);
   out['(no winner)'] = compareRates(ta.none, ta.games, tb.none, tb.games);
@@ -64,7 +65,7 @@ const settled = (d, alpha, precision) => d.p < alpha || (d.hi - d.lo) / 2 <= pre
  * verdicts.
  */
 export async function compareArms({
-  a, b, players = [3, 4, 5, 6], policySets = ['heuristic'], games = 200, maxGames = 1600,
+  a, b, players = [3, 4, 5, 6], policySets = ['heuristic'], games = 200, maxGames = games,
   precision = 0.03, alpha = 0.05, seedPrefix = 'cmp', maxRounds = 60, threads, onProgress = () => {},
 }) {
   const cells = [];

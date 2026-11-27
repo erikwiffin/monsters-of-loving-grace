@@ -7,7 +7,7 @@ import { seatSpec, makePolicy } from '../src/sim/registry.js';
 import { verdicts, parsePolicySet } from '../src/sim/compare.js';
 import { runGame, aggregate } from '../src/sim/runner.js';
 import { heuristicPolicy, DEFAULT_WEIGHTS, OBJECTIVE_WEIGHTS } from '../src/sim/policies.js';
-import { renameResearch } from '../src/sim/metamorphic.js';
+import { renameResearch, mergeOverrides } from '../src/sim/metamorphic.js';
 import { researchWorth, expectedDiscovery } from '../src/sim/effect-values.js';
 import { resolveConfig } from '../src/engine/index.js';
 import { summarizeView, describeMove } from '../src/sim/llm-policy.js';
@@ -105,4 +105,11 @@ test('effect values: Discreet Methods is valued from the configured discovery ro
   const cfg = resolveConfig({ playerCount: 4 });
   assert.equal(expectedDiscovery(cfg.actions.graves, { rollBonus: 1 }), 0.5);
   assert.equal(expectedDiscovery(cfg.actions.graves, { rollBonus: 4 }), 0);
+});
+
+test('overrides merge deeply, arrays replaced; renaming follows the rules under test', () => {
+  const m = mergeOverrides({ actions: { graves: { parts: 3, suspicion: { die: 6, bands: [{ max: 4, amount: 1 }] } } } }, { actions: { graves: { suspicion: { bands: [] } }, sell: { gain: 9 } } });
+  assert.deepEqual(m, { actions: { graves: { parts: 3, suspicion: { die: 6, bands: [] } }, sell: { gain: 9 } } });
+  const changed = resolveConfig({ playerCount: 4, research: { discretion: { effects: [{ kind: 'suspicionReduction', amount: 1 }] } } });
+  assert.deepEqual(renameResearch('x_', changed).research.x_discretion.effects, [{ kind: 'suspicionReduction', amount: 1 }]);
 });

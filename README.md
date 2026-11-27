@@ -110,6 +110,7 @@ src/engine/               pure rules engine (no DOM, storage, timers or Math.ran
 src/ui/                   browser adapter (rendering + localStorage); calls only engine APIs
 src/sim/                  policies, headless runner and AI quality tools
 bin/simulate.mjs          batch playtest CLI
+bin/quick-check.mjs       sanity check of a rule change in about 30 seconds
 bin/compare.mjs           two arms (rules or policies) on the same seeds, with intervals
 bin/ai-checks.mjs         metamorphic checks of the AI policies
 bin/explain.mjs           one decision's scored options; disagreements between policies
@@ -222,7 +223,7 @@ Games that hit `--max-commands` or `--max-rounds` are reported as `truncated: tr
 
 A bot holding more than 25 money or 25 loose parts is no longer playing realistically, so the runner stops the game there and flags it (`truncationReason: "hoarding"` and the `hoarding` record above). Aggregates count stops by reason (`truncatedByReason`) and hoarders by objective and resource (`hoardingBy`). Change the limits with `--hoard-money` and `--hoard-parts`, or turn the stop off with `--no-hoard-limit` (`hoardLimit` in `runGame`/`runBatch`; `null` disables it). Seats played by the `random` policy are exempt, since random play is not meant to be realistic.
 
-Policies: `random`, `heuristic`, and the heuristic's `cautious` and `bold` styles, plus, for robustness checks, `noisy` (picks at random among options near its best), `greedy` (no decision noise) and `bt` (the behaviour-tree Prometheus in `src/sim/bt-prometheus.js`, the heuristic for other roles). Names resolve through `src/sim/registry.js`, which also takes specs such as `{"policy":"heuristic","options":{"weights":{...}}}` and seatings such as `{"default":"heuristic","byObjective":{"prometheus":"bt"}}` (only the first Prometheus seat deviates unless `"deviators":"all"`).
+Policies: `random`, `heuristic`, and the heuristic's `cautious` and `bold` styles, plus, for robustness checks, `noisy` (picks at random among options near its best) and `bt` (the behaviour-tree Prometheus in `src/sim/bt-prometheus.js`, the heuristic for other roles). Names resolve through `src/sim/registry.js`, which also takes specs such as `{"policy":"heuristic","options":{"weights":{...}}}` and seatings such as `{"default":"heuristic","byObjective":{"prometheus":"bt"}}` (only the first Prometheus seat deviates unless `"deviators":"all"`).
 
 Every result also has an `uptake` record, aggregated as `uptake`:
 - each research type: how often it was acquired (by research or experiment), published and applied in rolls, with the win rate of the players who held it (a correlation, not a cause);
@@ -250,14 +251,19 @@ Variables are dotted config paths (`actions.medicine.gain`, `actions.research.ca
 Balance numbers are only as good as the bots producing them. These tools check that a result comes from the rules, not from how the AI plays.
 
 ```bash
-# a rule change, under several policy sets, with confidence intervals; plays
-# more games until each difference is significant or known to within 3 points
-node bin/compare.mjs --candidate change.json --policies 'heuristic;cautious,bold;noisy'
+# first: a quick sanity check of a rule change (about 30 seconds)
+node bin/quick-check.mjs change.json
+
+# then, if it flags something or before relying on a change: the full comparison,
+# under several policy sets, with confidence intervals (--max-games keeps adding
+# games until each difference is significant or known to within 3 points)
+node bin/compare.mjs --candidate change.json --policies 'heuristic;cautious,bold;noisy' --games 400 --max-games 800
 
 # a policy change under the same rules
 node bin/compare.mjs --base-policies heuristic --candidate-policies bt --players 4,5
 
-# metamorphic checks: changes with a known effect on a sensible player
+# metamorphic checks: changes with a known effect on a sensible player (about 1.5 minutes;
+# --exact for the move-for-move ones only, --scale 3 for more statistical power)
 npm run ai-checks
 
 # why did the bot do that: the heuristic's scored options at one decision
@@ -274,11 +280,13 @@ node bin/best-response.mjs
 node bin/llm-playtest.mjs --objective visionary --players 5
 ```
 
+- **Quick check** (`bin/quick-check.mjs`): the scenario tests and the exact metamorphic checks under the changed rules, a screening comparison (standard heuristic, 3 and 5 players, 200 games per arm, so changes of about ±7 points show), and the uptake of the content the change touches. It lists what it flagged and what to run next. It is for catching big effects and AI blind spots before a full run, not for balance numbers.
 - **Compare** (`src/sim/compare.js`): both arms play the same seeds. For each player count and policy set it reports each objective's win rate in both arms, the change with a 95% interval and a p-value, and how many marks chance alone would give. Its verdict per objective is *robust* (every policy set agrees), *policy-dependent* (sets disagree significantly: the effect comes from the AI), or *no clear effect*.
-- **Metamorphic checks** (`src/sim/metamorphic.js`): cheaper or safer actions are not used less; a research card with no effect is not bought (except by an Inquisitor blocking a slot); renaming every research type changes nothing beyond noise, so the AI depends on effects, not IDs; renaming the players changes nothing at all. A failure is an AI flaw to fix before trusting balance numbers.
+- **Metamorphic checks** (`src/sim/metamorphic.js`): cheaper or safer actions are not used less; a research card with no effect is not bought (except by an Inquisitor blocking a slot); renaming every research type, or the players, changes no game at all, move for move, so the AI depends on effects, not IDs. A failure is an AI flaw to fix before trusting balance numbers.
 - **Scenario tests** (`test/policy-scenarios.test.mjs`, part of `npm test`): set up a situation, let a policy play the phase, and check what it did. They state how the bots should behave.
 - **Explanations** (`src/sim/disagree.js`): the heuristic takes an `explain` callback that receives every option's score, split into value, suspicion risk, Scientist tax and Igor reserve.
 - **Effect values** (`src/sim/effect-values.js`): every policy values research from one two-layer table. Layer 1 (`EFFECT_IMPACT`) says what each effect kind does in a few game quantities (Vitality and Humanity points, control points and attempts, money, suspicion kept off the table, parts, ferocity, hunting); it is the same for every role. Layer 2 prices each quantity per role, for itself (`QUANTITY_PRICE`) and in a rival's hands (`RIVAL_PRICE`, which prices publishing and denial). A new card that uses existing effect kinds needs no code. A new effect kind needs one layer-1 entry, and a new quantity only for a genuinely new kind of benefit, priced once per role. The behaviour tree models resurrection and control odds itself and takes every other kind from the table.
+- **Occasional tools**, too slow or too uncertain for routine use: tuning, best response and the LLM playtest.
 - **Tuning and best response** (`src/sim/tune.js`): the heuristic's numbers are `DEFAULT_WEIGHTS` in `src/sim/policies.js`, with per-role defaults in `OBJECTIVE_WEIGHTS` (Prometheus uses tuned weights), overridable with the `weights` option. `bin/tune.mjs` searches them for one objective with the cross-entropy method, as a best response to standard opponents, and saves them under `experiments/tuned/`. `bin/best-response.mjs` puts one seat of each role on its best known policy against a standard field: a large gap over the standard heuristic means that role's balance numbers measure AI skill as much as rules.
 - **LLM playtest** (`src/sim/llm-policy.js`): Claude (`claude-opus-5-5`, low effort, with server-side refusal fallbacks) plays one seat from `assets/rulebook.md`, one API call per decision, and writes a transcript of its moves and reasons and its feedback on unclear rules and unused content to `playtests/`. It needs `npm install @anthropic-ai/sdk` and credentials. Use it for qualitative checks of new content, not for statistics.
 - **Statistics** (`src/sim/stats.js`): Wilson intervals, two-proportion tests and `gamesForHalfWidth`. At a 50% rate, 100 games give about ±10 points and 500 about ±4.4.

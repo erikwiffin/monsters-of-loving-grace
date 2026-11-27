@@ -10,7 +10,9 @@
 // Options:
 //   --policies 'heuristic;cautious,bold;noisy;bt'  policy sets, separated by ';'
 //                                                   (a comma assigns seats in order)
-//   --players 3,4,5,6  --games 200  --max-games 1600  --precision 0.03
+//   --players 3,4,5,6  --games 200  --precision 0.03
+//   --max-games 1600   keep doubling the games until every difference is
+//                      significant or within --precision (off by default)
 //   --seed cmp  --max-rounds 60  --threads N  --out comparison.json
 import { readFileSync, writeFileSync } from 'node:fs';
 import { compareArms, formatComparison, parsePolicySet } from '../src/sim/compare.js';
@@ -38,7 +40,7 @@ const result = await compareArms({
   a, b, policySets,
   players: opt('players', '3,4,5,6').split(',').map(Number),
   games: Number(opt('games', 200)),
-  maxGames: Number(opt('max-games', 1600)),
+  maxGames: Number(opt('max-games', opt('games', 200))),
   precision: Number(opt('precision', 0.03)),
   seedPrefix: opt('seed', 'cmp'),
   maxRounds: Number(opt('max-rounds', 60)),
