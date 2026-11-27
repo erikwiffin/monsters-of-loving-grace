@@ -1173,3 +1173,20 @@ test('heuristic: replaces harmful installed parts and never installs them', () =
   const asm = decide((c) => c.actionId === 'assemble' || c.type === 'PASS_TURN');
   assert.ok(asm.type === 'PASS_TURN' || !asm.choices.partIds.includes('part-a5'), 'the criminal brain is not installed');
 });
+
+test('dispatch shares frozen configuration and log entries, and never mutates the state it was given', () => {
+  let s = createGame({ playerCount: 4 }, 'share-1');
+  assert.ok(Object.isFrozen(s.config) && Object.isFrozen(s.config.actions.graves));
+  for (let i = 0; i < 120 && !s.result; i++) {
+    const before = serialize(s);
+    const r = dispatch(s, enumerateLegalCommands(s, s.activePlayerId)[0]);
+    assert.equal(serialize(s), before, 'the given state changed');
+    assert.equal(r.state.config, s.config);
+    s = r.state;
+  }
+  for (const log of [s.suspicionHistory, s.publications, s.resurrections]) for (const x of log) assert.ok(Object.isFrozen(x));
+  // Views share the frozen entries: a policy cannot change the game through them.
+  const view = getPlayerView(s, s.players[0].id);
+  assert.throws(() => { view.config.suspicionMax = 99; });
+  assert.throws(() => { view.suspicionHistory[0].value = 99; });
+});

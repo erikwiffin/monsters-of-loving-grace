@@ -13,6 +13,15 @@ const clone = typeof structuredClone === 'function'
   ? (x) => structuredClone(x)
   : (x) => JSON.parse(JSON.stringify(x));
 
+/** Freezes an object and everything in it: a game's configuration never changes once created. */
+function deepFreeze(x) {
+  if (x && typeof x === 'object' && !Object.isFrozen(x)) {
+    Object.freeze(x);
+    for (const v of Object.values(x)) deepFreeze(v);
+  }
+  return x;
+}
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -298,7 +307,7 @@ function changeSuspicion(s, delta, reason, playerId = null, onMob = formMob) {
   const before = s.suspicion;
   const after = Math.max(0, Math.min(max, before + delta));
   s.suspicion = after;
-  s.suspicionHistory.push({ eventSeq: s.events.length + 1, round: s.round, phase: s.phase, value: after, delta: after - before, reason, playerId });
+  s.suspicionHistory.push(Object.freeze({ eventSeq: s.events.length + 1, round: s.round, phase: s.phase, value: after, delta: after - before, reason, playerId }));
   emit(s, 'SUSPICION_CHANGED', { playerId, requested: delta, delta: after - before, value: after, max, reason });
   if (delta > 0 && after >= max) onMob(s);
 }
@@ -336,7 +345,7 @@ function gainResearch(s, p, card, via) {
 function publish(s, p, type) {
   p.published.push(type);
   p.published.sort();
-  s.publications.push({ playerId: p.id, type, round: s.round });
+  s.publications.push(Object.freeze({ playerId: p.id, type, round: s.round }));
   emit(s, 'RESEARCH_PUBLISHED', { playerId: p.id, researchType: type });
 }
 
@@ -722,7 +731,7 @@ export function createGame(config = {}, seed) {
     engineVersion: ENGINE_VERSION,
     seed: String(seed),
     configOverrides: clone(config || {}),
-    config: cfg,
+    config: deepFreeze(cfg),
     rng: seedState(String(seed)),
     round: 1,
     phase: 'setup',
@@ -775,7 +784,7 @@ export function createGame(config = {}, seed) {
   }
   shuffle(s.rng, s.deck);
   s.market = s.deck.splice(0, cfg.marketSize);
-  s.suspicionHistory.push({ eventSeq: 0, round: 1, phase: 'setup', value: 0, delta: 0, reason: 'start', playerId: null });
+  s.suspicionHistory.push(Object.freeze({ eventSeq: 0, round: 1, phase: 'setup', value: 0, delta: 0, reason: 'start', playerId: null }));
 
   emit(s, 'GAME_STARTED', {
     engineVersion: ENGINE_VERSION,
@@ -1058,7 +1067,7 @@ function resurrect(s, pid) {
     for (let i = 0; i < n; i++) refund.push(pool.splice(randInt(s.rng, pool.length), 1)[0]);
     p.loose.push(...refund);
     record.outcome = 'failed';
-    s.resurrections.push(record);
+    s.resurrections.push(deepFreeze(record));
     emit(s, 'RESURRECTION_FAILED', { playerId: pid, refundedParts: clone(refund), lostParts: clone(pool) });
     const failSus = Math.max(0, s.config.resurrection.failedVitalitySuspicion - researchBonus(s, pid, 'quietFailure'));
     if (failSus > 0) changeSuspicion(s, failSus, 'failed_resurrection', pid);
@@ -1072,7 +1081,7 @@ function resurrect(s, pid) {
     s.stableTransitions.push(cid);
     record.outcome = 'stable';
     record.creatureId = cid;
-    s.resurrections.push(record);
+    s.resurrections.push(deepFreeze(record));
     emit(s, 'CREATURE_STABILIZED', { playerId: pid, creatureId: cid, disposition: 'humane' });
     return;
   }
@@ -1125,7 +1134,21 @@ export function estimateControl(s, pid, creatorId = null) {
   return successChance([{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, pid).map((x) => x.e)], controlThreshold(s, creatorId));
 }
 
+// successChance is pure and called for every player against every creator on
+// every view, so its results are cached by their inputs.
+const chanceCache = new Map();
 function successChance(effects, threshold) {
+  let key = `${threshold}`;
+  for (const e of effects) key += `|${e.op},${e.die},${e.sign},${e.amount}`;
+  const hit = chanceCache.get(key);
+  if (hit !== undefined) return hit;
+  const v = computeSuccessChance(effects, threshold);
+  if (chanceCache.size > 20000) chanceCache.clear();
+  chanceCache.set(key, v);
+  return v;
+}
+
+function computeSuccessChance(effects, threshold) {
   let dist = new Map([[0, 1]]);
   for (const e of effects) {
     if (e.op === 'threshold') { threshold += e.amount; continue; }
@@ -1175,7 +1198,7 @@ function subdue(s, pid) {
   c.subduedBy = pid;
   k.record.outcome = 'subdued';
   k.record.subduedBy = pid;
-  s.resurrections.push(k.record);
+  s.resurrections.push(deepFreeze(k.record));
   s.control = null;
   emit(s, 'MONSTER_SUBDUED', { playerId: pid, creatorId: c.ownerId, creatureId: c.id, attemptsLeft: controlAttempts(s, pid), salvagedParts: clone(salvage), lostParts: clone(pool) });
   // The struggle is noticed. The monster is already destroyed, so a mob
@@ -1200,7 +1223,7 @@ function unleash(s, cause) {
   c.status = 'unleashed';
   c.disposition = 'unleashed';
   k.record.outcome = 'unleashed';
-  s.resurrections.push(k.record);
+  s.resurrections.push(deepFreeze(k.record));
   s.control = null;
   emit(s, 'CREATURE_UNLEASHED', { playerId: c.ownerId, creatureId: c.id, cause });
   endGame(s, 'unleashed', s.players.filter((x) => s.objectives[x.id] === 'unleasher').map((x) => x.id));
@@ -1359,10 +1382,21 @@ function applyCommand(s, cmd) {
 export function dispatch(state, command) {
   const e = validateCommand(state, command);
   if (e) return { ok: false, state, events: [], error: e };
-  // Emitted events are immutable, so the event list can be shared structurally.
-  const { events, ...rest } = state;
-  const s = clone(rest);
-  s.events = events.slice();
+  // Events, the command log and the other logs are append-only and their
+  // entries never change, and the configuration is frozen: share them
+  // structurally (new arrays, same entries) instead of copying them on every
+  // command, which made a game quadratic in its length.
+  const { events, config, commandLog, suspicionHistory, resurrections, publications, ...rest } = state;
+  const copied = clone(rest);
+  const shared = {
+    config, events: events.slice(), commandLog: commandLog.slice(), suspicionHistory: suspicionHistory.slice(),
+    resurrections: resurrections.slice(), publications: publications.slice(),
+  };
+  // Keep the key order earlier versions produced (every key in place, events
+  // last): saves are verified by comparing serialized text.
+  const s = {};
+  for (const k of Object.keys(state)) if (k !== 'events') s[k] = k in shared ? shared[k] : copied[k];
+  s.events = shared.events;
   const start = s.events.length;
   const recorded = clone(command);
   delete recorded.seq;
@@ -1567,7 +1601,12 @@ export function filterEvents(events, pid = null) {
   return events.filter((e) => eventVisibleTo(e, pid));
 }
 
-function publicPlayer(s, p) {
+function publicPlayer(s, p, thresholdOf) {
+  // The player's control roll against each creator's monsters: its effects
+  // once, the threshold once per creator (as estimateControl, without the
+  // repeated work: every view needs every pair).
+  const cc = s.config.control;
+  const roll = [{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, p.id).map((x) => x.e)];
   return {
     id: p.id, name: p.name, seat: p.seat, money: p.money,
     loose: clone(p.loose), body: clone(p.body), bodyComplete: bodyComplete(p),
@@ -1578,9 +1617,9 @@ function publicPlayer(s, p) {
     rerollsUsed: p.rerollsUsed || 0,
     assembleCapacity: assembleCapacity(s, p.id),
     controlAttempts: controlAttempts(s, p.id),
-    controlChance: estimateControl(s, p.id),
-    controlChanceVs: Object.fromEntries(s.players.map((c) => [c.id, estimateControl(s, p.id, c.id)])),
-    controlThreshold: controlThreshold(s, p.id),
+    controlChance: successChance(roll, cc.threshold),
+    controlChanceVs: Object.fromEntries(s.players.map((c) => [c.id, successChance(roll, thresholdOf(c.id))])),
+    controlThreshold: thresholdOf(p.id),
     garrisoned: garrisoned(s, p.id),
     canSubdueOthers: canSubdueOthers(s, p.id),
     resurrectionOdds: estimateResurrection(s, p.id),
@@ -1599,12 +1638,17 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     initiative: initiativeOrder(s),
     suspicion: s.suspicion,
     suspicionMax: s.config.suspicionMax,
-    suspicionHistory: clone(s.suspicionHistory),
+    // Log entries are frozen when recorded, so views share them.
+    suspicionHistory: s.suspicionHistory.slice(),
     market: clone(s.market),
     deckCount: s.deck.length,
-    publications: clone(s.publications),
+    publications: s.publications.slice(),
     occupancy: clone(s.occupancy),
-    players: s.players.map((p) => publicPlayer(s, p)),
+    players: (() => {
+      const thresholds = {};
+      const thresholdOf = (id) => (thresholds[id] ??= controlThreshold(s, id));
+      return s.players.map((p) => publicPlayer(s, p, thresholdOf));
+    })(),
     creatures: s.creatureOrder.map((id) => clone(s.creatures[id])),
     stableTransitions: [...s.stableTransitions],
     capacities: Object.fromEntries(Object.keys(s.config.actions).map((id) => [id, capacityFor(s.config, id)])),
@@ -1618,10 +1662,10 @@ export function getPublicView(s, { includeEvents = true } = {}) {
       // Players after the current decider who could still subdue this monster.
       upcoming: s.control.chain.slice(s.control.position + 1).filter((pid) => canSubdue(s, pid)),
     } : null,
-    resurrections: clone(s.resurrections),
+    resurrections: s.resurrections.slice(),
     commandCount: s.commandLog.length,
     result: s.result ? clone(s.result) : null,
-    config: clone(s.config),
+    config: s.config, // frozen: shared, not copied
   };
   if (includeEvents) view.events = clone(filterEvents(s.events, null));
   return view;
@@ -1683,5 +1727,7 @@ export function deserialize(json, { verifyReplay = true } = {}) {
     rebuilt.configOverrides = clone(s.configOverrides);
     if (serialize(rebuilt) !== serialize(s)) throw new Error('Save failed replay verification: state does not match its command history.');
   }
+  deepFreeze(s.config);
+  for (const log of [s.suspicionHistory, s.publications, s.resurrections]) for (const x of log || []) deepFreeze(x);
   return s;
 }
