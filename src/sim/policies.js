@@ -119,41 +119,15 @@ export const DEFAULT_WEIGHTS = {
 };
 
 /**
- * Per-objective defaults over DEFAULT_WEIGHTS: the best weights found for
- * each role, adopted only where they measurably beat the defaults in one seat
- * against a standard field (bin/best-response.mjs; experiments/README.md).
- * Prometheus: tuned by bin/tune.mjs (experiments/tuned/prometheus.json), +6.6
- * points over 1,200 games, p = 0.001, mostly at five and six players. The
- * tuned Visionary, Inquisitor and Unleasher weights were no better, so those
- * roles keep the defaults.
+ * Per-objective defaults over DEFAULT_WEIGHTS, for roles whose best weights
+ * measurably beat the defaults when every seat of that role plays them
+ * (bin/tune.mjs --deviators all; experiments/README.md). Weights tuned for a
+ * single seat against a standard field are best responses, not defaults:
+ * the first tuned Prometheus never garrisoned, which paid while others
+ * hunted monsters and let Unleashers win far more once every Prometheus
+ * played it. Those stay in experiments/tuned/ as challengers.
  */
-export const OBJECTIVE_WEIGHTS = {
-  prometheus: {
-    suspicionCost: 1.123,
-    suspicionCurve: 5.637,
-    suspicionPace: 2.883,
-    mobStake: 44.575,
-    moneyScale: 0.981,
-    spendFactor: 0.599,
-    partBase: 2.867,
-    partQuality: 0.233,
-    completionBonus: 1.38,
-    researchScale: 0.579,
-    publishHarm: 1.298,
-    denyScale: 1.011,
-    hireValue: 0.578,
-    expectedRounds: 9,
-    igorReserve: 0.717,
-    charityScale: 1.206,
-    garrisonValue: 4.067,
-    garrisonAlert: 8,
-    assembleValue: 7.009,
-    prepareValue: 15.927,
-    attemptMinStable: 0.176,
-    attemptLate: 0.129,
-    unleashFactor: 1.315,
-  },
-};
+export const OBJECTIVE_WEIGHTS = {};
 
 /**
  * A greedy strategy that prices every option in money, using only its view,
