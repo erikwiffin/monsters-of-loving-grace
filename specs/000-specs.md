@@ -6,6 +6,10 @@ This directory holds the specifications that direct development of Monsters of L
 
 Specs are the source of truth for what the game and its tooling should do. Code, tests and the README describe and enforce that intent, but if they disagree with a spec, the spec wins until the designer says otherwise. Anyone changing the project, human or AI, reads the relevant specs before making a change and checks afterwards that the change has not broken any behaviour a spec describes.
 
+## Specs are constraints
+
+Behaviour not specifically prohibited by a spec is allowed, and the game may implement things not explicitly required by a spec. Specs act as constraints; be creative outside of those constraints. Don't request to change a spec when you have a new idea unless it would conflict with an existing spec.
+
 ## Creating specs
 
 New specs are only created when the designer asks for one, or approves a proposal to write one. An assistant that thinks a new area deserves a spec should suggest it and wait for an answer rather than writing it. This keeps the directory a deliberate record of agreed behaviour, not a dumping ground for notes.

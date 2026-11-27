@@ -2,9 +2,10 @@
 // Headless AI playtest runner.
 // Usage: node bin/simulate.mjs [--games 100] [--seed batch] [--players 5]
 //        [--policy heuristic|random|heuristic,random,...] [--max-commands 20000]
-//        [--max-rounds 200] [--config overrides.json] [--commands] [--out results.json] [--jsonl]
+//        [--max-rounds 200] [--hoard-money 25] [--hoard-parts 25] [--no-hoard-limit]
+//        [--config overrides.json] [--commands] [--out results.json] [--jsonl]
 import { readFileSync, writeFileSync } from 'node:fs';
-import { runGame, aggregate } from '../src/sim/runner.js';
+import { runGame, aggregate, DEFAULT_HOARD_LIMIT } from '../src/sim/runner.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -28,6 +29,11 @@ const runOpts = {
   maxCommands: Number(opt('max-commands', 20000)),
   maxRounds: Number(opt('max-rounds', 200)),
   includeCommands: flag('commands'),
+  // Stop a game, flagging the bot, once anyone holds more money or loose parts than this.
+  hoardLimit: flag('no-hoard-limit') ? null : {
+    money: Number(opt('hoard-money', DEFAULT_HOARD_LIMIT.money)),
+    parts: Number(opt('hoard-parts', DEFAULT_HOARD_LIMIT.parts)),
+  },
 };
 
 const results = [];

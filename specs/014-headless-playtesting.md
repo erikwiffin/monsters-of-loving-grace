@@ -23,8 +23,6 @@ Built-in policies ship in `src/sim/policies.js`. Each has its own seeded randomn
 
 The runner creates a game, and then, until the game ends, asks the active player's policy for a command and dispatches it. Policies may be given as a name, an object, an array assigned to seats in order, or a function of the player. If a policy returns an invalid command, the runner counts it and falls back to the first legal command for that decision.
 
-An external runner may impose a command budget and a round budget to stop stalled simulations. A game stopped this way is reported as truncated and non-terminal, with the reason (`command_budget` or `round_budget`). It is never reported as an in-game defeat or a mob victory. The engine itself imposes no round limit (spec 021).
-
 ## Results
 
 Each game produces a machine-readable summary containing:
