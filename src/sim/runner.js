@@ -5,23 +5,22 @@
 import {
   createGame, dispatch, getPlayerView, enumerateLegalCommands, getReplayRecord, capacityFor,
 } from '../engine/index.js';
-import { POLICIES } from './policies.js';
+import { makePolicy, seatSpec } from './registry.js';
+import { uptakeMetrics, aggregateUptake } from './uptake.js';
 
-function resolvePolicyFactory(policies, seed) {
-  // policies: string | policy | array of (string | policy) | (playerId, index) => policy
+// policies: a seating (see registry.js): a name or spec for every seat, an
+// array assigned to seats in order, { default, byObjective, deviators }, or a
+// function (playerId, index, objective) returning a spec or policy.
+function resolvePolicyFactory(policies, seed, state) {
   const cache = {};
   return (pid, index) => {
     if (cache[pid]) return cache[pid];
-    let spec = policies;
-    if (typeof policies === 'function') spec = policies(pid, index);
-    else if (Array.isArray(policies)) spec = policies[index % policies.length];
-    if (typeof spec === 'string') {
-      const make = POLICIES[spec];
-      if (!make) throw new Error(`Unknown policy ${spec}`);
-      spec = make(`${seed}:${pid}:${spec}`);
-    }
-    cache[pid] = spec;
-    return spec;
+    const objective = state.objectives[pid];
+    const objectivesBefore = state.players.slice(0, index).map((p) => state.objectives[p.id]);
+    const spec = typeof policies === 'function' ? policies(pid, index, objective) : seatSpec(policies, { index, objective, objectivesBefore });
+    const name = typeof spec === 'string' ? spec : (spec && spec.policy) || 'custom';
+    cache[pid] = makePolicy(spec, `${seed}:${pid}:${name}`);
+    return cache[pid];
   };
 }
 
@@ -80,6 +79,7 @@ function summarize(state, { seed, commands, truncated, truncationReason, hoardin
     suspicionHistory: state.suspicionHistory.map((h) => ({ round: h.round, phase: h.phase, value: h.value, delta: h.delta, reason: h.reason, playerId: h.playerId })),
     resurrections: state.resurrections,
     economy: economyMetrics(state),
+    uptake: uptakeMetrics(state),
     ...(includeCommands ? { commands: getReplayRecord(state).commands } : {}),
   };
 }
@@ -87,7 +87,7 @@ function summarize(state, { seed, commands, truncated, truncationReason, hoardin
 function setup(opts) {
   const { seed = 'sim', config = {}, policies = 'heuristic' } = opts;
   const state = createGame(config, seed);
-  const policyFor = resolvePolicyFactory(policies, seed);
+  const policyFor = resolvePolicyFactory(policies, seed, state);
   return { state, policyFor };
 }
 
@@ -188,7 +188,8 @@ export function runBatch({ games = 100, seedPrefix = 'batch', ...opts } = {}) {
   return { results, aggregate: aggregate(results) };
 }
 
-export function aggregate(results) {
+/** Summarises a batch. `config`, when given, names content the batch never touched. */
+export function aggregate(results, config = null) {
   const agg = {
     games: results.length, truncated: 0, truncatedByReason: {}, hoardingBy: {}, byReason: {}, winsByObjective: {}, collectiveDefeats: 0,
     avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, failed: 0, stable: 0, subdued: 0, unleashed: 0 },
@@ -222,6 +223,7 @@ export function aggregate(results) {
   agg.medianRounds = rounds.length ? (rounds.length % 2 ? rounds[mid] : (rounds[mid - 1] + rounds[mid]) / 2) : 0;
   agg.avgFinalSuspicion = Math.round(agg.avgFinalSuspicion * 100) / 100;
   Object.assign(agg, aggregateEconomy(results));
+  agg.uptake = aggregateUptake(results, config);
   return agg;
 }
 

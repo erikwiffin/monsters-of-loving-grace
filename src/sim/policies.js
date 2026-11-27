@@ -132,14 +132,70 @@ function expectedSuspicion(def, reduction) {
   return total / r.die;
 }
 
+/** Chance that an action's discovery roll adds at least `room` suspicion: the mob, if room is what is left. */
+function mobChance(def, reduction, room) {
+  const r = def && def.suspicion;
+  if (!r || room <= 0) return 0;
+  let hits = 0;
+  for (let roll = 1; roll <= r.die; roll++) {
+    const band = r.bands.find((b) => roll <= b.max);
+    if (Math.max(0, (band ? band.amount : 0) - reduction) >= room) hits += 1;
+  }
+  return hits / r.die;
+}
+// What the mob forming is worth, in money: the game ends, lost for everyone
+// but the Inquisitor (and won for it). The smooth suspicion price misses this.
+const MOB_STAKE = 40;
+// A part that completes the body (or nearly) is worth more than any other:
+// it turns every other part into an attempt.
+const COMPLETION_BONUS = 2;
+
+/**
+ * The heuristic's tunable numbers. Defaults are the hand-set values; a tuner
+ * (bin/tune.mjs) searches them per objective. Each is a price in money or a
+ * multiplier on one, so the policy still values actions from the
+ * configuration's numbers (spec 016).
+ */
+export const DEFAULT_WEIGHTS = {
+  suspicionCost: 1, // multiplies the price of a point of suspicion
+  suspicionCurve: 8, // how steeply that price rises as the mob nears
+  suspicionPace: 4, // how much fast-rising suspicion adds to it
+  mobStake: MOB_STAKE, // what the mob forming is worth
+  moneyScale: 1, // multiplies what money is worth
+  spendFactor: 0.6, // share of a price felt when paying it
+  partBase: 3, // a part the body still needs
+  partQuality: 0.4, // per point of a part's effect on the odds
+  completionBonus: COMPLETION_BONUS, // a part that (nearly) completes the body
+  researchScale: 1, // multiplies research wants
+  publishHarm: 1, // multiplies the cost of publishing to rivals
+  denyScale: 0.8, // keeping a card from rivals, per unit of harm
+  hireValue: 0.35, // a new Igor, per round of medicine it can work
+  expectedRounds: EXPECTED_ROUNDS,
+  igorReserve: 0.8, // share of tonight's job a day Igor gives up
+  charityScale: 1.5, // multiplies the value of suspicion paid down
+  garrisonValue: 4.5,
+  garrisonAlert: GARRISON_ALERT_PARTS, // rival parts towards a body that call for a garrison
+  assembleValue: 5,
+  prepareValue: 12,
+  attemptMinStable: 0.2, // least stable chance for an attempt...
+  attemptLate: 0.1, // ...from round 12
+  unleashFactor: 1.5, // stable odds must beat this many times the unleash odds
+};
+
 /**
  * A greedy strategy that prices every option in money, using only its view,
  * the configuration's numbers and the engine's exact odds. Because values come
  * from the config, it adapts when a sweep changes costs, gains or suspicion.
  */
-export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'standard', igorBias = null } = {}) {
+export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'standard', igorBias = null, weights = {}, margin = 0, explain = null } = {}) {
   const r = makeRandom(seed);
   const st = STYLES[style] || STYLES.standard;
+  const W = { ...DEFAULT_WEIGHTS, ...weights };
+  // Why the bot chose: every option with its score, broken into parts.
+  const report = (kind, options, chosen) => {
+    if (explain) explain({ kind, options, chosen });
+    return chosen;
+  };
   return {
     name: style === 'standard' ? 'heuristic' : style,
     decide({ view, legal }) {
@@ -155,7 +211,8 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const redundant = cfg.research[t].stacks === false && (me.effectiveResearch[t] || 0) >= 1;
         want[t] = redundant ? 0 : w.want;
         // Rivals who already have a special ability lose nothing more.
-        publishPenalty[t] = w.harm * (cfg.research[t].stacks === false ? 0.6 : 1);
+        want[t] *= W.researchScale;
+        publishPenalty[t] = w.harm * W.publishHarm * (cfg.research[t].stacks === false ? 0.6 : 1);
       }
 
       // A card kept from an experiment is never published, and the deck holds
@@ -163,7 +220,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       // rival. Denial is worth what that card would cost this bot in a rival's
       // hands (PUBLISH_HARM), for about one rival.
       const denyValue = {};
-      for (const t of Object.keys(cfg.research)) denyValue[t] = researchWorth(cfg, t, objective).harm * 0.8;
+      for (const t of Object.keys(cfg.research)) denyValue[t] = researchWorth(cfg, t, objective).harm * W.denyScale;
       const keepValue = (t) => (want[t] || 0) + (denyValue[t] || 0);
 
       if (view.pendingPick) {
@@ -171,7 +228,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const typeOf = (id) => view.pendingPick.cards.find((k) => k.id === id).type;
         let best = legal[0];
         for (const c of legal) if (keepValue(typeOf(c.cardId)) > keepValue(typeOf(best.cardId))) best = c;
-        return best;
+        return report('pick', legal.map((c) => ({ command: c, score: keepValue(typeOf(c.cardId)), parts: { want: want[typeOf(c.cardId)] || 0, deny: denyValue[typeOf(c.cardId)] || 0 } })), best);
       }
       if (view.phase === 'resolution' && view.control) {
         // A monster is loose in the control chain (spec 025). Subduing costs
@@ -190,7 +247,8 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         }
         else if (objective === 'prometheus') doSubdue = k.creatorId === me.id || last || declineBringsMob || me.controlAttempts > 1;
         else doSubdue = true;
-        return legal.find((c) => c.subdue === doSubdue) || legal[0];
+        const chosen = legal.find((c) => c.subdue === doSubdue) || legal[0];
+        return report('control', legal.map((c) => ({ command: c, score: c.subdue === doSubdue ? 1 : 0, parts: { rule: `${objective}: ${doSubdue ? 'subdue' : 'decline'}` } })), chosen);
       }
 
       const susp = view.suspicion / view.suspicionMax;
@@ -200,7 +258,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       // The price of one point of suspicion: rises steeply as the mob nears.
       // Suspicion is the Inquisitor's only route to victory, so it buys it eagerly.
       const pace = Math.min(1, recentRise / view.suspicionMax);
-      const suspicionPrice = wantsSuspicion ? -4 : st.suspicionCost * (1 + 8 * susp * susp + 4 * pace);
+      const suspicionPrice = wantsSuspicion ? -4 : st.suspicionCost * W.suspicionCost * (1 + W.suspicionCurve * susp * susp + W.suspicionPace * pace);
       // Suspicion is shared: paying it down helps every rival as much as the
       // payer, so non-Inquisitors only buy it back when the mob is close, and
       // only as much as it takes to get out of danger.
@@ -211,12 +269,16 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       // My total research bonus of an effect kind (one entry per effective copy).
       const bonus = (kind) => Object.entries(cfg.research).reduce((a, [t, d]) => a + (me.effectiveResearch[t] || 0) * d.effects.filter((e) => e.kind === kind).reduce((x, e) => x + (e.amount ?? 1), 0), 0);
       const reduction = bonus('suspicionReduction');
+      // An action's suspicion cost: the expected rise at the current price,
+      // plus the chance its roll brings the mob, which ends the game.
+      const riskCost = (def) => expectedSuspicion(def, reduction) * suspicionPrice
+        + (wantsSuspicion ? -1 : 1) * W.mobStake * mobChance(def, reduction, view.suspicionMax - view.suspicion);
       const gravesParts = (cfg.actions.graves ? cfg.actions.graves.parts : 0) + bonus('gravesBonus');
       const sellGain = (cfg.actions.sell ? cfg.actions.sell.gain : 0) + bonus('sellBonus');
       const charityCut = (cfg.actions.charity ? cfg.actions.charity.reduction : 0) + bonus('charityBonus');
       const specimenCost = Math.max(0, (cfg.actions.specimens ? cfg.actions.specimens.cost : 0) - bonus('specimenDiscount'));
       // Money matters less the more of it a player already holds.
-      let moneyValue = me.money < 4 ? 1.5 : me.money < 10 ? 1 : me.money < 20 ? 0.5 : 0.2;
+      let moneyValue = W.moneyScale * (me.money < 4 ? 1.5 : me.money < 10 ? 1 : me.money < 20 ? 0.5 : 0.2);
       // The Inquisitor builds nothing: money matters only for hiring more
       // Igors (more night work) and for blocking charity.
       if (wantsSuspicion) {
@@ -248,11 +310,12 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const partValue = (variantId, needs = stillNeeded) => {
         const t = cfg.partVariants[variantId].type;
         if (wantsSuspicion) return 0.3;
-        return needs(t) > 0 ? 3 + variantValue(cfg, variantId, objective) * 0.4 : spareValue;
+        if (!(needs(t) > 0)) return spareValue;
+        return W.partBase + variantValue(cfg, variantId, objective) * W.partQuality + (totalStillNeeded <= 2 ? W.completionBonus : 0);
       };
       // A random part, drawn with the configured type weights.
       const weightTotal = Object.values(cfg.partTypes).reduce((a, t) => a + t.weight, 0);
-      const randomPartValue = wantsSuspicion ? 0.3 : Object.entries(cfg.partTypes).reduce((a, [t, def]) => a + def.weight / weightTotal * (stillNeeded(t) > 0 ? 3 : spareValue), 0);
+      const randomPartValue = wantsSuspicion ? 0.3 : Object.entries(cfg.partTypes).reduce((a, [t, def]) => a + def.weight / weightTotal * (stillNeeded(t) > 0 ? W.partBase : spareValue), 0);
       // The Inquisitor gains by taking the last slot of a space rivals need to
       // build Creatures, slowing everyone down while suspicion grows.
       const denial = (id) => {
@@ -272,10 +335,15 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         }
         return n;
       };
-      const rivalsNearlyReady = rivals.filter((p) => installedPlusLoose(p) >= GARRISON_ALERT_PARTS).length;
-      const unknownTypes = Object.keys(cfg.research).filter((t) => !me.research.includes(t));
+      const rivalsNearlyReady = rivals.filter((p) => installedPlusLoose(p) >= W.garrisonAlert).length;
+      const copiesOf = (t) => cfg.research[t].copies ?? cfg.researchCopies;
+      // Types it could still discover: unknown to it, with cards in the game.
+      const unknownTypes = Object.keys(cfg.research).filter((t) => !me.research.includes(t) && copiesOf(t) > 0);
+      // Share of the deck's cards that would be new to it, by copies, not types.
+      const totalCopies = Object.keys(cfg.research).reduce((a, t) => a + copiesOf(t), 0);
+      const newCardShare = totalCopies ? unknownTypes.reduce((a, t) => a + copiesOf(t), 0) / totalCopies : 0;
       const meanWant = unknownTypes.length ? unknownTypes.reduce((a, t) => a + Math.max(0, keepValue(t)), 0) / unknownTypes.length : 0;
-      const remaining = Math.max(0, EXPECTED_ROUNDS - view.round);
+      const remaining = Math.max(0, W.expectedRounds - view.round);
 
       // Money is worth what the bot expects to spend soon: an Igor, the parts
       // its body still needs (and replacements for harmful ones), research it
@@ -322,7 +390,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const bar = st.attemptBar;
         // A subdued monster is a setback; an unleashed one ends the game.
         const pUnleash = odds.pMonster * pUnleashed();
-        const safeEnough = odds.pStable >= bar * Math.max(late ? 0.1 : 0.2, 1.5 * pUnleash);
+        const safeEnough = odds.pStable >= bar * Math.max(late ? W.attemptLate : W.attemptMinStable, W.unleashFactor * pUnleash);
         if (objective === 'prometheus') {
           // A rival's attempt doesn't change the decision: if the rival
           // stabilizes, Prometheus loses whether or not it attempted too; if
@@ -363,7 +431,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         // Everyone plans graves when it pays (parts that don't fit can be sold).
         // Graves fill only about a third of rounds, so the Inquisitor plans on
         // every slot; builders, who also bear the suspicion, plan on fewer.
-        const gravesValue = g && sparesHeld < 16 ? gravesParts * randomPartValue - expectedSuspicion(g, reduction) * suspicionPrice : 0;
+        const gravesValue = g && sparesHeld < 16 ? gravesParts * randomPartValue - riskCost(g) : 0;
         for (let i = 0; g && i < (wantsSuspicion ? capOf('graves') : slots('graves')); i++) jobs.push(gravesValue);
         const sl = cfg.actions.sell;
         // Spare parts on hand (plus, for the Inquisitor, tonight's grave haul)
@@ -372,16 +440,16 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
           + (wantsSuspicion && g ? g.parts : 0);
         const ex = cfg.actions.experiment;
         if (ex && spareCount > 0 && unknownTypes.length && view.deckCount > 0) {
-          const frac = unknownTypes.length / Object.keys(cfg.research).length;
-          jobs.push(frac * meanWant - spareValue - expectedSuspicion(ex, reduction) * suspicionPrice);
+          const frac = newCardShare;
+          jobs.push(frac * meanWant - spareValue - riskCost(ex));
           spareCount -= 1;
         }
         if (sl) {
-          const sellValue = sellGain * moneyValue - sl.parts * (wantsSuspicion ? 0.3 : spareValue) - expectedSuspicion(sl, reduction) * suspicionPrice;
+          const sellValue = sellGain * moneyValue - sl.parts * (wantsSuspicion ? 0.3 : spareValue) - riskCost(sl);
           for (let i = 0; i < Math.min(slots('sell'), Math.floor(Math.max(0, spareCount) / sl.parts)); i++) jobs.push(sellValue);
         }
-        if (me.bodyComplete && shouldAttempt()) jobs.push(12); // the Scientist prepares
-        else if (!wantsSuspicion && totalStillNeeded === 0 && needed > 0) jobs.push(5); // assemble the whole body
+        if (me.bodyComplete && shouldAttempt()) jobs.push(W.prepareValue); // the Scientist prepares
+        else if (!wantsSuspicion && totalStillNeeded === 0 && needed > 0) jobs.push(W.assembleValue); // assemble the whole body
         jobs.push(0.8); // rest, if nobody else takes it
         return jobs.filter((v) => v > 0).sort((x, y) => y - x);
       };
@@ -391,7 +459,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const discardCost = (ids) => {
         const spares = {};
         for (const t of Object.keys(open)) spares[t] = Math.max(0, looseFits(t) - open[t]);
-        const refill = cfg.actions.specimens ? cfg.actions.specimens.cost * moneyValue * 0.6 + 1.5 : 3;
+        const refill = cfg.actions.specimens ? cfg.actions.specimens.cost * moneyValue * W.spendFactor + 1.5 : 3;
         return ids.reduce((acc, id) => {
           const loose = me.loose.find((x) => x.id === id);
           if (loose) {
@@ -414,7 +482,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         const forIgors = sciFree ? jobs.slice(1) : jobs; // the Scientist takes the best job tonight
         // Placing an Igor now leaves freeIgors - 1 for the night: it gives up the
         // job at position freeIgors - 1, if there is one.
-        igorReserve = 0.8 * (forIgors[freeIgors - 1] || 0);
+        igorReserve = W.igorReserve * (forIgors[freeIgors - 1] || 0);
       }
 
       const score = (c) => {
@@ -427,24 +495,32 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
         if (!isSci && igorBias) reserve += view.phase === igorBias ? -3 : 3;
         // Keep the Scientist free for what only it can do.
         const sciTax = isSci && igorFree && a !== 'prepare' ? 0.3 : 0;
-        const susCost = expectedSuspicion(def, reduction) * suspicionPrice;
-        return actionScore(c, a, def, isSci, sciTax, susCost) - reserve;
+        const susCost = riskCost(def);
+        const value = actionScore(c, a, def, isSci, sciTax, susCost);
+        // The parts, for explanations: the action's value already includes
+        // the suspicion cost and the Scientist tax.
+        lastParts = { value, risk: susCost, sciTax, reserve };
+        return value - reserve;
       };
+      let lastParts = null;
       const actionScore = (c, a, def, isSci, sciTax, susCost) => {
         switch (a) {
           case 'medicine':
             if (moneyIdle) return -0.5;
-            return (def.gain + me.effectiveResearch.medicine) * moneyValue * 0.8 - sciTax;
+            return (def.gain + bonus('medicineBonus')) * moneyValue * 0.8 - sciTax;
           case 'research': {
             const card = view.market.find((k) => k.id === c.choices.researchCardId);
             const pen = publishPenalty[card.type] || 0;
-            return (want[card.type] ?? 1) - pen - def.cost * moneyValue * 0.6 - sciTax + denial('research');
+            // A card worth nothing to it is never worth a slot, however cheap
+            // money is, unless taking the slot denies rivals (the Inquisitor).
+            if ((want[card.type] ?? 0) - pen <= 0 && !denial('research')) return -1;
+            return (want[card.type] ?? 1) - pen - def.cost * moneyValue * W.spendFactor - sciTax + denial('research');
           }
           case 'experiment': {
             // Draw one card per discarded part; keep the best eligible one,
             // privately (no publishing penalty, unlike research).
             const n = c.choices.partIds.length;
-            const frac = unknownTypes.length / Object.keys(cfg.research).length;
+            const frac = newCardShare;
             const hit = 1 - Math.pow(1 - frac, n);
             const repair = c.choices.partIds.reduce((acc, id) => {
               const bad = installedBad.find((x) => x.id === id);
@@ -463,7 +539,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
               v += vids.reduce((a, vid) => a + partValue(vid, (x) => left[x]), 0) / vids.length;
               if (left[t] > 0) left[t]--;
             }
-            return v - specimenCost * moneyValue * 0.6 - sciTax + denial('specimens');
+            return v - specimenCost * moneyValue * W.spendFactor - sciTax + denial('specimens');
           }
           case 'graves':
             // Nobody keeps hauling corpses into a cellar full of ones they can't use.
@@ -475,11 +551,11 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             const lost = c.choices.partIds.reduce((acc, id) => acc + partValue(me.loose.find((x) => x.id === id).variantId), 0);
             return sellGain * moneyValue - lost - susCost - sciTax;
           }
-          case 'hire': return def.cost > me.money ? -1 : (cfg.actions.medicine ? cfg.actions.medicine.gain : 2) * Math.min(remaining, 5) * 0.35 - def.cost * moneyValue * 0.6 - sciTax;
+          case 'hire': return def.cost > me.money ? -1 : (cfg.actions.medicine ? cfg.actions.medicine.gain : 2) * Math.min(remaining, 5) * W.hireValue - def.cost * moneyValue * W.spendFactor - sciTax;
           case 'charity': {
             const units = (c.choices && c.choices.units) || 1;
             const cut = Math.min(units * charityCut, view.suspicion);
-            const pay = units * def.cost * moneyValue * 0.6;
+            const pay = units * def.cost * moneyValue * W.spendFactor;
             if (wantsSuspicion) {
               // The Inquisitor takes a scarce charity slot as cheaply as it can,
               // to keep rivals from paying suspicion down.
@@ -492,7 +568,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             // Only the part of the cut that gets the table out of danger is worth
             // paying for, unless the money has no other use: then any cut keeps
             // the mob further off.
-            return Math.min(cut, excess) * suspicionPrice * 1.5 + (moneyIdle ? cut * 0.4 : 0) - pay - sciTax;
+            return Math.min(cut, excess) * suspicionPrice * W.charityScale + (moneyIdle ? cut * 0.4 : 0) - pay - sciTax;
           }
           case 'garrison': {
             // A garrisoned worker lets its owner subdue rivals' monsters; for
@@ -504,7 +580,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             const gCap = (view.capacities || {}).garrison;
             const gLeft = gCap == null ? Infinity : gCap - ((view.occupancy.day || {}).garrison || []).length;
             // An unleashing loses for the Inquisitor too, so it garrisons like anyone else.
-            return 4.5 + (gLeft <= 1 ? 1 : 0);
+            return W.garrisonValue + (gLeft <= 1 ? 1 : 0);
           }
           case 'assemble': {
             if (wantsSuspicion) return -1; // it builds nothing; parts are for experiments and sale
@@ -514,7 +590,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             const filled = Object.values(me.body).filter(Boolean).length;
             if (c.choices.partIds.some((id) => !usable(me.loose.find((x) => x.id === id).variantId))) return -3;
             if (def.max == null && filled + c.choices.partIds.length < Object.keys(me.body).length) return -0.5;
-            return 5 + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0)
+            return W.assembleValue + c.choices.partIds.reduce((acc, id) => acc + variantValue(cfg, me.loose.find((x) => x.id === id).variantId, objective) * 0.5 + 1, 0)
               - (isSci && igorFree ? 2 : 0);
           }
           case 'prepare':
@@ -524,7 +600,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             // Visionary: its own Creature stabilizing alone loses for everyone,
             // so it waits for a rival to commit.
             if (visionaryWaiting) return -5;
-            return shouldAttempt() ? 12 : -5;
+            return shouldAttempt() ? W.prepareValue : -5;
           case 'rest': {
             // Going first matters when the day's capped spaces fill up.
             const caps = view.capacities || {};
@@ -537,13 +613,20 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
           default: return 0.1;
         }
       };
-      let best = legal[0];
-      let bestScore = -Infinity;
-      for (const c of legal) {
-        const sc = score(c) + r.float() * noise;
-        if (sc > bestScore) { bestScore = sc; best = c; }
-      }
-      return best;
+      // Score every option, add noise, and take the best; with a margin, take
+      // any option within the margin of the best, uniformly (a weaker but
+      // still sensible player, for robustness checks).
+      const options = legal.map((c) => {
+        lastParts = null;
+        const base = score(c);
+        const parts = lastParts || { value: base };
+        return { command: c, score: base + r.float() * noise, base, parts };
+      });
+      const top = Math.max(...options.map((o) => o.score));
+      // Options the bot itself prices below zero are never near the best.
+      const near = margin > 0 ? options.filter((o) => o.score === top || (o.score >= top - margin && o.base >= 0)) : [options.find((o) => o.score === top)];
+      const pick = near.length === 1 ? near[0] : near[r.int(near.length)];
+      return report('place', options, pick.command);
     },
   };
 }

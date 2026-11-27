@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "simulate": "node bin/simulate.mjs",
+    "ai-checks": "node bin/ai-checks.mjs",
     "serve": "node bin/serve.mjs"
   },
   "engines": { "node": ">=18" },
