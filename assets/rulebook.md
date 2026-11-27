@@ -12,8 +12,8 @@ Each of you is a scientist in a nervous village. By day you earn money and buy w
 The print view prints everything except the dice.
 
 - **Rulebook** (this document).
-- **Village board**: the suspicion track (0–10), the round track, and spaces for the research deck, the four-card market and the unseen objective.
-- **12 action space tiles**: 6 day spaces and 6 night spaces.
+- **Village board**: the suspicion track (0–10), and spaces for the research deck and the four-card market.
+- **Action board**: one page with the 6 day spaces on the left and the 6 night spaces on the right. If a single space changes, reprint it and glue it over the old one.
 - **6 player mats**, one per colour, each with six body slots and a control-attempt track.
 - **6 player aids**, including the random body-part table.
 - **7 objective cards**: 4 Prometheus, 1 Visionary, 1 Inquisitor, 1 Unleasher.
@@ -21,7 +21,8 @@ The print view prints everything except the dice.
 - **Body part cards**: 13 named variants. The supply is meant to be unlimited; if a variant runs out, use any proxy.
 - **Worker tokens**: per colour, 1 Scientist and 3 Igors. Fold each along the dashed line so it stands up.
 - **Money**: coins worth 1 and 5. Money is unlimited; make change freely.
-- **Markers**: suspicion, round, first player, and one control-attempt marker per colour.
+- **Markers**: suspicion, first player, and one control-attempt marker per colour.
+- Everything prints single-sided. Use card stock or opaque sleeves so cards don't show through from the back.
 - **Dice (not printed)**: at least one d20, two d4, four d6 and one d8. If you are short of a die, roll it again and add the results.
 
 ## Overview
@@ -41,9 +42,9 @@ Everything is public except the objective cards and the order of the research de
 
 1. **Seats.** Sit in a circle. Each player takes a colour, its player mat and player aid, its Scientist and 3 Igors, and its control-attempt marker.
 2. **Starting resources.** Each player places their Scientist and **one** Igor in front of them, ready to work. The other two Igors stay beside the mat until hired. Each player takes **3 money** and sets their control-attempt marker on **3**.
-3. **The village.** Put the village board in the middle. Place the suspicion marker on **0** and the round marker on **1**. Lay out the six day tiles in one row and the six night tiles in another. Sort the body part cards into a face-up supply by variant, and put the money beside it.
+3. **The village.** Put the village board in the middle. Place the suspicion marker on **0**. Put the action board beside it. Sort the body part cards into a face-up supply by variant, and put the money beside it.
 4. **Research.** Shuffle the 28 research cards into a face-down deck on the village board. Deal the top **4** face up into the market.
-5. **Objectives.** Build the objective deck for your player count, shuffle it, and deal one card face down to each player. Look at your own card secretly. Put the remaining card, unseen, face down on the village board.
+5. **Objectives.** Build the objective deck for your player count, shuffle it, and deal one card face down to each player. Look at your own card secretly. Set the remaining card aside, unseen and face down.
 
    | Players | Prometheus | Visionary | Inquisitor | Unleasher | Cards |
    |---|---:|---:|---:|---:|---:|
@@ -243,7 +244,7 @@ If any Creature became stable this round, the game ends (see below). Otherwise:
 
 1. The player who rested becomes the first player. If nobody rested, the first-player marker moves one seat clockwise.
 2. Every worker returns to its owner, and every space is empty again.
-3. Advance the round marker and begin a new day.
+3. Begin a new day.
 
 ## End of the game
 

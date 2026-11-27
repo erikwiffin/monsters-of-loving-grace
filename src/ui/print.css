@@ -31,13 +31,15 @@ body.print-view { background: #8a8a8a; color: #1e1e1e; }
 .pp-page h2, .pp-page h3, .pp-page h4 { font-family: var(--hand); color: #1e1e1e; margin: 0 0 .25em; }
 .pp-grid { display: grid; justify-content: center; align-content: start; height: 100%; }
 .pp-L-sheet .pp-grid { grid-template-columns: 190mm; grid-template-rows: 264mm; }
-.pp-L-tile .pp-grid { grid-template-columns: repeat(2, 94mm); grid-auto-rows: 130mm; }
+/* actions: day tiles fill the left column, night tiles the right, each from the top */
+.pp-L-actions .pp-grid { grid-template-columns: repeat(2, 95mm); grid-auto-rows: 44mm; grid-auto-flow: row dense; }
+.pp-L-actions .pp-grid > .pp-day { grid-column: 1; }
+.pp-L-actions .pp-grid > .pp-night { grid-column: 2; }
 .pp-L-half .pp-grid { grid-template-columns: 190mm; grid-auto-rows: 130mm; gap: 2mm 0; }
 .pp-L-card .pp-grid { grid-template-columns: repeat(3, 63mm); grid-auto-rows: 88mm; }
 .pp-L-mini .pp-grid { grid-template-columns: repeat(4, 44mm); grid-auto-rows: 63mm; }
 .pp-L-token .pp-grid { grid-template-columns: repeat(7, 26mm); grid-auto-rows: 26mm; }
 .pp-grid > * { box-sizing: border-box; overflow: hidden; outline: .3mm dashed #999; outline-offset: -.15mm; }
-.pp-blank { outline: none !important; }
 .pp-small { font-size: 8pt; color: #444; }
 .pp-brand { font-family: var(--hand); font-weight: 700; }
 .pp-kind { font: 7pt/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #666; }
@@ -54,7 +56,8 @@ body.print-view { background: #8a8a8a; color: #1e1e1e; }
 .pp-board, .pp-mat { padding: 5mm 6mm; display: grid; gap: 4mm; align-content: start; }
 .pp-board h2, .pp-mat h2 { display: flex; justify-content: space-between; font-size: 16pt; border-bottom: .6mm solid var(--seat, #1e1e1e); padding-bottom: 2mm; }
 .pp-board h3 small, .pp-mat h3 small { font: 8pt Georgia, serif; color: #555; margin-left: 2mm; }
-.pp-market { display: grid; grid-template-columns: repeat(3, 58mm); grid-auto-rows: 78mm; gap: 3mm; justify-content: center; }
+.pp-market { display: grid; grid-template-columns: repeat(3, 56mm); grid-auto-rows: 80mm; gap: 3mm; justify-content: center; }
+.pp-market .pp-deck { grid-row: span 2; align-self: center; height: 80mm; box-sizing: border-box; }
 .pp-cardslot { border: .5mm dashed #555; border-radius: 3mm; padding: 3mm; display: flex; flex-direction: column; gap: 2mm; text-align: center; justify-content: center; }
 .pp-cardslot b { font: 700 12pt var(--hand); }
 .pp-deck { background: #f1f3f5; }
@@ -66,19 +69,19 @@ body.print-view { background: #8a8a8a; color: #1e1e1e; }
 .pp-bodyslot b { font: 700 13pt var(--hand); color: #1e1e1e; }
 
 /* action tiles */
-.pp-grid > .pp-tile { padding: 4mm; display: flex; flex-direction: column; gap: 2mm; }
-.pp-tile-head { display: flex; justify-content: space-between; font: 700 8pt system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; color: #555; }
-.pp-tile h3 { font-size: 15pt; }
-.pp-tile-meta { display: flex; justify-content: space-between; font: 700 9pt system-ui, sans-serif; }
-.pp-tile p { margin: 0; font-size: 10.5pt; }
-.pp-roll { background: #fff3bf; padding: 1.5mm 2mm; border-radius: 1.5mm; font-size: 9pt !important; }
-.pp-grid > .pp-night { background: linear-gradient(#e7eaf3, #fff 22mm); }
-.pp-grid > .pp-day { background: linear-gradient(#fff4d6, #fff 22mm); }
-.pp-slots { margin-top: auto; display: flex; gap: 3mm; flex-wrap: wrap; justify-content: center; }
-.pp-slot { width: 20mm; height: 20mm; border: .6mm solid #1e1e1e; border-radius: 50%; display: grid; place-content: center; text-align: center; }
+.pp-grid > .pp-tile { padding: 2.5mm 3mm; display: flex; gap: 3mm; }
+.pp-tile-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1mm; }
+.pp-tile-head { display: flex; justify-content: space-between; gap: 2mm; font: 700 6.5pt system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; color: #555; }
+.pp-tile h3 { font-size: 12.5pt; margin: 0; }
+.pp-tile p { margin: 0; font-size: 8.5pt; line-height: 1.25; }
+.pp-tile .pp-small { font-size: 7.5pt; }
+.pp-grid > .pp-night { background: linear-gradient(90deg, #e7eaf3, #fff 40mm); }
+.pp-grid > .pp-day { background: linear-gradient(90deg, #fff4d6, #fff 40mm); }
+.pp-slots { flex: none; width: 12mm; display: flex; flex-direction: column; gap: 1.2mm; justify-content: center; }
+.pp-slot { width: 11.5mm; height: 11.5mm; box-sizing: border-box; border: .5mm solid #1e1e1e; border-radius: 50%; display: grid; place-content: center; text-align: center; background: #fff; }
 .pp-slot-more { border-style: dashed; }
 .pp-slot small { font: 6.5pt system-ui, sans-serif; color: #555; }
-.pp-unlimited { border: .6mm dashed #1e1e1e; border-radius: 3mm; padding: 6mm 3mm; font: 700 10pt var(--hand); }
+.pp-unlimited { width: 12mm; box-sizing: border-box; border: .5mm dashed #1e1e1e; border-radius: 2mm; padding: 2mm 0; font: 700 8pt var(--hand); text-align: center; writing-mode: vertical-rl; align-items: center; background: #fff; }
 
 /* player aid */
 .pp-aid { padding: 4mm 5mm; border-top: 1.5mm solid var(--seat) !important; }
@@ -100,10 +103,6 @@ body.print-view { background: #8a8a8a; color: #1e1e1e; }
 .pp-foot { margin-top: auto; font-size: 7pt; color: #777; text-align: center; }
 .pp-objective { background: linear-gradient(#f3e8ff, #fff 30mm); }
 .pp-research { background: linear-gradient(#e7f5ff, #fff 30mm); }
-.pp-grid > .pp-back { padding: 3mm; background: #2b2d42; color: #fff; }
-.pp-back > div { height: 100%; border: .6mm solid #fff; border-radius: 3mm; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3mm; text-align: center; }
-.pp-back b { font: 700 16pt var(--hand); }
-.pp-backs .pp-grid > * { outline-color: transparent; }
 
 /* mini cards: parts and workers */
 .pp-grid > .pp-mini { padding: 3mm; display: flex; flex-direction: column; gap: 1.5mm; }

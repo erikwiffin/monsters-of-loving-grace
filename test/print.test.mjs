@@ -93,29 +93,27 @@ test('dice tables reproduce the engine\'s random part odds exactly', () => {
 
 test('disabled components are left out and the rest repack onto fewer pages', () => {
   const sections = buildSections();
-  const full = paginate(sections, all, { backs: false });
+  const full = paginate(sections, all);
   const researchPages = full.filter((p) => p.section === 'research');
   assert.equal(researchPages.length, Math.ceil(28 / LAYOUTS.card.perPage));
   const only = new Set(['research:galvanism']);
-  const some = paginate(sections, (id) => only.has(id), { backs: false });
+  const some = paginate(sections, (id) => only.has(id));
   assert.equal(some.length, 1);
   assert.equal(some[0].items.length, DEFAULT_CONFIG.researchCopies);
   assert.deepEqual(paginate(sections, () => false), []);
 });
 
-test('card backs follow each page of cards, mirrored for long-edge duplex', () => {
+test('all action spaces fit on one page; the village board has no round track or unseen-objective space', () => {
   const sections = buildSections();
-  const pages = paginate(sections, (id) => id === 'objective:prometheus' || id === 'objective:visionary', { backs: true });
-  assert.equal(pages.length, 2);
-  assert.ok(!pages[0].isBack && pages[1].isBack);
-  assert.equal(pages[1].items.length, 6, 'five cards pad to two full rows of backs');
-  // Row 1 holds cards 1–3, so its backs are reversed; row 2 holds 4–5 and a blank, reversed to blank-first.
-  assert.match(pages[1].items[3], /pp-blank/);
-  assert.match(pages[1].items[4], /pp-back/);
-  const noBacks = paginate(sections, (id) => id.startsWith('objective:'), { backs: false });
-  assert.ok(noBacks.every((p) => !p.isBack));
-  const partPages = paginate(sections, (id) => id.startsWith('part:'), { backs: true });
-  assert.ok(partPages.every((p) => !p.isBack), 'body parts need no backs');
+  const pages = paginate(sections, all).filter((p) => p.section === 'actions');
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].items.length, Object.keys(DEFAULT_CONFIG.actions).length);
+  const board = sections.find((s) => s.id === 'village').components[0].render(0);
+  assert.doesNotMatch(board, /Round|Unseen/);
+  assert.equal((board.match(/<b>Market<\/b>/g) || []).length, DEFAULT_CONFIG.marketSize);
+  const ids = componentIds(sections);
+  assert.ok(!ids.includes('marker:round'));
+  assert.ok(paginate(sections, all).every((p) => !p.items.some((h) => h.includes('pp-back'))), 'no card backs');
 });
 
 test('the Markdown renderer handles the rulebook\'s constructs and escapes HTML', () => {

@@ -24,7 +24,6 @@ const stored = load();
 const prefs = {
   disabled: Array.isArray(stored.disabled) ? stored.disabled : [],
   paper: stored.paper === 'a4' ? 'a4' : 'letter',
-  backs: stored.backs !== false,
 };
 let sections = [];
 
@@ -61,7 +60,6 @@ function controls(pages) {
     <p class="pp-count"><b>${sheetCount}</b> component page${sheetCount === 1 ? '' : 's'}${flow ? ' + the rulebook' : ''}</p>
     <div class="pp-row"><button data-act="all-on">Enable all</button><button data-act="all-off">Disable all</button></div>
     <label>Paper <select id="pp-paper"><option value="letter" ${prefs.paper === 'letter' ? 'selected' : ''}>US Letter</option><option value="a4" ${prefs.paper === 'a4' ? 'selected' : ''}>A4</option></select></label>
-    <label class="pp-check"><input type="checkbox" id="pp-backs" ${prefs.backs ? 'checked' : ''}> <span>Card backs <small>(print double-sided, flip on the long edge)</small></span></label>
     ${sectionHtml}
   </aside>`;
 }
@@ -70,11 +68,11 @@ function pagesHtml(pages) {
   if (!pages.length) return '<p class="pp-empty">Nothing selected to print.</p>';
   return pages.map((p) => (p.layout === 'flow'
     ? `<div class="pp-page pp-flow">${p.items.join('')}</div>`
-    : `<div class="pp-page pp-L-${p.layout}${p.isBack ? ' pp-backs' : ''}"><div class="pp-grid">${p.items.join('')}</div></div>`)).join('');
+    : `<div class="pp-page pp-L-${p.layout}"><div class="pp-grid">${p.items.join('')}</div></div>`)).join('');
 }
 
 function render() {
-  const pages = paginate(sections, isEnabled, { backs: prefs.backs });
+  const pages = paginate(sections, isEnabled);
   const scroll = root.querySelector('.pp-controls')?.scrollTop || 0;
   root.innerHTML = `<style>${pageStyle()}</style>
     <div class="pp-view paper-${prefs.paper}">${controls(pages)}<main class="pp-pages">${pagesHtml(pages)}</main></div>`;
@@ -98,7 +96,6 @@ root.addEventListener('change', (ev) => {
   const t = ev.target;
   if (t.dataset.id) setEnabled([t.dataset.id], t.checked);
   else if (t.id === 'pp-paper') { prefs.paper = t.value === 'a4' ? 'a4' : 'letter'; save(); render(); }
-  else if (t.id === 'pp-backs') { prefs.backs = t.checked; save(); render(); }
 });
 
 async function start() {

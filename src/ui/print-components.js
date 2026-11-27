@@ -3,7 +3,7 @@
 // in Node tests. Contains no rules logic — every number comes from the engine.
 
 import * as E from '../engine/index.js';
-import { esc, actionText, variantText, suspicionText, effectText } from './format.js';
+import { esc, actionText, effectText } from './format.js';
 
 export const MAX_PLAYERS = 6;
 export const MIN_PLAYERS = 3;
@@ -13,12 +13,12 @@ export const SEAT_NAMES = ['Red', 'Blue', 'Orange', 'Violet', 'Green', 'Magenta'
 /** Items per printed page for each layout. 'flow' pages break naturally. */
 export const LAYOUTS = {
   flow: { perPage: null },
-  sheet: { perPage: 1, cols: 1 },
-  tile: { perPage: 4, cols: 2 },
-  half: { perPage: 2, cols: 1 },
-  card: { perPage: 9, cols: 3 },
-  mini: { perPage: 16, cols: 4 },
-  token: { perPage: 70, cols: 7 },
+  sheet: { perPage: 1 },
+  actions: { perPage: 12 }, // day in the left column, night in the right
+  half: { perPage: 2 },
+  card: { perPage: 9 },
+  mini: { perPage: 16 },
+  token: { perPage: 70 },
 };
 
 const range = (n) => Array.from({ length: n }, (_, i) => i);
@@ -111,12 +111,12 @@ function costText(id, def) {
 
 function slotsHtml(cfg, id) {
   const caps = capacities(cfg, id);
-  if (caps.some((c) => c.capacity == null)) return '<div class="pp-slots pp-unlimited">No limit — any number of workers</div>';
+  if (caps.some((c) => c.capacity == null)) return '<div class="pp-slots pp-unlimited">No limit</div>';
   const most = Math.max(...caps.map((c) => c.capacity));
   const slots = range(most).map((i) => {
     const from = caps.find((c) => c.capacity > i).playerCount;
-    const label = from === MIN_PLAYERS ? '' : `${from}${from < MAX_PLAYERS ? '–' + MAX_PLAYERS : ''} players`;
-    return `<span class="pp-slot${label ? ' pp-slot-more' : ''}">${label ? `<small>${label}</small>` : ''}</span>`;
+    const label = from === MIN_PLAYERS ? '' : `${from}${from < MAX_PLAYERS ? '–' + MAX_PLAYERS : ''}`;
+    return `<span class="pp-slot${label ? ' pp-slot-more' : ''}"${label ? ` title="${label} players only"` : ''}>${label ? `<small>${label}</small>` : ''}</span>`;
   });
   return `<div class="pp-slots">${slots.join('')}</div>`;
 }
@@ -129,16 +129,13 @@ const brand = '<span class="pp-brand">Monsters of Loving Grace</span>';
 
 function villageBoard(cfg) {
   const track = range(cfg.suspicionMax + 1).map((v) => `<span class="pp-box${v === cfg.suspicionMax ? ' pp-mob' : ''}">${v}${v === cfg.suspicionMax ? '<small>MOB</small>' : ''}</span>`).join('');
-  const rounds = range(12).map((r) => `<span class="pp-box pp-box-s">${r + 1}</span>`).join('');
   const market = range(cfg.marketSize).map((i) => `<div class="pp-cardslot"><b>Market</b><small>slot ${i + 1}</small></div>`).join('');
   const deckSize = Object.keys(cfg.research).length * cfg.researchCopies;
   return `<div class="pp-board">
     <h2>${brand}<span>The village</span></h2>
     <section><h3>Suspicion <small>starts at 0 · the mob forms at ${cfg.suspicionMax}</small></h3><div class="pp-track">${track}</div></section>
-    <section><h3>Round <small>there is no last round: after 12, start again from 1 and remember</small></h3><div class="pp-track">${rounds}</div></section>
     <section class="pp-market">
       <div class="pp-cardslot pp-deck"><b>Research deck</b><small>${deckSize} cards, face down. Experiments draw from the top and return cards to the bottom.</small></div>
-      <div class="pp-cardslot pp-deck"><b>Unseen objective</b><small>Face down until the game ends.</small></div>
       ${market}
     </section>
     <p class="pp-small">When a market card is taken, refill the slot from the top of the deck at once. When the deck runs out, the market shrinks.</p>
@@ -148,14 +145,13 @@ function villageBoard(cfg) {
 function actionTile(cfg, id, def) {
   const phase = def.phase === 'day' ? '☀ Day' : '☾ Night';
   const note = id === 'charity' ? '<p class="pp-small">Only while suspicion is above 0.</p>' : '';
-  const roll = def.suspicion ? `<p class="pp-roll">Discovery roll — ${esc(suspicionText(def.suspicion))}</p>` : '';
   return `<div class="pp-tile pp-${def.phase}">
-    <div class="pp-tile-head"><span>${phase}</span><span>${esc(def.location)}</span></div>
-    <h3>${esc(def.name)}</h3>
-    <div class="pp-tile-meta"><span>${costText(id, def)}</span><span>${permissionText(def)}</span></div>
-    <p>${esc(actionText(id, def, cfg))}</p>
-    ${note}
-    ${roll}
+    <div class="pp-tile-text">
+      <div class="pp-tile-head"><span>${phase} · ${esc(def.location)}</span><span>${costText(id, def)} · ${permissionText(def)}</span></div>
+      <h3>${esc(def.name)}</h3>
+      <p>${esc(actionText(id, def, cfg))}</p>
+      ${note}
+    </div>
     ${slotsHtml(cfg, id)}
   </div>`;
 }
@@ -212,8 +208,6 @@ function researchCard(cfg, id) {
   return `<div class="pp-card pp-research"><div class="pp-kind">Research</div><h3>${esc(r.name)}</h3><p>${esc(r.text)}</p><p class="pp-small">Every effective copy applies: your own discovery, plus one for each publication by another player.</p><div class="pp-foot">${brand}</div></div>`;
 }
 
-const back = (kind) => `<div class="pp-card pp-back"><div><span>${brand}</span><b>${kind}</b></div></div>`;
-
 function partCard(cfg, id) {
   const v = cfg.partVariants[id];
   const type = cfg.partTypes[v.type];
@@ -235,7 +229,7 @@ const token = (label, extra = '', style = '') => `<div class="pp-token ${extra}"
 /**
  * Every print-and-play component, grouped into sections, from a configuration
  * (default: the engine's default configuration at six players).
- * A component is { id, name, copies, render(i) → html, back? → html }.
+ * A component is { id, name, copies, render(i) → html }.
  * rulebookHtml is the rendered rulebook, supplied by the caller.
  */
 export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
@@ -250,7 +244,7 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
     { id: 'village', name: 'Village board', layout: 'sheet', components: [
       { id: 'village-board', name: 'Village board', copies: 1, render: () => villageBoard(cfg) },
     ] },
-    { id: 'actions', name: 'Action spaces', layout: 'tile', components: [
+    { id: 'actions', name: 'Action spaces', layout: 'actions', components: [
       ...actions.filter(([, d]) => d.phase === 'day'), ...actions.filter(([, d]) => d.phase === 'night'),
     ].map(([id, def]) => ({ id: `action:${id}`, name: `${def.name} (${def.phase})`, copies: 1, render: () => actionTile(cfg, id, def) })) },
     { id: 'mats', name: 'Player mats', layout: 'sheet', components: [
@@ -261,11 +255,11 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
     ] },
     { id: 'objectives', name: 'Objective cards', layout: 'card', components:
       Object.keys(E.OBJECTIVE_INFO).filter((id) => objectives[id]).map((id) => ({
-        id: `objective:${id}`, name: E.OBJECTIVE_INFO[id].name, copies: objectives[id], render: () => objectiveCard(id), back: () => back('Objective'),
+        id: `objective:${id}`, name: E.OBJECTIVE_INFO[id].name, copies: objectives[id], render: () => objectiveCard(id),
       })) },
     { id: 'research', name: 'Research cards', layout: 'card', components:
       Object.keys(cfg.research).map((id) => ({
-        id: `research:${id}`, name: cfg.research[id].name, copies: cfg.researchCopies, render: () => researchCard(cfg, id), back: () => back('Research'),
+        id: `research:${id}`, name: cfg.research[id].name, copies: cfg.researchCopies, render: () => researchCard(cfg, id),
       })) },
     { id: 'parts', name: 'Body parts', layout: 'mini', components:
       Object.keys(cfg.partVariants).map((id) => ({
@@ -280,7 +274,6 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
     { id: 'tokens', name: 'Tokens', layout: 'token', components: [
       ...COINS.map((c) => ({ id: `money:${c.value}`, name: `Money: ${c.value}s`, copies: c.copies, render: () => token(`<b>${c.value}</b><small>money</small>`, `pp-coin pp-coin-${c.value}`) })),
       { id: 'marker:suspicion', name: 'Suspicion marker', copies: 1, render: () => token('<b>!</b><small>suspicion</small>', 'pp-marker') },
-      { id: 'marker:round', name: 'Round marker', copies: 1, render: () => token('<b>☀</b><small>round</small>', 'pp-marker') },
       { id: 'marker:first', name: 'First-player marker', copies: 1, render: () => token('<b>1st</b><small>player</small>', 'pp-marker') },
       { id: 'marker:control', name: 'Control-attempt markers', copies: MAX_PLAYERS, render: (i) => token('<b>⚡</b><small>control</small>', 'pp-marker pp-seat', `--seat:${SEAT_COLOURS[i]}`) },
     ] },
@@ -292,34 +285,17 @@ export const componentIds = (sections) => sections.flatMap((s) => s.components.m
 
 /**
  * Lay the enabled components out on pages. Returns
- * [{ section, layout, items: [html], backs: [html] | null }] — one entry per
- * printed page (a 'flow' entry may print as several pages).
+ * [{ section, layout, items: [html] }] — one entry per printed page
+ * (a 'flow' entry may print as several pages).
  */
-export function paginate(sections, enabled, { backs = true } = {}) {
+export function paginate(sections, enabled) {
   const pages = [];
   for (const s of sections) {
-    const items = [];
-    for (const c of s.components) {
-      if (!enabled(c.id)) continue;
-      for (let i = 0; i < c.copies; i++) items.push({ html: c.render(i), back: c.back ? c.back(i) : null });
-    }
+    const items = s.components.filter((c) => enabled(c.id))
+      .flatMap((c) => range(c.copies).map((i) => c.render(i)));
     if (!items.length) continue;
-    const { perPage, cols } = LAYOUTS[s.layout];
-    const n = perPage || items.length;
-    for (let i = 0; i < items.length; i += n) {
-      const chunk = items.slice(i, i + n);
-      pages.push({ section: s.id, layout: s.layout, items: chunk.map((it) => it.html) });
-      if (backs && chunk.some((it) => it.back)) {
-        // Mirror each row left-to-right so backs line up when printed double-sided (long edge).
-        const mirrored = [];
-        for (let r = 0; r < chunk.length; r += cols) {
-          const row = chunk.slice(r, r + cols).map((it) => it.back || '<div class="pp-blank"></div>');
-          while (row.length < cols) row.push('<div class="pp-blank"></div>');
-          mirrored.push(...row.reverse());
-        }
-        pages.push({ section: s.id, layout: s.layout, items: mirrored, isBack: true });
-      }
-    }
+    const n = LAYOUTS[s.layout].perPage || items.length;
+    for (let i = 0; i < items.length; i += n) pages.push({ section: s.id, layout: s.layout, items: items.slice(i, i + n) });
   }
   return pages;
 }

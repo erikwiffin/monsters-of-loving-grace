@@ -13,25 +13,25 @@ Components are generated from the default configuration and sized for the larges
 | Section | Components | Size |
 |---|---|---|
 | Rulebook | The rulebook (below) | Flowing pages |
-| Village board | Suspicion track from 0 to the mob threshold, a round track, spaces for the research deck, the market and the unseen objective | One page |
-| Action spaces | One tile per action space: location, phase, name, cost and effect, discovery roll, worker permission, and a worker slot per capacity, marking slots used only at higher player counts. Unlimited spaces say so | Four per page |
+| Village board | Suspicion track from 0 to the mob threshold, a space for the research deck, and the market slots in a 2 × 2 grid. There is no round track: no rule depends on the round number | One page |
+| Action spaces | One tile per action space: location, phase, name, cost and effect, discovery roll, worker permission, and a worker slot per capacity, marking slots used only at higher player counts. Unlimited spaces say so | One page: day spaces in the left column, night spaces in the right |
 | Player mats | One per seat, in that seat's colour: the six body slots, a control-attempt track, and where to keep money, loose parts and research | One page |
 | Player aids | One per seat: the round, resurrection, control rolls and the body-part draw table | Two per page |
 | Objective cards | One component per objective, with as many copies as any player count needs | Card, nine per page |
 | Research cards | One component per research type, with the configured number of copies | Card, nine per page |
 | Body parts | One component per variant, with four copies per body slot of its type, since the supply is unlimited | Mini card, sixteen per page |
 | Workers | Scientists and Igors, folding stand-up tokens in seat colours, enough for six players | Mini card, sixteen per page |
-| Tokens | Money in 1s and 5s, the suspicion, round and first-player markers, and a control-attempt marker per seat | Round token, seventy per page |
+| Tokens | Money in 1s and 5s, the suspicion and first-player markers, and a control-attempt marker per seat | Round token, seventy per page |
 
 Cards are 63 × 88 mm and mini cards 44 × 63 mm. Components have dashed cut lines. Pages fit both US Letter and A4 with 7 mm margins, and print correctly at 100% scale.
 
-Objective and research cards have backs, so the objective deal and the research deck stay hidden. With **card backs** on, every page of these cards is followed by a page of backs, mirrored for long-edge double-sided printing.
+Everything prints single-sided; cards have plain backs. Card stock or opaque sleeves keep the objective deal and the research deck hidden.
 
 ## Choosing what to print
 
 Every component has a checkbox, so a playtester who has changed only a few components can reprint just those. There are **Enable all** and **Disable all** controls for the whole view, and for each section. A disabled component is left out of the printout entirely, and the enabled components in its section repack onto as few pages as possible. A section with nothing enabled prints nothing. The control panel shows the number of pages to be printed, and is itself never printed.
 
-The selection, the paper size (Letter or A4) and the card backs setting are remembered in this browser. Without storage, the view still works, with everything enabled.
+The selection and the paper size (Letter or A4) are remembered in this browser. Without storage, the view still works, with everything enabled.
 
 ## Physical adaptations
 
@@ -39,7 +39,7 @@ The browser game does some things automatically that people at a table must do b
 
 - **Random body parts.** The engine draws a type by weight, then a variant uniformly (spec 024). The print view turns those weights into a dice table with exactly the same odds, for example d6 for the type, then a die for the variant, rerolling unused faces where the counts don't divide a die evenly. The table is printed on the player aids and is generated from the configuration, not written by hand.
 - **Random salvage.** Salvaged parts are chosen by shuffling the six parts face down and taking three.
-- **Secret objectives.** The objective deck for the player count is dealt face down; the remaining card goes face down on the village board.
+- **Secret objectives.** The objective deck for the player count is dealt face down; the remaining card is set aside face down.
 - **Effective research.** Researched cards are kept face up in a published row beside the owner's mat, and experiment discoveries in a separate row, so everyone can count effective copies (spec 023).
 - **Odds.** Exact odds are not printed. Discovery rolls are printed on their action spaces.
 - **Dice.** The rulebook lists the dice needed. Dice are not printed.
