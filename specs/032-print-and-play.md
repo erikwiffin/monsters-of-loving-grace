@@ -13,17 +13,16 @@ Components are generated from the default configuration and sized for the larges
 | Section | Components | Size |
 |---|---|---|
 | Rulebook | The rulebook (below) | Flowing pages |
-| Village board | Suspicion track from 0 to the mob threshold, a space for the research deck, and the market slots in a 2 × 2 grid. There is no round track: no rule depends on the round number | One page |
+| Village board | Suspicion track from 0 to the mob threshold on one line, a space for the research deck, and the market slots in a 2 × 2 grid. There is no round track: no rule depends on the round number | One page |
 | Action spaces | One tile per action space: location, phase, name, cost and effect, discovery roll, worker permission, and a worker slot per capacity, marking slots used only at higher player counts. Unlimited spaces say so | One page: day spaces in the left column, night spaces in the right |
-| Player mats | One per seat, in that seat's colour: the six body slots, a control-attempt track, and where to keep money, loose parts and research | One page |
-| Player aids | One per seat: the round, resurrection, control rolls and the body-part draw table | Two per page |
+| Player sheets | One per seat, in its colour: the six body slots, sized for body-part cards, a control-attempt track, the body-part draw table, and a player aid covering the round, resurrection and control rolls | One page |
 | Objective cards | One component per objective, with as many copies as any player count needs | Card, nine per page |
 | Research cards | One component per research type, with the configured number of copies | Card, nine per page |
-| Body parts | One component per variant, with four copies per body slot of its type, since the supply is unlimited | Mini card, sixteen per page |
-| Workers | Scientists and Igors, folding stand-up tokens in seat colours, enough for six players | Mini card, sixteen per page |
+| Body parts | One component per variant, with four copies per body slot of its type, since the supply is unlimited | Small card, thirty-six per page |
+| Workers | One component per seat: a Scientist and the most Igors a player may have, as tiles in the seat's colour, each with an icon of its kind | Tile, all on one page |
 | Tokens | Money in 1s and 5s, the suspicion and first-player markers, and a control-attempt marker per seat | Round token, seventy per page |
 
-Cards are 63 × 88 mm and mini cards 44 × 63 mm. Components have dashed cut lines. Pages fit both US Letter and A4 with 7 mm margins, and print correctly at 100% scale.
+Cards are 63 × 88 mm and body parts 30 × 42 mm. Cut lines are dashed. Pages fit both US Letter and A4 with 7 mm margins, and print correctly at 100% scale.
 
 Everything prints single-sided; cards have plain backs. Card stock or opaque sleeves keep the objective deal and the research deck hidden.
 
@@ -37,10 +36,10 @@ The selection and the paper size (Letter or A4) are remembered in this browser. 
 
 The browser game does some things automatically that people at a table must do by hand. The rulebook explains each, and the components support them:
 
-- **Random body parts.** The engine draws a type by weight, then a variant uniformly (spec 024). The print view turns those weights into a dice table with exactly the same odds, for example d6 for the type, then a die for the variant, rerolling unused faces where the counts don't divide a die evenly. The table is printed on the player aids and is generated from the configuration, not written by hand.
+- **Random body parts.** The engine draws a type by weight, then a variant uniformly (spec 024). The print view turns those weights into a dice table with exactly the same odds, for example d6 for the type, then a die for the variant, rerolling unused faces where the counts don't divide a die evenly. The table is printed on the player sheets and is generated from the configuration, not written by hand.
 - **Random salvage.** Salvaged parts are chosen by shuffling the six parts face down and taking three.
 - **Secret objectives.** The objective deck for the player count is dealt face down; the remaining card is set aside face down.
-- **Effective research.** Researched cards are kept face up in a published row beside the owner's mat, and experiment discoveries in a separate row, so everyone can count effective copies (spec 023).
+- **Effective research.** Researched cards are kept face up in a published row beside the owner's sheet, and experiment discoveries in a separate row, so everyone can count effective copies (spec 023).
 - **Odds.** Exact odds are not printed. Discovery rolls are printed on their action spaces.
 - **Dice.** The rulebook lists the dice needed. Dice are not printed.
 

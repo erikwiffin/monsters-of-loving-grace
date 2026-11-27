@@ -15,9 +15,9 @@ export const LAYOUTS = {
   flow: { perPage: null },
   sheet: { perPage: 1 },
   actions: { perPage: 12 }, // day in the left column, night in the right
-  half: { perPage: 2 },
   card: { perPage: 9 },
-  mini: { perPage: 16 },
+  part: { perPage: 36 },
+  worker: { perPage: 24 },
   token: { perPage: 70 },
 };
 
@@ -133,7 +133,7 @@ function villageBoard(cfg) {
   const deckSize = Object.keys(cfg.research).length * cfg.researchCopies;
   return `<div class="pp-board">
     <h2>${brand}<span>The village</span></h2>
-    <section><h3>Suspicion <small>starts at 0 · the mob forms at ${cfg.suspicionMax}</small></h3><div class="pp-track">${track}</div></section>
+    <section><h3>Suspicion <small>starts at 0 · the mob forms at ${cfg.suspicionMax}</small></h3><div class="pp-track pp-track-line">${track}</div></section>
     <section class="pp-market">
       <div class="pp-cardslot pp-deck"><b>Research deck</b><small>${deckSize} cards, face down. Experiments draw from the top and return cards to the bottom.</small></div>
       ${market}
@@ -156,24 +156,24 @@ function actionTile(cfg, id, def) {
   </div>`;
 }
 
-function playerMat(cfg, seat) {
-  const slot = (s) => `<div class="pp-bodyslot" style="grid-area:${s}"><b>${esc(cfg.partTypes[s.replace(/\d$/, '')]?.name || s)}</b><small>${s}</small></div>`;
+function playerSheet(cfg, seat) {
+  const slot = (s) => `<div class="pp-bodyslot" style="grid-area:${s}"><b>${esc(cfg.partTypes[s.replace(/\d$/, '')]?.name || s)}</b></div>`;
   const attemptsMax = cfg.control.startingAttempts + cfg.researchCopies;
   const attempts = range(attemptsMax + 1).map((v) => `<span class="pp-box pp-box-s${v === cfg.control.startingAttempts ? ' pp-start' : ''}">${v}</span>`).join('');
-  return `<div class="pp-mat" style="--seat:${SEAT_COLOURS[seat]}">
-    <h2>${brand}<span>${SEAT_NAMES[seat]} scientist</span></h2>
-    <div class="pp-body">${E.SLOT_ORDER.map(slot).join('')}</div>
-    <section><h3>Control attempts <small>start at ${cfg.control.startingAttempts}; +1 per effective Neural Conditioning</small></h3><div class="pp-track">${attempts}</div></section>
-    <p class="pp-small">Keep your money and loose parts beside this mat. Lay your research cards above it: those you <b>published</b> by research in one row, those you <b>kept from experiments</b> in another. All are face up.</p>
-  </div>`;
-}
-
-function playerAid(cfg, seat) {
   const t = partDrawTables(cfg);
   const r = cfg.resurrection;
   const c = cfg.control;
-  return `<div class="pp-aid" style="--seat:${SEAT_COLOURS[seat]}">
-    <h3>${brand} — player aid</h3>
+  return `<div class="pp-player" style="--seat:${SEAT_COLOURS[seat]}">
+    <h2>${brand}<span>${SEAT_NAMES[seat]} scientist</span></h2>
+    <div class="pp-player-top">
+      <div class="pp-body">${E.SLOT_ORDER.map(slot).join('')}</div>
+      <div>
+        <h4>Random body part</h4>
+        ${diceTableHtml(t.type, 'Type')}
+        ${Object.entries(t.variants).map(([id, v]) => diceTableHtml(v, cfg.partTypes[id].name)).join('')}
+      </div>
+    </div>
+    <section><h3>Control attempts <small>start at ${c.startingAttempts}; +1 per effective Neural Conditioning</small></h3><div class="pp-track pp-track-line">${attempts}</div></section>
     <div class="pp-aid-cols">
       <div>
         <h4>Round</h4>
@@ -181,6 +181,9 @@ function playerAid(cfg, seat) {
           <li><b>Night</b>: the same. Scientists refresh; Igors used by day stay used.</li>
           <li><b>Resolution</b>: prepared resurrections, in turn order.</li>
           <li><b>Dawn</b>: any stable Creature ends the game. Otherwise the rester goes first, or initiative passes left.</li></ol>
+        <p class="pp-small">Keep money and loose parts beside this sheet. Lay research cards above it, face up: those you <b>published</b> in one row, those <b>kept from experiments</b> in another.</p>
+      </div>
+      <div>
         <h4>Resurrection</h4>
         <p>Discard all six installed parts. Roll d${r.baseDie} + modifiers for Vitality (${r.thresholds.vitality}+) and Humanity (${r.thresholds.humanity}+).</p>
         <ul><li>Vitality fails: keep ${r.failedVitalityRefund} of the parts at random; suspicion +${r.failedVitalitySuspicion}.</li>
@@ -188,11 +191,6 @@ function playerAid(cfg, seat) {
           <li>Humanity fails: a monster. Control chain from its creator, clockwise.</li></ul>
         <h4>Control roll</h4>
         <p>Spend an attempt: d${c.baseDie} + control research, ${c.threshold}+ subdues (take ${c.subdueSalvage} parts at random, suspicion +${c.subdueSuspicion}). Declining: suspicion +${c.declineSuspicion}. Other players' monsters need your Igor in the garrison.</p>
-      </div>
-      <div>
-        <h4>Random body part</h4>
-        ${diceTableHtml(t.type, 'Type')}
-        ${Object.entries(t.variants).map(([id, v]) => diceTableHtml(v, cfg.partTypes[id].name)).join('')}
       </div>
     </div>
   </div>`;
@@ -212,12 +210,39 @@ function partCard(cfg, id) {
   const v = cfg.partVariants[id];
   const type = cfg.partTypes[v.type];
   const effects = v.effects.length ? v.effects.map((e) => esc(effectText(e))).join('<br>') : 'No effect';
-  return `<div class="pp-mini pp-part pp-part-${esc(v.type)}"><div class="pp-kind">${esc(type.name)}</div><h4>${esc(v.name)}</h4><p>${effects}</p></div>`;
+  return `<div class="pp-part pp-part-${esc(v.type)}"><div class="pp-kind">${esc(type.name)}</div><h4>${esc(v.name)}</h4><p>${effects}</p></div>`;
 }
 
-function workerToken(seat, label) {
-  const face = `<div><b>${esc(label)}</b><small>${SEAT_NAMES[seat]}</small></div>`;
-  return `<div class="pp-mini pp-worker" style="--seat:${SEAT_COLOURS[seat]}"><div class="pp-flip">${face}</div><div class="pp-fold">${face}</div></div>`;
+// Simple line illustrations, drawn in white on the seat colour.
+const ICONS = {
+  scientist: `<svg viewBox="0 0 40 40" aria-hidden="true">
+    <path d="M11 15 L8 9 L13 11 L13 5 L17 9 L20 3 L23 9 L27 5 L27 11 L32 9 L29 15 Z" fill="#fff"/>
+    <circle cx="20" cy="17" r="7.5" fill="#fff"/>
+    <circle cx="16.8" cy="16.5" r="2.6" fill="none" stroke="#1e1e1e" stroke-width="1.4"/>
+    <circle cx="23.2" cy="16.5" r="2.6" fill="none" stroke="#1e1e1e" stroke-width="1.4"/>
+    <path d="M19.4 16.5 h1.2" stroke="#1e1e1e" stroke-width="1.2"/>
+    <path d="M17.5 21 q2.5 1.6 5 0" fill="none" stroke="#1e1e1e" stroke-width="1"/>
+    <path d="M9 39 L12 28 Q20 24.5 28 28 L31 39 Z" fill="#fff"/>
+    <path d="M20 27 L20 39" stroke="#1e1e1e" stroke-width=".8"/>
+    <path d="M31 21 h4 M33 21 v4 l2.5 6 h-7 l2.5-6" fill="#fff" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/>
+  </svg>`,
+  igor: `<svg viewBox="0 0 40 40" aria-hidden="true">
+    <path d="M6 39 L8 24 Q9 12 19 12 Q27 13 27 22 L29 39 Z" fill="#fff"/>
+    <circle class="pp-outline" cx="27" cy="24" r="6.3" fill="#fff" stroke-width="1.6"/>
+    <path d="M23 18.5 l-1 -2.5 M26 17.8 l0 -2.6 M29 18.3 l1.2 -2.3" stroke="#fff" stroke-width="1" stroke-linecap="round"/>
+    <circle cx="29" cy="23" r="2.1" fill="#1e1e1e"/>
+    <circle cx="24.8" cy="23.6" r="1" fill="#1e1e1e"/>
+    <path d="M25 27.6 h4.5" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round"/>
+    <path class="pp-outline" d="M15 26 Q21 31 31 31" fill="none" stroke-width="1.4"/>
+    <path d="M31 31 L34 31 L34 32.5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>
+    <rect x="31.5" y="32.5" width="5" height="6" rx="1" fill="#fff"/>
+    <rect x="33" y="34" width="2" height="3" fill="#ffd43b"/>
+  </svg>`,
+};
+
+function workerTile(seat, kind) {
+  const label = kind === 'scientist' ? 'Scientist' : 'Igor';
+  return `<div class="pp-worker pp-worker-${kind}" style="--seat:${SEAT_COLOURS[seat]}">${ICONS[kind]}<b>${label}</b><small>${SEAT_NAMES[seat]}</small></div>`;
 }
 
 const token = (label, extra = '', style = '') => `<div class="pp-token ${extra}"${style ? ` style="${style}"` : ''}>${label}</div>`;
@@ -247,11 +272,8 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
     { id: 'actions', name: 'Action spaces', layout: 'actions', components: [
       ...actions.filter(([, d]) => d.phase === 'day'), ...actions.filter(([, d]) => d.phase === 'night'),
     ].map(([id, def]) => ({ id: `action:${id}`, name: `${def.name} (${def.phase})`, copies: 1, render: () => actionTile(cfg, id, def) })) },
-    { id: 'mats', name: 'Player mats', layout: 'sheet', components: [
-      { id: 'player-mats', name: 'Player mat', copies: MAX_PLAYERS, render: (i) => playerMat(cfg, i) },
-    ] },
-    { id: 'aids', name: 'Player aids', layout: 'half', components: [
-      { id: 'player-aids', name: 'Player aid', copies: MAX_PLAYERS, render: (i) => playerAid(cfg, i) },
+    { id: 'players', name: 'Player sheets', layout: 'sheet', components: [
+      { id: 'player-sheets', name: 'Player sheet', copies: MAX_PLAYERS, render: (i) => playerSheet(cfg, i) },
     ] },
     { id: 'objectives', name: 'Objective cards', layout: 'card', components:
       Object.keys(E.OBJECTIVE_INFO).filter((id) => objectives[id]).map((id) => ({
@@ -261,16 +283,16 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
       Object.keys(cfg.research).map((id) => ({
         id: `research:${id}`, name: cfg.research[id].name, copies: cfg.researchCopies, render: () => researchCard(cfg, id),
       })) },
-    { id: 'parts', name: 'Body parts', layout: 'mini', components:
+    { id: 'parts', name: 'Body parts', layout: 'part', components:
       Object.keys(cfg.partVariants).map((id) => ({
         id: `part:${id}`, name: cfg.partVariants[id].name,
         copies: cfg.partTypes[cfg.partVariants[id].type].slots.length * PART_COPIES_PER_SLOT,
         render: () => partCard(cfg, id),
       })) },
-    { id: 'workers', name: 'Workers', layout: 'mini', components: [
-      { id: 'workers:scientist', name: 'Scientists', copies: MAX_PLAYERS, render: (i) => workerToken(i, 'Scientist') },
-      { id: 'workers:igor', name: 'Igors', copies: MAX_PLAYERS * cfg.maxIgors, render: (i) => workerToken(Math.floor(i / cfg.maxIgors), 'Igor') },
-    ] },
+    { id: 'workers', name: 'Workers', layout: 'worker', components: seats.map((seat) => ({
+      id: `workers:${seat + 1}`, name: `${SEAT_NAMES[seat]} workers`, copies: 1 + cfg.maxIgors,
+      render: (i) => workerTile(seat, i === 0 ? 'scientist' : 'igor'),
+    })) },
     { id: 'tokens', name: 'Tokens', layout: 'token', components: [
       ...COINS.map((c) => ({ id: `money:${c.value}`, name: `Money: ${c.value}s`, copies: c.copies, render: () => token(`<b>${c.value}</b><small>money</small>`, `pp-coin pp-coin-${c.value}`) })),
       { id: 'marker:suspicion', name: 'Suspicion marker', copies: 1, render: () => token('<b>!</b><small>suspicion</small>', 'pp-marker') },

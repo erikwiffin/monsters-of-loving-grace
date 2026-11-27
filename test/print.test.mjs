@@ -35,7 +35,7 @@ test('there is a component for every action space, objective, research type and 
   for (const id of Object.keys(DEFAULT_CONFIG.research)) assert.ok(ids.includes(`research:${id}`), id);
   for (const id of Object.keys(DEFAULT_CONFIG.partVariants)) assert.ok(ids.includes(`part:${id}`), id);
   for (const id of Object.keys(OBJECTIVE_INFO)) assert.ok(ids.includes(`objective:${id}`), id);
-  for (const id of ['rulebook', 'village-board', 'player-mats', 'player-aids', 'workers:scientist', 'workers:igor', 'money:1', 'money:5']) assert.ok(ids.includes(id), id);
+  for (const id of ['rulebook', 'village-board', 'player-sheets', 'workers:1', 'workers:6', 'money:1', 'money:5']) assert.ok(ids.includes(id), id);
 });
 
 test('card counts come from the configuration and cover every player count', () => {
@@ -48,7 +48,7 @@ test('card counts come from the configuration and cover every player count', () 
     for (const o of new Set(deck)) assert.ok(copies[o] >= deck.filter((x) => x === o).length, `${o} at ${n} players`);
   }
   assert.equal(comp('objective:prometheus').copies, 4);
-  assert.equal(comp('workers:igor').copies, 6 * DEFAULT_CONFIG.maxIgors);
+  assert.equal(comp('workers:1').copies, 1 + DEFAULT_CONFIG.maxIgors);
   // Overrides flow through: more research copies print more cards.
   const more = buildSections({ config: { researchCopies: 5 } }).flatMap((s) => s.components).find((c) => c.id === 'research:medicine');
   assert.equal(more.copies, 5);
@@ -114,6 +114,22 @@ test('all action spaces fit on one page; the village board has no round track or
   const ids = componentIds(sections);
   assert.ok(!ids.includes('marker:round'));
   assert.ok(paginate(sections, all).every((p) => !p.items.some((h) => h.includes('pp-back'))), 'no card backs');
+});
+
+test('one page per player sheet; all workers on one page; the suspicion track is one line', () => {
+  const sections = buildSections();
+  const pages = paginate(sections, all);
+  assert.equal(pages.filter((p) => p.section === 'players').length, 6);
+  const workers = pages.filter((p) => p.section === 'workers');
+  assert.equal(workers.length, 1);
+  assert.equal(workers[0].items.length, 6 * (1 + DEFAULT_CONFIG.maxIgors));
+  assert.equal(workers[0].items.filter((h) => h.includes('pp-worker-scientist')).length, 6);
+  assert.ok(workers[0].items.every((h) => h.includes('<svg')), 'every worker has an icon');
+  const board = sections.find((s) => s.id === 'village').components[0].render(0);
+  assert.match(board, /pp-track pp-track-line/);
+  const sheet = sections.find((s) => s.id === 'players').components[0].render(0);
+  assert.match(sheet, /Random body part/);
+  assert.match(sheet, /Control attempts/);
 });
 
 test('the Markdown renderer handles the rulebook\'s constructs and escapes HTML', () => {

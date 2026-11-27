@@ -14,12 +14,11 @@ The print view prints everything except the dice.
 - **Rulebook** (this document).
 - **Village board**: the suspicion track (0–10), and spaces for the research deck and the four-card market.
 - **Action board**: one page with the 6 day spaces on the left and the 6 night spaces on the right. If a single space changes, reprint it and glue it over the old one.
-- **6 player mats**, one per colour, each with six body slots and a control-attempt track.
-- **6 player aids**, including the random body-part table.
+- **6 player sheets**, one per colour, each with six body slots, a control-attempt track, the random body-part table and a summary of the rules.
 - **7 objective cards**: 4 Prometheus, 1 Visionary, 1 Inquisitor, 1 Unleasher.
 - **28 research cards**: 4 copies of each of 7 types.
 - **Body part cards**: 13 named variants. The supply is meant to be unlimited; if a variant runs out, use any proxy.
-- **Worker tokens**: per colour, 1 Scientist and 3 Igors. Fold each along the dashed line so it stands up.
+- **Worker tiles**: per colour, 1 Scientist and 3 Igors.
 - **Money**: coins worth 1 and 5. Money is unlimited; make change freely.
 - **Markers**: suspicion, first player, and one control-attempt marker per colour.
 - Everything prints single-sided. Use card stock or opaque sleeves so cards don't show through from the back.
@@ -40,8 +39,8 @@ Everything is public except the objective cards and the order of the research de
 
 ## Setup
 
-1. **Seats.** Sit in a circle. Each player takes a colour, its player mat and player aid, its Scientist and 3 Igors, and its control-attempt marker.
-2. **Starting resources.** Each player places their Scientist and **one** Igor in front of them, ready to work. The other two Igors stay beside the mat until hired. Each player takes **3 money** and sets their control-attempt marker on **3**.
+1. **Seats.** Sit in a circle. Each player takes a colour, its player sheet, its Scientist and 3 Igors, and its control-attempt marker.
+2. **Starting resources.** Each player places their Scientist and **one** Igor in front of them, ready to work. The other two Igors stay beside the sheet until hired. Each player takes **3 money** and sets their control-attempt marker on **3**.
 3. **The village.** Put the village board in the middle. Place the suspicion marker on **0**. Put the action board beside it. Sort the body part cards into a face-up supply by variant, and put the money beside it.
 4. **Research.** Shuffle the 28 research cards into a face-down deck on the village board. Deal the top **4** face up into the market.
 5. **Objectives.** Build the objective deck for your player count, shuffle it, and deal one card face down to each player. Look at your own card secretly. Set the remaining card aside, unseen and face down.
@@ -106,7 +105,7 @@ An action needs its full cost and every prerequisite. Money never goes below 0.
 
 | Space | Location | Effect |
 |---|---|---|
-| **Assemble body** | Private laboratory | Move any number of your loose parts onto matching empty slots of your mat, at least one. |
+| **Assemble body** | Private laboratory | Move any number of your loose parts onto matching empty slots of your player sheet, at least one. |
 | **Prepare resurrection** | Private laboratory | Scientists only. You will attempt a resurrection in this round's resolution. |
 | **Sell parts** | Back alley | Discard exactly 2 of your loose parts and gain 7 money. Then make a discovery roll: d6, 1–2 → suspicion +1. |
 | **Conduct experiments** | Private laboratory | Discard 1 to 3 of your parts, loose or installed, and draw that many research cards; keep one. Then make a discovery roll: d6, 1–3 → suspicion +1. |
@@ -133,7 +132,7 @@ Night actions mirror day actions: graves for specimens, selling for medicine, ex
 
 ## Body parts
 
-A complete body has **two arms, two legs, one chest and one head**: one part in each of the six slots on your mat. Arms are interchangeable, and so are legs. You have one body under construction at a time. Loose parts can be kept for as long as you like, with no limit.
+A complete body has **two arms, two legs, one chest and one head**: one part in each of the six slots on your player sheet. Arms are interchangeable, and so are legs. You have one body under construction at a time. Loose parts can be kept for as long as you like, with no limit.
 
 Each part may change the resurrection rolls:
 
@@ -155,7 +154,7 @@ Each part may change the resurrection rolls:
 
 ### Random parts
 
-Each random part is drawn separately, from an unlimited supply. Roll for its type, then for its variant, using the table on your player aid:
+Each random part is drawn separately, from an unlimited supply. Roll for its type, then for its variant, using the table on your player sheet:
 
 | Type (d6) | | Variant | |
 |---|---|---|---|
@@ -164,7 +163,7 @@ Each random part is drawn separately, from an unlimited supply. Roll for its typ
 | 5 | Chest | d6: 1–2 ordinary, 3–4 robust, 5–6 scarred | |
 | 6 | Head | d4: 1 ordinary, 2 criminal, 3 scholar, 4 poet | |
 
-The player aid's table is generated from the game's data, so if the two ever disagree, the player aid is right.
+The player sheet's table is generated from the game's data, so if the two ever disagree, the player sheet is right.
 
 ## Research
 
@@ -180,7 +179,7 @@ Research cards are permanent: they are never spent. There are seven types:
 | **Moral Philosophy** | Add +5 to resurrection Humanity |
 | **Discreet Methods** | Reduce the suspicion from each discovery roll by 1, to a minimum of 0 |
 
-**Two ways to discover research.** Conducting research takes a card from the market and **publishes** it. An experiment keeps a card from the deck **privately**: it is still face up for all to see, but never published. Keep published cards in one row above your mat and experiment discoveries in another.
+**Two ways to discover research.** Conducting research takes a card from the market and **publishes** it. An experiment keeps a card from the deck **privately**: it is still face up for all to see, but never published. Keep published cards in one row above your player sheet and experiment discoveries in another.
 
 **One of each type.** You can never take a type you have already discovered, by either route. You may take a type another player has already published, and that publishes it again. Conducting research is not allowed when the market has no card you may take.
 
@@ -214,7 +213,7 @@ Negative dice are rolled and subtracted. There are no automatic results on a nat
 
 ## Control: subduing monsters
 
-Everyone starts with **3 control attempts**, plus one for each effective copy of Neural Conditioning. Track them on your mat. Spent attempts never come back.
+Everyone starts with **3 control attempts**, plus one for each effective copy of Neural Conditioning. Track them on your player sheet. Spent attempts never come back.
 
 When a monster is created, a **control chain** begins with its creator and goes clockwise, giving each player exactly one chance:
 
@@ -266,7 +265,7 @@ When the game ends, everyone reveals their objective, and the unseen card is tur
 
 The browser game handles some things automatically. At the table:
 
-- **Random parts** use the dice table on the player aids.
+- **Random parts** use the dice table on the player sheets.
 - **Random salvage** is three parts drawn from the six shuffled face down.
 - **Experiment cards** are shown to everyone; only the kept card stays with you, face up in your experiment row.
 - **Odds** are not printed. Discovery rolls are printed on their spaces.
