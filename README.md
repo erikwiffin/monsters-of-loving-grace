@@ -202,7 +202,8 @@ node bin/simulate.mjs --games 500 --config overrides.json --jsonl --max-rounds 1
 Each game result records:
 
 - `seed`, `engineVersion` and the `policies` used
-- `terminal`, `truncated`, `truncationReason` and `terminalReason` (`mob`, `unleashed` or `objective`)
+- `terminal`, `truncated`, `truncationReason` (`command_budget`, `round_budget` or `hoarding`) and `terminalReason` (`mob`, `unleashed` or `objective`)
+- `hoarding`: when a bot was stopped for hoarding, its `playerId`, `objective`, `policy`, the `resource` (`money` or `parts`), its `value`, the `limit`, and the `round` and `phase`
 - `winners`, `winnerObjectives` and `collectiveDefeat`
 - `objectives` and `unseenObjectives`
 - `rounds`, `commandCount` and `invalidCommands`
@@ -211,6 +212,8 @@ Each game result records:
 - the replay `commands`, when `--commands` is given
 
 Games that hit `--max-commands` or `--max-rounds` are reported as `truncated: true` with no terminal reason. They are never counted as an in-game result.
+
+A bot holding more than 25 money or 25 loose parts is no longer playing realistically, so the runner stops the game there and flags it (`truncationReason: "hoarding"` and the `hoarding` record above). Aggregates count stops by reason (`truncatedByReason`) and hoarders by objective and resource (`hoardingBy`). Change the limits with `--hoard-money` and `--hoard-parts`, or turn the stop off with `--no-hoard-limit` (`hoardLimit` in `runGame`/`runBatch`; `null` disables it). Seats played by the `random` policy are exempt, since random play is not meant to be realistic.
 
 Policies: `random`, `heuristic`, and the heuristic's `cautious` and `bold` styles.
 

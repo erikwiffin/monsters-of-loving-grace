@@ -7,7 +7,7 @@ import {
   effectiveCopies, controlThreshold, canSubdueOthers,
 } from '../src/engine/index.js';
 import { heuristicPolicy } from '../src/sim/policies.js';
-import { runGame, runBatch } from '../src/sim/runner.js';
+import { runGame, runBatch, aggregate } from '../src/sim/runner.js';
 
 const ok = (state, cmd) => {
   const r = dispatch(state, cmd);
@@ -574,7 +574,8 @@ test('every enumerated legal command is accepted', () => {
 
 test('batch simulations terminate without invalid commands', () => {
   for (const policies of ['random', 'heuristic', ['heuristic', 'random']]) {
-    const { results } = runBatch({ games: 15, policies, includeCommands: false, seedPrefix: `t-${policies}` });
+    // The rules always reach an end; the hoarding stop (a runner choice) is off here.
+    const { results } = runBatch({ games: 15, policies, includeCommands: false, seedPrefix: `t-${policies}`, hoardLimit: null });
     for (const r of results) {
       assert.equal(r.invalidCommands, 0);
       assert.equal(r.terminal, true);
@@ -585,6 +586,24 @@ test('batch simulations terminate without invalid commands', () => {
   assert.equal(t.truncated, true);
   assert.equal(t.terminalReason, null);
   assert.equal(t.truncationReason, 'command_budget');
+});
+
+test('runner stops and flags a bot that hoards money or loose parts', () => {
+  // A tiny limit trips at once; the summary names who, what and their objective.
+  const t = runGame({ seed: 'hoard', policies: 'heuristic', hoardLimit: { money: 3, parts: 25 } }).summary;
+  assert.equal(t.truncated, true);
+  assert.equal(t.terminalReason, null);
+  assert.equal(t.truncationReason, 'hoarding');
+  assert.equal(t.hoarding.resource, 'money');
+  assert.ok(t.hoarding.value > 3);
+  assert.equal(t.hoarding.objective, t.objectives[t.hoarding.playerId]);
+  assert.equal(t.hoarding.policy, 'heuristic');
+  const agg = aggregate([t]);
+  assert.equal(agg.truncatedByReason.hoarding, 1);
+  assert.equal(agg.hoardingBy[`${t.hoarding.objective}:money`], 1);
+  // Random seats are exempt, and the limit can be turned off.
+  assert.equal(runGame({ seed: 'hoard', policies: 'random', hoardLimit: { money: 3, parts: 3 } }).summary.hoarding, null);
+  assert.equal(runGame({ seed: 'hoard', policies: 'heuristic', hoardLimit: null }).summary.hoarding, null);
 });
 
 test('engine source has no DOM, storage, timers or unseeded randomness', () => {
@@ -921,13 +940,13 @@ test('sweep scoring penalises missed targets and explains why', async () => {
 });
 
 test('the cautious and bold heuristic styles play legal games', () => {
-  const { results } = runBatch({ games: 4, policies: ['cautious', 'bold', 'heuristic'], includeCommands: false, seedPrefix: 'styles' });
+  const { results } = runBatch({ games: 4, policies: ['cautious', 'bold', 'heuristic'], includeCommands: false, seedPrefix: 'styles', hoardLimit: null });
   for (const r of results) { assert.equal(r.invalidCommands, 0); assert.equal(r.terminal, true); }
 });
 
-test('heuristic: suspicion is shared, so only danger justifies charity; the Inquisitor blocks a scarce charity slot', () => {
+test('heuristic: suspicion is shared, so only danger or idle money justifies charity; the Inquisitor blocks a scarce charity slot', () => {
   const decideDay = (objective, suspicion, config = {}) => {
-    const s = createGame({ playerCount: 3, startingMoney: 20, ...config }, 'h-charity');
+    const s = createGame({ playerCount: 3, startingMoney: 8, ...config }, 'h-charity');
     const pid = s.activePlayerId;
     s.objectives[pid] = objective;
     s.suspicion = suspicion;
@@ -936,6 +955,7 @@ test('heuristic: suspicion is shared, so only danger justifies charity; the Inqu
   };
   assert.equal(decideDay('prometheus', 3).actionId, 'medicine', 'no charity while the mob is far off');
   assert.equal(decideDay('prometheus', 9).actionId, 'charity', 'charity when the mob is near');
+  assert.equal(decideDay('prometheus', 3, { startingMoney: 24 }).actionId, 'charity', 'money with nothing else to buy goes to charity, not more medicine');
   const scarce = { actions: { charity: { cost: 1, reduction: 1, maxUnits: 4, capacity: 1 } } };
   const inq = decideDay('inquisitor', 6, scarce);
   assert.equal(inq.actionId, 'charity', 'the Inquisitor takes the only charity slot');
@@ -1097,4 +1117,26 @@ test('specimens draw every variant of the chosen type, and only that type', () =
   const cfg = createGame({ playerCount: 3 }, 'cfg').config;
   const heads = Object.keys(cfg.partVariants).filter((id) => cfg.partVariants[id].type === 'head');
   assert.deepEqual([...seen].sort(), heads.sort());
+});
+
+test('heuristic: replaces harmful installed parts and never installs them', () => {
+  let s = createGame({ playerCount: 3 }, 'h-repair');
+  s = passAllUntil(s, (x) => x.phase === 'night');
+  const pid = s.activePlayerId;
+  s.objectives[pid] = 'prometheus';
+  const p = s.players.find((x) => x.id === pid);
+  fullBody(s, pid, { arm1: 'damaged_arm', head: 'criminal_brain' });
+  p.loose.push({ id: 'part-l1', variantId: 'ordinary_arm', type: 'arm' });
+  const decide = (filter) => heuristicPolicy('h', { noise: 0 }).decide({ playerId: pid, view: getPlayerView(s, pid), legal: enumerateLegalCommands(s, pid).filter(filter) });
+  const ex = decide((c) => c.actionId === 'experiment' || c.type === 'PASS_TURN');
+  assert.equal(ex.actionId, 'experiment', 'an experiment repairs the body');
+  assert.ok(ex.choices.partIds.includes(p.body.arm1.id) && ex.choices.partIds.includes(p.body.head.id), 'by discarding the harmful parts');
+  assert.ok(!ex.choices.partIds.includes('part-l1'), 'and keeping the replacement arm');
+
+  // With loose parts for a whole body, a harmful one is left out of assembly.
+  for (const slot of Object.keys(p.body)) p.body[slot] = null;
+  p.loose = ['ordinary_arm', 'ordinary_arm', 'ordinary_leg', 'ordinary_leg', 'ordinary_chest', 'criminal_brain']
+    .map((variantId, i) => ({ id: `part-a${i}`, variantId, type: s.config.partVariants[variantId].type }));
+  const asm = decide((c) => c.actionId === 'assemble' || c.type === 'PASS_TURN');
+  assert.ok(asm.type === 'PASS_TURN' || !asm.choices.partIds.includes('part-a5'), 'the criminal brain is not installed');
 });
