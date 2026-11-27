@@ -6,12 +6,13 @@
 // shows how much of the role's win rate is the AI's skill, not the rules.
 //
 // tuneWeights searches the heuristic's weights (DEFAULT_WEIGHTS) for one
-// objective with the cross-entropy method: sample weight vectors around a
+// objective with the cross-entropy method, starting from its current
+// defaults (OBJECTIVE_WEIGHTS): sample weight vectors around a
 // mean (in log space, so every weight stays positive), play each on the same
 // seeds, keep the best quarter, and move the mean and spread towards them.
 // Each generation uses fresh seeds, so the search can't overfit a few games.
 
-import { DEFAULT_WEIGHTS } from './policies.js';
+import { DEFAULT_WEIGHTS, OBJECTIVE_WEIGHTS } from './policies.js';
 import { runGames } from './parallel.js';
 import { wilson, compareRates } from './stats.js';
 import { seedState, nextUint32 } from '../engine/rng.js';
@@ -50,10 +51,12 @@ function gaussian(st) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-export function weightsFrom(logs, keys) {
+/** Weights at log offsets from an objective's current defaults. */
+export function weightsFrom(logs, keys, objective = null) {
+  const base = { ...DEFAULT_WEIGHTS, ...(OBJECTIVE_WEIGHTS[objective] || {}) };
   const w = {};
   keys.forEach((k, i) => {
-    const x = DEFAULT_WEIGHTS[k] * Math.exp(logs[i]);
+    const x = base[k] * Math.exp(logs[i]);
     w[k] = INTEGER_WEIGHTS.has(k) ? Math.max(1, Math.round(x)) : Math.round(x * 1000) / 1000;
   });
   return w;
@@ -77,7 +80,7 @@ export async function tuneWeights({
     while (cands.length < population) cands.push(mean.map((m, i) => m + sd[i] * gaussian(st)));
     const scored = [];
     for (const c of cands) {
-      const spec = { policy: 'heuristic', options: { weights: weightsFrom(c, keys) } };
+      const spec = { policy: 'heuristic', options: { weights: weightsFrom(c, keys, objective) } };
       const r = await seatWinRate({ objective, spec, field, players, games, seedPrefix: `${seed}-${objective}-g${g}`, threads });
       scored.push({ logs: c, rate: r.rate, seats: r.seats });
     }
@@ -90,7 +93,7 @@ export async function tuneWeights({
     history.push(entry);
     onGeneration(entry);
   }
-  return { objective, weights: weightsFrom(mean, keys), history };
+  return { objective, weights: weightsFrom(mean, keys, objective), history };
 }
 
 /**

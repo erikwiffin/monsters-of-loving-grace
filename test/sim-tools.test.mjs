@@ -6,7 +6,7 @@ import { wilson, compareRates, gamesForHalfWidth, normalP } from '../src/sim/sta
 import { seatSpec, makePolicy } from '../src/sim/registry.js';
 import { verdicts, parsePolicySet } from '../src/sim/compare.js';
 import { runGame, aggregate } from '../src/sim/runner.js';
-import { heuristicPolicy, DEFAULT_WEIGHTS } from '../src/sim/policies.js';
+import { heuristicPolicy, DEFAULT_WEIGHTS, OBJECTIVE_WEIGHTS } from '../src/sim/policies.js';
 import { renameResearch } from '../src/sim/metamorphic.js';
 import { resolveConfig } from '../src/engine/index.js';
 import { summarizeView, describeMove } from '../src/sim/llm-policy.js';
@@ -58,10 +58,15 @@ test('uptake is reported per game and aggregated', () => {
   for (const x of Object.values(agg.uptake.idle)) assert.ok(x.idleIgorShare >= 0 && x.idleIgorShare <= 1);
 });
 
-test('heuristic: default weights change nothing; explanations list every option', () => {
+test('heuristic: per-objective weights apply by default; explanations list every option', () => {
+  for (const [o, w] of Object.entries(OBJECTIVE_WEIGHTS)) for (const k of Object.keys(w)) assert.ok(k in DEFAULT_WEIGHTS, `${o}.${k}`);
   const play = (opts) => runGame({ seed: 'w-1', config: { playerCount: 4 }, policies: (pid) => heuristicPolicy(`w:${pid}`, opts), includeCommands: false, maxRounds: 8 }).summary;
-  assert.deepEqual(play({}).winners, play({ weights: { ...DEFAULT_WEIGHTS } }).winners);
-  assert.equal(play({}).commandCount, play({ weights: { ...DEFAULT_WEIGHTS } }).commandCount);
+  // Passing a role's own defaults explicitly changes nothing; passing the
+  // global defaults to every seat changes the Prometheus seats' play.
+  const own = (pid, objective) => heuristicPolicy(`w:${pid}`, { weights: { ...DEFAULT_WEIGHTS, ...(OBJECTIVE_WEIGHTS[objective] || {}) } });
+  const explicit = runGame({ seed: 'w-1', config: { playerCount: 4 }, policies: (pid, i, objective) => own(pid, objective), includeCommands: false, maxRounds: 8 }).summary;
+  assert.equal(play({}).commandCount, explicit.commandCount);
+  assert.deepEqual(play({}).winners, explicit.winners);
   const { state } = runGame({ seed: 'w-2', config: { playerCount: 4 }, includeCommands: false, maxCommands: 10 });
   const pid = state.activePlayerId;
   let seen = null;

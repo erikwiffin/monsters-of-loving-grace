@@ -5,6 +5,7 @@
 // Policies may be async (return a Promise) — the async runner awaits them.
 
 import { seedState, randInt, nextUint32 } from '../engine/rng.js';
+import { effectMean, researchWorth } from './effect-values.js';
 
 function makeRandom(seed) {
   const st = seedState(seed);
@@ -29,12 +30,7 @@ export function randomPolicy(seed = 'random') {
   };
 }
 
-function effectValue(e) {
-  if (e.op === 'die') return e.sign * (e.die + 1) / 2;
-  if (e.op === 'fixed') return e.amount;
-  if (e.op === 'threshold') return -e.amount;
-  return 0;
-}
+const effectValue = effectMean;
 
 // The Unleasher wants a body that lives but lacks Humanity.
 function variantValue(cfg, variantId, objective) {
@@ -42,70 +38,10 @@ function variantValue(cfg, variantId, objective) {
   return cfg.partVariants[variantId].effects.reduce((a, e) => a + effectValue(e) * (e.attribute === 'vitality' ? 1 : humanityWeight), 0);
 }
 
-// How much each objective wants one unit of each research effect, in money.
-// A unit is a mean point for dice and modifiers, or one of the effect's amount.
-// Values come from the configuration's effects, so new research types are
-// valued without a per-type table (spec 016).
-const EFFECT_WANT = {
-  vitality: { default: 1.15, unleasher: 1.3, inquisitor: 0.15 },
-  humanity: { default: 0.9, visionary: 1.0, unleasher: -0.3, inquisitor: 0.2 },
-  control: { default: 1.0, unleasher: 0.12, inquisitor: 0.37 },
-  controlAttempts: { default: 3.5, unleasher: 0.5, inquisitor: 1 },
-  medicineBonus: { default: 2.5, inquisitor: 3 },
-  suspicionReduction: { default: 1.5, inquisitor: 0 },
-  ferocity: { default: -0.3, unleasher: 1.0, inquisitor: 0.1 },
-  rerollvitality: { default: 4, unleasher: 4.5, inquisitor: 0.3 },
-  rerollhumanity: { default: 3.5, unleasher: -1, inquisitor: 0.3 },
-  noGarrison: { default: 3, unleasher: 0, inquisitor: 0.5 },
-  researchCalm: { default: 1.5, inquisitor: -2 },
-  gravesBonus: { default: 2, inquisitor: 1.5 },
-  sellBonus: { default: 0.4 },
-  charityBonus: { default: 1, inquisitor: 0 },
-  specimenDiscount: { default: 1.2, inquisitor: 0.3 },
-  quietFailure: { default: 1, inquisitor: -0.5 },
-  pursuit: { default: 2.5, unleasher: 0, inquisitor: 0.3 },
-  discoveryBoost: { default: -1.5, inquisitor: 3 },
-};
-// Conducting research publishes the card, giving every rival a copy. What one
-// unit in rivals' hands costs each objective (negative: it gains).
-const PUBLISH_HARM = {
-  prometheus: { vitality: 0.3, humanity: 0.3 },
-  // Rivals' stability research helps the Visionary: it needs two Creatures at once.
-  visionary: { vitality: -0.3, humanity: -0.3 },
-  inquisitor: { discoveryBoost: -2, suspicionReduction: 2, researchCalm: 2, charityBonus: 1, humanity: 0.3, quietFailure: 1 },
-  // Rivals' Vitality makes their failures monsters, not corpses.
-  unleasher: { vitality: -0.2, humanity: 0.4, control: 0.4, controlAttempts: 1.5, noGarrison: 2, ferocity: -1, rerollhumanity: 1.5, pursuit: 2 },
-};
-// How many rivals a Visionary-style effect expects to share a round with.
-const RIVALS_PREPARING = { default: 0.4, visionary: 1.2, prometheus: 0.2, unleasher: 0.3, inquisitor: 0 };
+// Research is valued from its effects by the shared two-layer table
+// (effect-values.js): what each effect kind does, and what that is worth to
+// each objective, in money.
 
-function effectKey(e) {
-  if (e.kind === 'resurrection') return e.attribute;
-  if (e.kind === 'reroll') return `reroll${e.attribute}`;
-  return e.kind;
-}
-function effectUnits(e) {
-  if (e.kind === 'resurrection' || e.kind === 'control') return effectValue(e);
-  if (e.per === 'rivalHunters') return (e.amount ?? 1) * Math.max(0, 2 - (e.beyond || 0)); // about two hunters per monster
-  if (e.kind === 'reroll' || e.kind === 'noGarrison' || e.kind === 'pursuit') return e.uses ?? 1;
-  return e.amount ?? 1;
-}
-const pick = (table, objective) => (table ? (table[objective] ?? table.default ?? 0) : 0);
-
-/** What a research type is worth to an objective, and what publishing it costs. */
-function researchWorth(cfg, type, objective) {
-  const def = cfg.research[type];
-  let want = 0;
-  let harm = 0;
-  for (const e of def.effects) {
-    const key = effectKey(e);
-    let units = effectUnits(e);
-    if (e.per === 'rivalPrepared') units *= pick(RIVALS_PREPARING, objective);
-    want += units * pick(EFFECT_WANT[key], objective);
-    harm += units * ((PUBLISH_HARM[objective] || {})[key] || 0);
-  }
-  return { want, harm };
-}
 const UNLEASHER_MAX_STABLE = 0.05;
 const VISIONARY_MIN_RIVALS = 3;
 const GARRISON_ALERT_PARTS = 5; // installed plus fitting loose parts
@@ -183,6 +119,43 @@ export const DEFAULT_WEIGHTS = {
 };
 
 /**
+ * Per-objective defaults over DEFAULT_WEIGHTS: the best weights found for
+ * each role, adopted only where they measurably beat the defaults in one seat
+ * against a standard field (bin/best-response.mjs; experiments/README.md).
+ * Prometheus: tuned by bin/tune.mjs (experiments/tuned/prometheus.json), +6.6
+ * points over 1,200 games, p = 0.001, mostly at five and six players. The
+ * tuned Visionary, Inquisitor and Unleasher weights were no better, so those
+ * roles keep the defaults.
+ */
+export const OBJECTIVE_WEIGHTS = {
+  prometheus: {
+    suspicionCost: 1.123,
+    suspicionCurve: 5.637,
+    suspicionPace: 2.883,
+    mobStake: 44.575,
+    moneyScale: 0.981,
+    spendFactor: 0.599,
+    partBase: 2.867,
+    partQuality: 0.233,
+    completionBonus: 1.38,
+    researchScale: 0.579,
+    publishHarm: 1.298,
+    denyScale: 1.011,
+    hireValue: 0.578,
+    expectedRounds: 9,
+    igorReserve: 0.717,
+    charityScale: 1.206,
+    garrisonValue: 4.067,
+    garrisonAlert: 8,
+    assembleValue: 7.009,
+    prepareValue: 15.927,
+    attemptMinStable: 0.176,
+    attemptLate: 0.129,
+    unleashFactor: 1.315,
+  },
+};
+
+/**
  * A greedy strategy that prices every option in money, using only its view,
  * the configuration's numbers and the engine's exact odds. Because values come
  * from the config, it adapts when a sweep changes costs, gains or suspicion.
@@ -190,7 +163,8 @@ export const DEFAULT_WEIGHTS = {
 export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'standard', igorBias = null, weights = {}, margin = 0, explain = null } = {}) {
   const r = makeRandom(seed);
   const st = STYLES[style] || STYLES.standard;
-  const W = { ...DEFAULT_WEIGHTS, ...weights };
+  // The weights for this decision: defaults, the objective's own, then the caller's.
+  let W = { ...DEFAULT_WEIGHTS, ...weights };
   // Why the bot chose: every option with its score, broken into parts.
   const report = (kind, options, chosen) => {
     if (explain) explain({ kind, options, chosen });
@@ -202,6 +176,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       const me = view.players.find((p) => p.id === view.viewerId);
       const objective = view.private.objective;
       const cfg = view.config;
+      W = { ...DEFAULT_WEIGHTS, ...(OBJECTIVE_WEIGHTS[objective] || {}), ...weights };
       // A special ability (stacks: false) is worthless to a player who already
       // has it through a rival's publication.
       const want = {};
@@ -218,7 +193,7 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
       // A card kept from an experiment is never published, and the deck holds
       // only a few copies of each type, so keeping one also keeps it from a
       // rival. Denial is worth what that card would cost this bot in a rival's
-      // hands (PUBLISH_HARM), for about one rival.
+      // hands (its rival price, effect-values.js), for about one rival.
       const denyValue = {};
       for (const t of Object.keys(cfg.research)) denyValue[t] = researchWorth(cfg, t, objective).harm * W.denyScale;
       const keepValue = (t) => (want[t] || 0) + (denyValue[t] || 0);
@@ -551,7 +526,16 @@ export function heuristicPolicy(seed = 'heuristic', { noise = 0.75, style = 'sta
             const lost = c.choices.partIds.reduce((acc, id) => acc + partValue(me.loose.find((x) => x.id === id).variantId), 0);
             return sellGain * moneyValue - lost - susCost - sciTax;
           }
-          case 'hire': return def.cost > me.money ? -1 : (cfg.actions.medicine ? cfg.actions.medicine.gain : 2) * Math.min(remaining, 5) * W.hireValue - def.cost * moneyValue * W.spendFactor - sciTax;
+          case 'hire': {
+            if (def.cost > me.money) return -1;
+            // An Igor is an investment: urgent needs come first. Don't hire
+            // if what is left can't pay for charity with the mob close, or
+            // for the last parts of the body.
+            const urgent = (!wantsSuspicion && excess > 0 && cfg.actions.charity ? cfg.actions.charity.cost : 0)
+              + (!wantsSuspicion && needed > 0 && totalStillNeeded <= 1 ? totalStillNeeded * specimenCost : 0);
+            if (urgent > 0 && me.money - def.cost < urgent) return -1;
+            return (cfg.actions.medicine ? cfg.actions.medicine.gain : 2) * Math.min(remaining, 5) * W.hireValue - def.cost * moneyValue * W.spendFactor - sciTax;
+          }
           case 'charity': {
             const units = (c.choices && c.choices.units) || 1;
             const cut = Math.min(units * charityCut, view.suspicion);

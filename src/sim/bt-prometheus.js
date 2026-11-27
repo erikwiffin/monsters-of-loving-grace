@@ -23,6 +23,10 @@
 
 import { selector, sequence, condition, action, guard } from './bt.js';
 import { heuristicPolicy } from './policies.js';
+import { researchWorthExcept } from './effect-values.js';
+
+// Effect kinds the tree values itself, from its own odds and plan.
+const MODELLED_KINDS = ['resurrection', 'control', 'controlAttempts', 'suspicionReduction', 'medicineBonus'];
 
 // ---------------------------------------------------------------------------
 // Dice arithmetic over configuration effects
@@ -244,9 +248,10 @@ function buildBlackboard(view, legal, P) {
       // Discreet Methods makes my night work free of suspicion.
       if (e.kind === 'suspicionReduction') v += bb.reduction > 0 ? 0.5 : bb.P.discretionValue;
       if (e.kind === 'medicineBonus') v += Math.max(0, 1.5 - view.round * 0.2);
-      if (e.kind === 'researchCalm') v += 0.7;
-      if (e.kind === 'charityBonus') v += 0.5;
     }
+    // Every other effect kind is valued by the shared table (effect-values.js),
+    // so the tree gets a sensible value for new kinds without new code.
+    v += bb.P.tableScale * researchWorthExcept(cfg, type, 'prometheus', MODELLED_KINDS).want;
     return v;
   };
   // The planned body, with ordinary parts where it still lacks one.
@@ -289,6 +294,7 @@ export const PARAMS = {
   gainScale: 40, // value of one unit of body utility
   controlValue: 12, // value of a whole control chance, at five players
   discretionValue: 6, // value of the first Discreet Methods
+  tableScale: 0.5, // the shared effect table's money values, in the tree's units
   // Night work.
   gravesGain: 0.01, // least utility two random parts must add
   gravesReserveBelow: 6, // keep an Igor for graves while this few parts are missing
