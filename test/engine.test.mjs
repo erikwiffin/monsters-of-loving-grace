@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import {
   createGame, dispatch, getLegalCommands, enumerateLegalCommands, getPlayerView, getPublicView,
   serialize, deserialize, replay, getReplayRecord, researchCount, estimateResurrection, estimateControl, controlAttempts,
+  effectiveCopies, controlThreshold, canSubdueOthers,
 } from '../src/engine/index.js';
 import { heuristicPolicy } from '../src/sim/policies.js';
 import { runGame, runBatch } from '../src/sim/runner.js';
@@ -949,4 +950,100 @@ test('experiment: a loose part and an installed part of the same variant are dif
   assert.equal(r.ok, true);
   assert.deepEqual(r.state.players.find((x) => x.id === pid).loose, []);
   assert.ok(Object.values(r.state.players.find((x) => x.id === pid).body).every(Boolean), 'the body is untouched');
+});
+
+// Experimental research effect kinds (inert in the default configuration).
+test('research: stacks false caps effective copies at one; copies sets the deck count', () => {
+  const s = createGame({ playerCount: 3, research: { restraint: { stacks: false, copies: 2 } } }, 'special');
+  assert.equal(s.deck.length + s.market.length, 6 * 4 + 2);
+  player(s, 'p1').research = ['restraint'];
+  s.publications.push({ playerId: 'p2', type: 'restraint', round: 1 }, { playerId: 'p3', type: 'restraint', round: 1 });
+  assert.equal(researchCount(s, 'p1', 'restraint'), 3);
+  assert.equal(effectiveCopies(s, 'p1', 'restraint'), 1);
+  assert.ok(Math.abs(estimateControl(s, 'p1') - 0.25) < 1e-9, 'only one +4 applies');
+  assert.throws(() => createGame({ research: { x: { name: 'X', effects: [{ kind: 'bogus' }] } } }, 'bad'));
+});
+
+test('research: ferocity raises the control threshold against its holder\'s monsters', () => {
+  const research = { fury: { name: 'Fury', effects: [{ kind: 'ferocity', amount: 3 }] } };
+  let s = createGame({ playerCount: 3, research }, 'fury');
+  player(s, 'p2').research = ['fury'];
+  assert.equal(controlThreshold(s, 'p2'), 23);
+  assert.equal(controlThreshold(s, 'p1'), 20);
+  assert.equal(estimateControl(s, 'p1', 'p2'), 0, 'a bare d20 cannot reach 23');
+  s = resurrectionGame({ research, resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => { fullBody(st, 'p2'); player(st, 'p2').research = ['fury']; });
+  const r = dispatch(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
+  const roll = r.events.find((e) => e.type === 'CONTROL_ROLLED');
+  assert.equal(roll.threshold, 23);
+  assert.equal(roll.success, roll.score >= 23);
+});
+
+test('research: noGarrison lets its holder subdue rivals\' monsters without a garrison', () => {
+  const research = { hounds: { name: 'Bloodhounds', stacks: false, effects: [{ kind: 'noGarrison' }] } };
+  let s = resurrectionGame({ ...MONSTER, research }, (st) => { fullBody(st, 'p2'); player(st, 'p3').research = ['hounds']; });
+  assert.equal(canSubdueOthers(s, 'p3'), true);
+  assert.equal(canSubdueOthers(s, 'p1'), false);
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+  assert.equal(s.activePlayerId, 'p3', 'p3 is not skipped');
+});
+
+test('research: a reroll ability retries a failed attribute once per game, and the odds include it', () => {
+  const research = { rod: { name: 'Lightning Rod', stacks: false, effects: [{ kind: 'reroll', attribute: 'vitality', uses: 1 }] } };
+  let s = createGame({ playerCount: 3, research }, 'rod');
+  fullBody(s, 'p1');
+  const before = estimateResurrection(s, 'p1').attributes.vitality.success;
+  player(s, 'p1').research = ['rod'];
+  const after = estimateResurrection(s, 'p1').attributes.vitality.success;
+  assert.ok(Math.abs(after - (1 - (1 - before) ** 2)) < 1e-9);
+  s = resurrectionGame({ research, resurrection: { thresholds: { vitality: 100, humanity: 100 } } }, (st) => { fullBody(st, 'p2'); player(st, 'p2').research = ['rod']; });
+  assert.equal(player(s, 'p2').rerollsUsed, 1);
+  assert.equal(s.events.filter((e) => e.type === 'ATTRIBUTE_REROLLED').length, 1);
+});
+
+test('research: rivalPrepared applies a resurrection effect once per rival who prepared', () => {
+  const research = { corr: { name: 'Correspondence', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'fixed', amount: 5, per: 'rivalPrepared' }] } };
+  const s = createGame({ playerCount: 3, research, resurrection: { thresholds: { vitality: 20, humanity: 30 } } }, 'corr');
+  fullBody(s, 'p1');
+  player(s, 'p1').research = ['corr'];
+  assert.equal(estimateResurrection(s, 'p1').attributes.humanity.success, 0, 'nobody else prepared: d20 cannot reach 30');
+  s.occupancy.night.prepare = [sci('p1'), sci('p2'), sci('p3')];
+  assert.ok(Math.abs(estimateResurrection(s, 'p1').attributes.humanity.success - 0.05) < 1e-9, 'two rivals: d20 + 10 >= 30');
+});
+
+test('research: researchCalm lowers suspicion when its holder conducts research', () => {
+  let s = createGame({ playerCount: 3, research: { lectures: { name: 'Public Lectures', effects: [{ kind: 'researchCalm', amount: 1 }] } } }, 'calm');
+  s.suspicion = 4;
+  const pid = s.activePlayerId;
+  const p = player(s, pid);
+  p.research = ['lectures']; p.money = 10;
+  const card = s.market.find((c) => c.type !== 'lectures');
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'research', choices: { researchCardId: card.id } });
+  assert.equal(s.suspicion, 3);
+});
+
+test('research: pursuit gives its holders one more control roll before a monster is unleashed', () => {
+  const research = { arctic: { name: 'Arctic Pursuit', stacks: false, effects: [{ kind: 'pursuit', uses: 1 }] } };
+  let s = resurrectionGame({ research, resurrection: { thresholds: { vitality: -100, humanity: 100 } }, control: { threshold: 100 } }, (st) => { fullBody(st, 'p2'); player(st, 'p3').research = ['arctic']; });
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+  assert.equal(s.suspicion, 2);
+  assert.equal(s.activePlayerId, 'p3', 'p3 is in the pursuit though not garrisoned');
+  assert.equal(getPublicView(s).control.pursuit, true);
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: true });
+  assert.equal(player(s, 'p3').pursuitsUsed, 1);
+  assert.equal(s.result.reason, 'unleashed', 'the one pursuit failed');
+});
+
+test('research: rivalHunters ferocity grows with each rival able to subdue; discoveryBoost worsens noticed discoveries', () => {
+  const research = { blood: { name: 'Transfusion', effects: [{ kind: 'ferocity', amount: 1, per: 'rivalHunters' }] } };
+  const s = createGame({ playerCount: 4, research }, 'hunters');
+  player(s, 'p1').research = ['blood'];
+  assert.equal(controlThreshold(s, 'p1'), 20);
+  garrison(s, 'p2', 'p3');
+  assert.equal(controlThreshold(s, 'p1'), 22);
+  let t = createGame({ playerCount: 3, research: { pamph: { name: 'Pamphlets', stacks: false, effects: [{ kind: 'discoveryBoost', amount: 1 }] } }, actions: { graves: { suspicion: { die: 6, bands: [{ max: 6, amount: 1 }] } } } }, 'pamph');
+  t = passAllUntil(t, (x) => x.phase === 'night');
+  const pid = t.activePlayerId;
+  player(t, pid).research = ['pamph'];
+  t = ok(t, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
+  assert.equal(t.suspicion, 2);
 });

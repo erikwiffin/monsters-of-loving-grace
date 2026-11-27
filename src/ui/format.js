@@ -101,7 +101,9 @@ export function describeEvent(e, ctx) {
     case 'CREATURE_STABILIZED': return `${n(e.playerId)}'s Creature lives — and is <b>${e.disposition.replace(/_/g, ' ')}</b>!`;
     case 'MONSTER_CREATED': return `${n(e.playerId)}'s Creature lives — but it is a <b class="danger">monster</b>! Who will subdue it?`;
     case 'SUBDUE_DECLINED': return `${n(e.playerId)} does not subdue the monster.`;
-    case 'CONTROL_SKIPPED': return e.reason === 'not_garrisoned' ? `${n(e.playerId)} has no one in the garrison and cannot subdue it.` : `${n(e.playerId)} has no control attempts left.`;
+    case 'CONTROL_SKIPPED': return e.reason === 'not_garrisoned' ? `${n(e.playerId)} has no one in the garrison and cannot subdue it.` : e.reason === 'no_pursuit' ? `${n(e.playerId)} cannot give chase.` : `${n(e.playerId)} has no control attempts left.`;
+    case 'PURSUIT_BEGUN': return `The monster flees, pursued by ${e.playerIds.map(n).join(', ')}.`;
+    case 'ATTRIBUTE_REROLLED': return `${n(e.playerId)} rerolls a failed ${e.attribute} (${e.firstScore}).`;
     case 'CONTROL_ROLLED': return `${n(e.playerId)} tries to subdue the monster: <b>${e.score}</b> vs ${e.threshold}+ ${e.success ? '✓' : '✗'}.`;
     case 'MONSTER_SUBDUED': return `${n(e.playerId)} subdues and destroys the monster (${e.attemptsLeft} control attempt${e.attemptsLeft === 1 ? '' : 's'} left), salvaging ${e.salvagedParts.map((p) => esc(variantName(cfg, p.variantId))).join(', ')}.`;
     case 'CREATURE_UNLEASHED': return `${n(e.playerId)}'s monster is <b class="danger">UNLEASHED</b>!`;
