@@ -563,7 +563,7 @@ function renderMenu() {
   const kindOpts = (i) => [['human', 'Human'], ...Object.entries(AI_KINDS)].map(([k, label]) => `<option value="${k}" ${kindOf(i) === k ? 'selected' : ''}>${label}</option>`).join('');
   const names = Array.from({ length: n }, (_, i) => `<div class="prow"><label>Player ${i + 1} <input name="pname" maxlength="24" value="${esc((ui.menuNames || [])[i] || '')}" ${((ui.menuNames || [])[i] || '').trim() ? 'data-named="1"' : ''} placeholder="${seatPlaceholder(kindOf(i), i)}"></label><label>Played by <select name="pkind">${kindOpts(i)}</select></label></div>`).join('');
   return `<div class="menu-screen">
-    <div class="title"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–6 players.</p></div>
+    <div class="title"><img class="logo" src="assets/logo.png" alt="" width="512" height="512"><h1>Monsters of Loving Grace</h1><p>A game of science, suspicion and secret ambition for 3–6 players.</p></div>
     <div class="menu-grid">
       <section class="panel">
         <h2>New game</h2>
