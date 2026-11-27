@@ -67,8 +67,9 @@ test('action tiles show a slot per capacity, marking slots used only at higher p
   assert.equal((tile('graves').match(/pp-slot-more/g) || []).length, big - small);
   assert.match(tile('graves'), /d6: 1–4 → \+1 suspicion/);
   assert.match(tile('medicine'), /No limit/);
-  assert.match(tile('garrison'), /Igors only/);
-  assert.match(tile('prepare'), /Scientist only/);
+  assert.match(tile('garrison'), /No Scientist/);
+  assert.match(tile('prepare'), /No Igor/);
+  assert.doesNotMatch(tile('medicine'), /No Scientist|No Igor|Scientist or Igor/);
 });
 
 test('dice tables reproduce the engine\'s random part odds exactly', () => {

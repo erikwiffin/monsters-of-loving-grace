@@ -31,7 +31,7 @@ Named brains occupy the head slot; there is no separate brain resource or slot. 
 ## Acquiring parts
 
 - **Random draws** (graves: 2 parts). Each part is drawn independently, with replacement and from unlimited supply. First the type is chosen with weights arm 2/6, leg 2/6, chest 1/6 and head 1/6. Then a variant of that type is chosen uniformly.
-- **Specimens** (day): choose exactly one variant by ID for 2 money (spec 022).
+- **Specimens** (day): choose exactly one part type for 2 money; its variant is then chosen uniformly, as in a random draw (spec 022).
 - **Salvage**: a failed resurrection returns three of the six consumed parts to its creator's loose inventory, and subduing a monster gives three of its six parts to the subduing player (spec 025).
 
 ## Assembly

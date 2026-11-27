@@ -127,10 +127,10 @@ test('capacity tiers follow the player count; medicine is unlimited', () => {
     for (let i = 0; i < cap; i++) {
       const pid = s.activePlayerId;
       placed.push(pid);
-      s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['ordinary_arm'] } });
+      s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['arm'] } });
     }
     const next = s.activePlayerId;
-    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: next, workerId: sci(next), actionId: 'specimens', choices: { variantIds: ['ordinary_arm'] } });
+    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: next, workerId: sci(next), actionId: 'specimens', choices: { partTypes: ['arm'] } });
     assert.equal(r.error.code, 'SPACE_FULL');
     assert.ok(!getLegalCommands(s, next).some((c) => c.actionId === 'specimens'));
     // Medicine never fills.
@@ -156,7 +156,7 @@ test('everyone starts with an Igor; hired Igors act at once; an Igor acts once p
   assert.equal(s.players.find((p) => p.id === pid).money, 19, 'the first hire costs 4');
   assert.equal(s.workers[`igor-${pid}-2`].active, true, 'a hired Igor is available at once');
   s = passAllUntil(s, (x) => x.activePlayerId === pid);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-2`, actionId: 'specimens', choices: { variantIds: ['athlete_leg'] } });
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-2`, actionId: 'specimens', choices: { partTypes: ['leg'] } });
   s = passAllUntil(s, (x) => x.phase === 'night' && x.activePlayerId === pid);
   const legal = getLegalCommands(s, pid);
   assert.ok(!legal.some((c) => c.workerId === `igor-${pid}-1` || c.workerId === `igor-${pid}-2`), 'Igors act only once per round');
@@ -326,10 +326,13 @@ test('specimens buy one part; assemble installs any number of fitting parts, up 
   let s = createGame({ playerCount: 3, startingMoney: 10 }, 'assemble');
   const pid = s.activePlayerId;
   assert.ok(!('anatomy' in s.config.research), 'Advanced Anatomy is retired');
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['athlete_leg', 'athlete_leg'] } }).error.code, 'INVALID_CHOICE');
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { variantIds: ['athlete_leg'] } });
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['leg', 'leg'] } }).error.code, 'INVALID_CHOICE');
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['athlete_leg'] } }).error.code, 'INVALID_TARGET', 'specimens choose a type, not a variant');
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['leg'] } });
   const p = () => s.players.find((x) => x.id === pid);
-  assert.deepEqual(p().loose.map((x) => x.variantId), ['athlete_leg']);
+  assert.deepEqual(p().loose.map((x) => x.type), ['leg']);
+  const bought = p().loose[0].variantId;
+  assert.equal(s.config.partVariants[bought].type, 'leg', 'the variant is drawn from the chosen type');
   assert.equal(p().money, 8);
   const extra = [['ordinary_arm', 'arm'], ['ordinary_arm', 'arm'], ['ordinary_leg', 'leg'], ['ordinary_chest', 'chest'], ['poet_brain', 'head'], ['poet_brain', 'head']];
   extra.forEach(([variantId, type], i) => p().loose.push({ id: `part-x${i}`, variantId, type }));
@@ -337,7 +340,7 @@ test('specimens buy one part; assemble installs any number of fitting parts, up 
   assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ['part-x4', 'part-x5'] } }).error.code, 'NO_MATCHING_SLOT');
   const all = p().loose.filter((x) => x.id !== 'part-x5').map((x) => x.id);
   s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: all } });
-  assert.equal(p().body.leg1.variantId, 'athlete_leg');
+  assert.equal(p().body.leg1.variantId, bought);
   assert.equal(p().body.head.id, 'part-x4');
   assert.ok(Object.values(p().body).every(Boolean), 'a whole body in one action');
   assert.deepEqual(p().loose.map((x) => x.id), ['part-x5']);
@@ -1079,4 +1082,19 @@ test('objective deck: unleashers may be tiered by player count', () => {
   assert.equal(count(6), 2);
   const s = createGame({ ...cfg, playerCount: 6 }, 'u');
   assert.equal(Object.values(s.objectives).length + s.unseenObjectives.length, 7);
+});
+
+test('specimens draw every variant of the chosen type, and only that type', () => {
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) {
+    let s = createGame({ playerCount: 3 }, `specimen-variants-${i}`);
+    const pid = s.activePlayerId;
+    s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['head'] } });
+    const part = s.players.find((x) => x.id === pid).loose[0];
+    assert.equal(part.type, 'head');
+    seen.add(part.variantId);
+  }
+  const cfg = createGame({ playerCount: 3 }, 'cfg').config;
+  const heads = Object.keys(cfg.partVariants).filter((id) => cfg.partVariants[id].type === 'head');
+  assert.deepEqual([...seen].sort(), heads.sort());
 });

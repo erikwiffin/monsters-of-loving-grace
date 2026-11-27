@@ -27,7 +27,7 @@ export function actionText(id, def, cfg) {
   switch (id) {
     case 'medicine': return `Gain ${def.gain} money. +1 per Medical Expertise copy.`;
     case 'research': return `Pay ${def.cost}: take an eligible research card from the market and publish it for everyone.${cfg.research.lectures ? ' −1 suspicion per Public Lectures copy.' : ''}`;
-    case 'specimens': return `Pay ${def.cost}: choose ${def.count === 1 ? 'any named body part' : `any ${def.count} named body parts`}.`;
+    case 'specimens': return `Pay ${def.cost}: choose ${def.count === 1 ? 'a body part type' : `${def.count} body part types`} (arm, leg, chest or head); the variant is random.`;
     case 'hire': return `Pay ${def.cost}: hire an Igor who can work at once (max ${cfg.maxIgors} Igors).`;
     case 'charity': return (def.maxUnits || 1) > 1
       ? `Pay ${def.cost} per unit, up to ${def.maxUnits} units: suspicion −${def.reduction} per unit${cfg.research.benefactor ? ', −1 more per Parish Benefactor copy' : ''}.`

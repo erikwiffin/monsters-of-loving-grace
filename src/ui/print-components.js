@@ -102,10 +102,11 @@ export function objectiveCopies(cfg) {
   return most;
 }
 
+// Only restrictions are printed; a space any worker may take says nothing.
 function permissionText(def) {
-  if (def.scientist === false) return 'Igors only';
-  if (def.igor === false) return 'Scientist only';
-  return 'Scientist or Igor';
+  if (def.scientist === false) return 'No Scientist';
+  if (def.igor === false) return 'No Igor';
+  return '';
 }
 
 function costText(id, def) {
@@ -151,7 +152,7 @@ function actionTile(cfg, id, def) {
   const note = id === 'charity' ? '<p class="pp-small">Only while suspicion is above 0.</p>' : '';
   return `<div class="pp-tile pp-${def.phase}">
     <div class="pp-tile-text">
-      <div class="pp-tile-head"><span>${phase} · ${esc(def.location)}</span><span>${costText(id, def)} · ${permissionText(def)}</span></div>
+      <div class="pp-tile-head"><span>${phase} · ${esc(def.location)}</span><span>${[costText(id, def), permissionText(def)].filter(Boolean).join(' · ')}</span></div>
       <h3>${esc(def.name)}</h3>
       <p>${esc(actionText(id, def, cfg))}</p>
       ${note}

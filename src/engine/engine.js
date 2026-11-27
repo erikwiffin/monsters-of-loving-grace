@@ -61,6 +61,9 @@ function validateConfig(cfg) {
     if (!cfg.partTypes[v.type]) throw new Error(`part variant ${id} has unknown type ${v.type}`);
     for (const e of v.effects) validateEffect(e, `part variant ${id}`);
   }
+  for (const t of Object.keys(cfg.partTypes)) {
+    if (!Object.values(cfg.partVariants).some((v) => v.type === t)) throw new Error(`part type ${t} has no variants`);
+  }
   for (const [id, r] of Object.entries(cfg.research)) {
     if (r.copies !== undefined && (!Number.isInteger(r.copies) || r.copies < 0)) throw new Error(`research ${id}: copies must be a non-negative integer`);
     if (r.stacks !== undefined && typeof r.stacks !== 'boolean') throw new Error(`research ${id}: stacks must be a boolean`);
@@ -315,7 +318,12 @@ function drawRandomPart(s) {
     if (r < t.weight) { chosen = id; break; }
     r -= t.weight;
   }
-  const variants = Object.keys(s.config.partVariants).filter((id) => s.config.partVariants[id].type === chosen);
+  return drawPartOfType(s, chosen);
+}
+
+// A uniformly random variant of the given part type (graves and specimens).
+function drawPartOfType(s, type) {
+  const variants = Object.keys(s.config.partVariants).filter((id) => s.config.partVariants[id].type === type);
   return makePart(s, variants[randInt(s.rng, variants.length)]);
 }
 
@@ -448,21 +456,22 @@ export const HANDLERS = {
     },
   },
   specimens: {
-    choiceKeys: ['variantIds'],
+    choiceKeys: ['partTypes'],
     numbers: ['cost'],
     positive: ['count'],
     prereq: (s, p, w, def) => needMoney(p, specimenCost(s, p, def)),
     checkChoices(s, p, w, def, c) {
-      const v = c.variantIds;
-      if (!Array.isArray(v) || v.length !== def.count) return err('INVALID_CHOICE', `variantIds must list exactly ${def.count} variants.`);
-      for (const id of v) if (typeof id !== 'string' || !s.config.partVariants[id]) return err('INVALID_TARGET', `Unknown part variant ${id}.`);
+      const v = c.partTypes;
+      if (!Array.isArray(v) || v.length !== def.count) return err('INVALID_CHOICE', `partTypes must list exactly ${def.count} part types.`);
+      for (const t of v) if (typeof t !== 'string' || !Object.hasOwn(s.config.partTypes, t)) return err('INVALID_TARGET', `Unknown part type ${t}.`);
       return null;
     },
-    constraints: (s, p, w, def) => ({ variantIds: { type: 'multiset', count: def.count, values: Object.keys(s.config.partVariants) } }),
+    constraints: (s, p, w, def) => ({ partTypes: { type: 'multiset', count: def.count, values: Object.keys(s.config.partTypes) } }),
     apply(s, p, w, def, c) {
       const cost = specimenCost(s, p, def);
       if (cost) changeMoney(s, p, -cost, 'specimens');
-      const parts = c.variantIds.map((id) => makePart(s, id));
+      // The player chooses the type; the variant is random (spec 024).
+      const parts = c.partTypes.map((t) => drawPartOfType(s, t));
       p.loose.push(...parts);
       emit(s, 'PARTS_GAINED', { playerId: p.id, source: 'specimens', parts: clone(parts) });
     },
@@ -1502,9 +1511,9 @@ function expandChoices(s, p, actionId, c, dedupe) {
   if (actionId === 'research') {
     for (const id of c.researchCardId.values) out.push({ researchCardId: id });
   } else if (actionId === 'specimens') {
-    const v = c.variantIds.values;
+    const v = c.partTypes.values;
     const rec = (start, acc) => {
-      if (acc.length === c.variantIds.count) { out.push({ variantIds: [...acc] }); return; }
+      if (acc.length === c.partTypes.count) { out.push({ partTypes: [...acc] }); return; }
       for (let i = start; i < v.length; i++) { acc.push(v[i]); rec(i, acc); acc.pop(); }
     };
     rec(0, []);
