@@ -42,18 +42,25 @@ a stacking counter:
 | Neural Conditioning | stacks | 4 | +1 control attempt |
 | Mesmerism | one-off | 4 | Control +1d10 (was 1d6, stacking) |
 | Restraining Apparatus | one-off | 4 | Control +8 (was +4, stacking) |
-| Transfusion of Animal Blood | stacks | 3 | Vitality +1d6; your monsters are 2 harder to subdue per rival able to subdue them, beyond the first |
-| Public Lectures | stacks | 5 | When you conduct research, suspicion −1 |
-| Parish Benefactor | stacks | 3 | Your charity removes 1 more suspicion per unit |
+| Transfusion of Animal Blood | stacks | 2 | Vitality +1d6; your monsters are 2 harder to subdue per rival able to subdue them, beyond the first |
+| Public Lectures | stacks | 4 | When you conduct research, suspicion −1 |
+| Parish Benefactor | stacks | 4 | Your charity removes 1 more suspicion per unit |
 | Lunar Society Correspondence | stacks | 3 | Humanity +1d8 per rival attempting a resurrection this round |
-| Bloodhounds | one-off | 3 | You may subdue rivals' monsters without a garrison |
-| Arctic Pursuit | one-off, once per game | 3 | When a monster would be unleashed, one more control roll against it |
+| Bloodhounds | one-off | 1 | You may subdue rivals' monsters without a garrison |
+| Arctic Pursuit | one-off, once per game | 1 | When a monster would be unleashed, one more control roll against it |
 
 Tried and dropped: Lightning Rod (once per game, reroll a failed Vitality:
 little effect), Inflammatory Pamphlets (your noticed discoveries add +1:
 far too strong once published, Inquisitor ~0.5 everywhere).
 
-## Results (400 games per count, both policy sets)
+Copy counts follow spec 023: weak stackable modifiers four, rule-bending
+abilities singletons, two or three in between. With these counts the
+catalogue scores RMS 0.078 at 240 games per count (3p .30/–/.15/.44/.11,
+4p .24/.16/.10/.26/.20, 5p .14/.16/.30/.15/.14, 6p .12/.14/.24/.13/.14).
+Making Arctic Pursuit fire every time instead of once stalled about 100
+games in 3,840 and was rejected.
+
+## Results before copy counts were scaled (400 games per count, both policy sets)
 
 | | 3p | 4p | 5p | 6p |
 |---|---|---|---|---|

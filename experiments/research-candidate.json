@@ -10,7 +10,8 @@
      "die": 10,
      "sign": 1
     }
-   ]
+   ],
+   "copies": 4
   },
   "restraint": {
    "stacks": false,
@@ -21,7 +22,8 @@
      "op": "fixed",
      "amount": 8
     }
-   ]
+   ],
+   "copies": 4
   },
   "correspondence": {
    "name": "Lunar Society Correspondence",
@@ -40,7 +42,7 @@
   },
   "lectures": {
    "name": "Public Lectures",
-   "copies": 5,
+   "copies": 4,
    "text": "When you conduct research, suspicion -1.",
    "effects": [
     {
@@ -51,7 +53,7 @@
   },
   "hounds": {
    "name": "Bloodhounds",
-   "copies": 3,
+   "copies": 1,
    "stacks": false,
    "text": "You may subdue rivals' monsters without a garrison.",
    "effects": [
@@ -62,7 +64,7 @@
   },
   "transfusion": {
    "name": "Transfusion of Animal Blood",
-   "copies": 3,
+   "copies": 2,
    "text": "Add 1d6 to Vitality. Your monsters are 2 harder to subdue for each rival able to subdue them, beyond the first.",
    "effects": [
     {
@@ -85,7 +87,7 @@
   },
   "arctic": {
    "name": "Arctic Pursuit",
-   "copies": 3,
+   "copies": 1,
    "stacks": false,
    "text": "Once per game, when a monster would be unleashed, make one more control roll against it.",
    "effects": [
@@ -108,7 +110,7 @@
   },
   "benefactor": {
    "name": "Parish Benefactor",
-   "copies": 3,
+   "copies": 4,
    "text": "Your charity removes 1 more suspicion per unit.",
    "effects": [
     {
