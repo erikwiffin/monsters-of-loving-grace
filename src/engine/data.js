@@ -73,7 +73,7 @@ export const DEFAULT_CONFIG = {
   //   adds its `amount`; a result above
   //   every band adds nothing.
   actions: {
-    medicine: { phase: 'day', name: 'Practise medicine', location: 'Hospital', capacity: null, igor: true, gain: 3 },
+    medicine: { phase: 'day', name: 'Practice medicine', location: 'Hospital', capacity: null, igor: true, gain: 3 },
     research: { phase: 'day', name: 'Conduct research', location: 'University', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2 },
     specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2, count: 1 },
     charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: { 3: 2, 5: 3 }, igor: true, cost: 3, reduction: 2, maxUnits: 1 },

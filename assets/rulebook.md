@@ -88,7 +88,7 @@ At the start of night, everyone who passed is back in, and the turn returns to t
 
 ### Capacity
 
-Each action space shows a worker slot per capacity. Most spaces hold **2 workers with 3–4 players** and **3 with 5–6 players**; the dashed slot is used only with 5–6 players. *Garrison the watch* holds 3 at every player count. *Practise medicine*, *Assemble body* and *Prepare resurrection* have no limit. *Rest* holds one worker. Workers stay on their spaces until dawn, and which workers are where is public.
+Each action space shows a worker slot per capacity. Most spaces hold **2 workers with 3–4 players** and **3 with 5–6 players**; the dashed slot is used only with 5–6 players. *Garrison the watch* holds 3 at every player count. *Practice medicine*, *Assemble body* and *Prepare resurrection* have no limit. *Rest* holds one worker. Workers stay on their spaces until dawn, and which workers are where is public.
 
 An action needs its full cost and every prerequisite. Money never goes below 0.
 
@@ -96,7 +96,7 @@ An action needs its full cost and every prerequisite. Money never goes below 0.
 
 | Space | Location | Effect |
 |---|---|---|
-| **Practise medicine** | Hospital | Gain 3 money, plus 1 for each effective copy of Medical Expertise. |
+| **Practice medicine** | Hospital | Gain 3 money, plus 1 for each effective copy of Medical Expertise. |
 | **Conduct research** | University | Pay 2. Take a market card of a type you have not discovered and **publish** it (see *Research*). Refill the market from the deck at once. Then suspicion −1 for each effective copy of Public Lectures. |
 | **Buy specimens** | Anatomical supplier | Pay 2. Choose a type of body part: arm, leg, chest or head. Roll for its variant on the table on your player sheet and take that part from the supply. |
 | **Donate to charity** | Town hall | Pay 3. Suspicion −2, and 1 more for each effective copy of Parish Benefactor, to a minimum of 0. Only allowed while suspicion is above 0. |
@@ -158,12 +158,12 @@ Each part may change the resurrection rolls:
 
 Each random part is drawn separately, from an unlimited supply. Roll for its type, then for its variant, using the table on your player sheet. When you buy specimens you choose the type yourself and roll only for the variant:
 
-| Type (d6) | | Variant | |
-|---|---|---|---|
-| 1–2 | Arm | d6: 1–2 ordinary, 3–4 labourer, 5–6 damaged | |
-| 3–4 | Leg | d6: 1–2 ordinary, 3–4 athlete, 5–6 frail | |
-| 5 | Chest | d6: 1–2 ordinary, 3–4 robust, 5–6 scarred | |
-| 6 | Head | d4: 1 ordinary, 2 criminal, 3 scholar, 4 poet | |
+| Type (d6) | | Variant |
+|---|---|---|
+| 1–2 | Arm | d6: 1–2 ordinary, 3–4 labourer, 5–6 damaged |
+| 3–4 | Leg | d6: 1–2 ordinary, 3–4 athlete, 5–6 frail |
+| 5 | Chest | d6: 1–2 ordinary, 3–4 robust, 5–6 scarred |
+| 6 | Head | d4: 1 ordinary, 2 criminal, 3 scholar, 4 poet |
 
 The player sheet's table is generated from the game's data, so if the two ever disagree, the player sheet is right.
 
@@ -173,7 +173,7 @@ Research cards are permanent: they are never spent. There are nine types:
 
 | Research | Effect of each effective copy |
 |---|---|
-| **Medical Expertise** | +1 money from Practise medicine |
+| **Medical Expertise** | +1 money from Practice medicine |
 | **Galvanic Mastery** | Add 1d6 to resurrection Vitality |
 | **Neural Conditioning** | +1 control attempt |
 | **Mesmerism** | Add 1d6 to control rolls |

@@ -18,7 +18,7 @@ Scientists and Igors may take every action, with two exceptions: **Garrison the 
 
 | ID | Name | Location | Capacity | Effect |
 |---|---|---|---:|---|
-| medicine | Practise medicine | Hospital | unlimited | Gain 3 money. Medical Expertise adds +1 per effective copy. |
+| medicine | Practice medicine | Hospital | unlimited | Gain 3 money. Medical Expertise adds +1 per effective copy. |
 | research | Conduct research | University | 2/3 | Pay 2. Take a market card of a type you haven't discovered, and publish it (spec 023). |
 | specimens | Buy specimens | Anatomical supplier | 2/3 | Pay 2. Choose a part type; its variant is random. |
 | charity | Donate to charity | Town hall | 2/3 | Buy 1 unit: pay 3, suspicion −2 (more with Parish Benefactor), minimum 0. Only legal while suspicion is above 0. |
