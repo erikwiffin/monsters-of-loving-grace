@@ -2,7 +2,8 @@
 export {
   createGame, dispatch, validateCommand, getLegalCommands, enumerateLegalCommands,
   getPlayerView, getPublicView, filterEvents, serialize, deserialize, replay, getReplayRecord,
-  resolveConfig, estimateResurrection, estimateControl, researchCount, effectiveCopies, controlThreshold, canSubdueOthers, assembleCapacity, controlAttempts, garrisoned, objectiveDeckFor, bodyComplete, initiativeOrder, getPlayer, capacityFor,
+  resolveConfig, estimateResurrection, estimateControl, scienceCount, vitalityBonus, bestVitality, partVitality, fullSetCounts,
+  controlThreshold, canSubdue, garrisoned, objectiveDeckFor, bodyComplete, initiativeOrder, getPlayer, capacityFor,
   COMMAND_TYPES, ENGINE_VERSION, SCHEMA_VERSION,
 } from './engine.js';
 export { DEFAULT_CONFIG, OBJECTIVE_INFO, SLOT_ORDER, ATTRIBUTES, ALLOWED_DICE } from './data.js';

@@ -7,8 +7,9 @@ import { seatSpec, makePolicy } from '../src/sim/registry.js';
 import { verdicts, parsePolicySet } from '../src/sim/compare.js';
 import { runGame, aggregate } from '../src/sim/runner.js';
 import { heuristicPolicy, DEFAULT_WEIGHTS, OBJECTIVE_WEIGHTS } from '../src/sim/policies.js';
-import { renameResearch, mergeOverrides } from '../src/sim/metamorphic.js';
-import { researchWorth, expectedDiscovery } from '../src/sim/effect-values.js';
+import { renameScience, mergeOverrides } from '../src/sim/metamorphic.js';
+import { scienceWorth } from '../src/sim/effect-values.js';
+import { planBody, scienceStats, expectedMax } from '../src/sim/body-plan.js';
 import { resolveConfig } from '../src/engine/index.js';
 import { summarizeView, describeMove } from '../src/sim/llm-policy.js';
 import { getPlayerView, enumerateLegalCommands } from '../src/engine/index.js';
@@ -54,7 +55,7 @@ test('uptake is reported per game and aggregated', () => {
   const u = results[0].uptake;
   assert.ok(u.idle && Object.keys(u.idle).length === 4);
   const agg = aggregate(results, resolveConfig({ playerCount: 4 }));
-  assert.ok(agg.uptake.research.galvanism);
+  assert.ok(agg.uptake.science.galvanism);
   assert.ok(Array.isArray(agg.uptake.rarelyUsed));
   for (const x of Object.values(agg.uptake.idle)) assert.ok(x.idleIgorShare >= 0 && x.idleIgorShare <= 1);
 });
@@ -76,10 +77,11 @@ test('heuristic: per-objective weights apply by default; explanations list every
   assert.ok(seen.options.some((o) => JSON.stringify(o.command) === JSON.stringify(cmd)));
 });
 
-test('renaming research keeps every effect and retires the old names', () => {
-  const cfg = resolveConfig(renameResearch('x_'));
-  assert.equal(cfg.research.galvanism.copies, 0);
-  assert.deepEqual(cfg.research.x_galvanism.effects, cfg.research.galvanism.effects);
+test('renaming science keeps every effect and retires the old names', () => {
+  const cfg = resolveConfig(renameScience('x_'));
+  assert.equal(cfg.science.galvanism.copies, 0);
+  assert.equal(cfg.science.x_galvanism.copies, 4);
+  assert.deepEqual(cfg.science.x_galvanism.effects, cfg.science.galvanism.effects);
 });
 
 test('the LLM playtester describes the view and every legal move', () => {
@@ -90,26 +92,37 @@ test('the LLM playtester describes the view and every legal move', () => {
   for (const c of enumerateLegalCommands(state, pid)) assert.ok(describeMove(view, c).length > 3);
 });
 
-test('effect values: Discreet Methods is valued from the configured discovery rolls', () => {
-  const at = (overrides) => researchWorth(resolveConfig({ playerCount: 4, ...overrides }), 'discretion', 'prometheus').want;
-  const base = at({});
-  assert.ok(base > 0);
-  // A bigger roll bonus avoids more suspicion, so it is worth more.
-  assert.ok(at({ research: { discretion: { effects: [{ kind: 'discoveryRollBonus', amount: 2 }] } } }) > base);
-  // With no discovery rolls that can be noticed, it is worth nothing.
-  const quiet = { die: 6, bands: [{ max: 6, amount: 0 }] };
-  assert.equal(at({ actions: { graves: { suspicion: quiet }, sell: { suspicion: quiet }, experiment: { suspicion: quiet } } }), 0);
-  // The Inquisitor wants suspicion: to it the card is worth less than nothing.
-  assert.ok(researchWorth(resolveConfig({ playerCount: 4 }), 'discretion', 'inquisitor').want < 0);
-  // The shared estimate: graves (1-4 of 6) with +1 is noticed on 1-3.
+test('effect values: science is valued from its effects, per objective', () => {
   const cfg = resolveConfig({ playerCount: 4 });
-  assert.equal(expectedDiscovery(cfg.actions.graves, { rollBonus: 1 }), 0.5);
-  assert.equal(expectedDiscovery(cfg.actions.graves, { rollBonus: 4 }), 0);
+  const w = (t, o) => scienceWorth(cfg, t, o).want;
+  // More Vitality is worth more; the Unleasher prices Humanity below zero.
+  assert.ok(w('voltaic', 'prometheus') > w('galvanism', 'prometheus') && w('galvanism', 'prometheus') > w('anatomy', 'prometheus'));
+  assert.ok(w('philosophy', 'prometheus') > 0 && w('philosophy', 'unleasher') < 0);
+  // The Inquisitor wants suspicion: calm is worth less than nothing to it.
+  assert.ok(w('lectures', 'inquisitor') < 0 && w('lectures', 'prometheus') > 0);
+  // A card with no effect is worth nothing.
+  assert.equal(scienceWorth(resolveConfig({ science: { blank: { name: 'Blank', kind: 'other', copies: 1, text: '', effects: [] } } }), 'blank', 'prometheus').want, 0);
+});
+
+test('body planning: the best body meets the Vitality threshold first, then suits the objective', () => {
+  const cfg = resolveConfig({ playerCount: 4 });
+  const hand = ['labourer_arm', 'damaged_arm', 'ordinary_arm', 'athlete_leg', 'frail_leg', 'soldier_leg', 'robust_chest', 'criminal_brain', 'saint_brain']
+    .map((variantId, i) => ({ id: `p${i}`, variantId, type: cfg.partVariants[variantId].type }));
+  const humane = planBody(cfg, hand, scienceStats(cfg, []), { sign: 1 });
+  assert.equal(humane.ok, true);
+  assert.ok(humane.vitality >= 10);
+  assert.ok(humane.ids.includes('p8'), 'the saint\'s brain for a stable Creature');
+  const monster = planBody(cfg, hand, scienceStats(cfg, []), { sign: -1 });
+  assert.ok(monster.ids.includes('p7'), 'the criminal\'s brain for a monster');
+  // Without a full set, it counts what is missing.
+  assert.equal(planBody(cfg, hand.slice(0, 3), scienceStats(cfg, []), {}).missing, 4, 'three arms: two legs, a chest and a head missing');
+  // Expected best of draws: two fair coins of 0 and 1, best of 2 is 0.75.
+  assert.equal(expectedMax([{ value: 0, weight: 0.5 }, { value: 1, weight: 0.5 }], 2), 0.75);
 });
 
 test('overrides merge deeply, arrays replaced; renaming follows the rules under test', () => {
-  const m = mergeOverrides({ actions: { graves: { parts: 3, suspicion: { die: 6, bands: [{ max: 4, amount: 1 }] } } } }, { actions: { graves: { suspicion: { bands: [] } }, sell: { gain: 9 } } });
-  assert.deepEqual(m, { actions: { graves: { parts: 3, suspicion: { die: 6, bands: [] } }, sell: { gain: 9 } } });
-  const changed = resolveConfig({ playerCount: 4, research: { discretion: { effects: [{ kind: 'suspicionReduction', amount: 1 }] } } });
-  assert.deepEqual(renameResearch('x_', changed).research.x_discretion.effects, [{ kind: 'suspicionReduction', amount: 1 }]);
+  const m = mergeOverrides({ actions: { graves: { parts: 3, tiers: { a: [1, 2] } } } }, { actions: { graves: { tiers: { a: [] } }, sell: { gain: 9 } } });
+  assert.deepEqual(m, { actions: { graves: { parts: 3, tiers: { a: [] } }, sell: { gain: 9 } } });
+  const changed = resolveConfig({ playerCount: 4, science: { galvanism: { effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'fixed', amount: 5 }] } } });
+  assert.deepEqual(renameScience('x_', changed).science.x_galvanism.effects, [{ kind: 'resurrection', attribute: 'vitality', op: 'fixed', amount: 5 }]);
 });

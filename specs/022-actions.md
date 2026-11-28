@@ -2,13 +2,18 @@
 
 Each action space has a phase, a capacity, a worker permission and an effect. An action needs its full cost and every prerequisite; balances never go negative. All numbers are default configuration values (spec 010), a baseline for tuning by sweeps (spec 016).
 
-## Design principle: night mirrors day
+## Design principle: day is steady, night is risky
 
-Day is legitimate; night is free but risky (spec 021). Most night actions mirror a day action: they reach a similar outcome with a similar expected value, but higher variance, paid for in random results and discovery rolls rather than money. Graves mirrors specimens (random parts, free, versus a chosen type bought), sell mirrors medicine (money), and experiment mirrors research (a card). Where a night action costs an input the day action doesn't, such as parts, its output is larger to compensate. Sweeps (spec 016) should keep an Igor's night work worth about as much as its day work.
+- **Day actions** generally cost money and never raise suspicion. They have a medium expected value with low variance: the player chooses what they get, from cards they can see or a few they draw.
+- **Night actions** are generally free but raise suspicion by exactly 1. They have a slightly higher expected value and a much higher variance: the player takes what the decks give them, sight unseen.
+
+Night mirrors day: rob graves mirrors buy specimens (random parts versus a chosen one), sell mirrors medicine (money), and experiment mirrors research (science cards). A night action that costs parts gives more to compensate. Sweeps (spec 016) should keep an Igor's night work worth about as much as its day work.
+
+**No dice before resolution.** Nothing in the day or night uses dice. The only randomness before resolution is the order of the shuffled decks. The game builds to one Humanity roll per attempt, and the control rolls that answer a monster (spec 025).
 
 ## Capacity
 
-A capacity is unlimited (`null`, the fallback spaces), a number, or tiers keyed by the smallest player count of each tier: `{ 3: 2, 5: 3 }`, written "2/3" below, means two slots with three or four players and three with five or six. More tiers may be added.
+A capacity is unlimited (`null`), a number, or tiers keyed by the smallest player count of each tier: `{ 3: 2, 5: 3 }`, written "2/3" below, means two slots with three or four players and three with five or six.
 
 ## Worker permissions
 
@@ -18,46 +23,46 @@ Scientists and Igors may take every action, with two exceptions: **Garrison the 
 
 | ID | Name | Location | Capacity | Effect |
 |---|---|---|---:|---|
-| medicine | Practice medicine | Hospital | unlimited | Gain 3 money. Medical Expertise adds +1 per effective copy. |
-| research | Conduct research | University | 2/3 | Pay 2. Take a market card of a type you haven't discovered, and publish it (spec 023). |
-| specimens | Buy specimens | Anatomical supplier | 2/3 | Pay 2. Choose a part type; its variant is random. |
+| medicine | Practice medicine | Hospital | unlimited | Gain 3 money, +1 per Medical Expertise card held. |
+| research | Conduct research | University | 2/3 | Pay 2. Take any science card from the market (spec 023). |
+| specimens | Buy specimens | Anatomical supplier | 2/3 | Pay 2. Draw 3 body parts and keep one (spec 024). |
 | charity | Donate to charity | Town hall | 2/3 | Buy 1 unit: pay 3, suspicion −2 (more with Parish Benefactor), minimum 0. Only legal while suspicion is above 0. |
 | hire | Hire an Igor | Tavern | 2/3 | Pay 4. Gain one Igor, who can act at once. At most three Igors per player, counting the starting one. |
-| garrison | Garrison the watch | Watch house | 3 | Igors only. No cost or immediate effect. Lets the player subdue other players' monsters this round (spec 025). |
+| garrison | Garrison the watch | Watch house | 3 | Igors only. No cost or immediate effect. Lets the player try to subdue monsters this round (spec 025). |
 
 ## Night actions
 
 | ID | Name | Location | Capacity | Effect |
 |---|---|---|---:|---|
-| assemble | Assemble body | Private laboratory | unlimited | Move any number of chosen loose parts, up to a whole body, into matching empty body slots. |
-| prepare | Prepare resurrection | Private laboratory | unlimited | Scientists only. The player will attempt a resurrection in this round's resolution (spec 025). |
-| sell | Sell parts | Back alley | 2/3 | Discard exactly 2 chosen loose parts. Gain 7 money. Discovery roll: d6, 1–2 → +1 suspicion. |
-| experiment | Conduct experiments | Private laboratory | 2/3 | Discard 1 to 3 chosen parts, loose or installed, and draw that many research cards; keep one (spec 023). Discovery roll: d6, 1–3 → +1 suspicion. |
-| graves | Rob graves | Graveyard | 2/3 | Gain 2 random loose parts. Discovery roll: d6, 1–4 → +1 suspicion. |
+| prepare | Prepare resurrection | Private laboratory | unlimited | Scientists only. Lay out a full set of body parts with Vitality at least the threshold; attempt a resurrection in this round's resolution (spec 025). |
+| sell | Sell parts | Back alley | 2/3 | Discard exactly 2 chosen body parts. Gain 7 money. Suspicion +1. |
+| experiment | Conduct experiments | Private laboratory | 2/3 | Discard exactly 2 chosen body parts. Draw 2 science cards from the deck and keep both. Suspicion +1. |
+| graves | Rob graves | Graveyard | 2/3 | Draw 2 body parts. Suspicion +1. |
+| vespers | Attend vespers | Chapel | unlimited | Suspicion −1, minimum 0. Only legal while suspicion is above 0. |
 | rest | Rest | Home | 1 | The player goes first next round (spec 021). |
 
-## Discovery rolls
+## Suspicion from actions
 
-Every action that can raise suspicion uses a configurable discovery roll: a die size and an ordered list of bands, each with a highest roll and a suspicion amount. The first band whose highest roll is at least the result applies; a higher result adds nothing. A flat increase is one band covering every face.
-
-Each effective copy of Discreet Methods adds 1 to the result before the band is found, so a discovery is less likely; copies stack without limit, and a result above every band adds nothing. **Ruling:** this replaces the earlier rule, under which each copy took 1 off the suspicion a discovery adds: published copies stack, so that rule made night actions free of suspicion for the whole table once the card was out, and closed off the Inquisitor's route to the mob. The roll, the bonus, the result and every adjustment are logged, and any increase checks the mob threshold immediately (spec 020).
+A night action that raises suspicion has a configured `suspicion` amount, a non-negative integer, default 1. It is added after the action's other effects, it is logged and attributed to the player, and it checks the mob threshold at once (spec 020).
 
 ## Details
 
-**Graves.** The random parts are drawn first (spec 024), then the discovery die is rolled.
+**Specimens.** The player draws up to 3 cards from the body-part deck (spec 024), all public, and must keep one with `PICK_PART` (spec 011) before play moves on. The others are discarded. The action needs at least one card in the deck or the discard pile.
 
-**Sell.** Only loose parts can be sold. Sell pays more than medicine because it costs parts. The parts are discarded and the money paid, then the discovery die is rolled.
+**Graves.** The player draws up to 2 cards from the body-part deck into their hand, then suspicion rises. The action needs at least one card in the deck or the discard pile.
 
-**Experiment.** The player discards 1 or more parts, loose or installed, at most the configured maximum or the cards left in the deck; discarded installed parts empty their slots. They draw a card from the top of the research deck per part, then the discovery die is rolled. If any drawn card is of a type they have not personally discovered, they keep one with `PICK_RESEARCH` (spec 011) before play moves on; it is never published (spec 023). The other cards go to the bottom of the deck in the order drawn. All these cards are public. If the roll brings the mob, the game ends before the pick. The action needs a part and a non-empty deck.
+**Sell.** Only parts in hand can be sold. Sell pays more than medicine because it costs parts. The parts are discarded and the money is paid, then suspicion rises.
 
-**Assemble.** Each chosen part fills a distinct empty slot of its type, in slot order; at least one is placed. **Ruling:** there is no limit on parts per action, so a whole body can be built at once.
+**Experiment.** The player discards exactly 2 parts from their hand, then draws 2 cards from the top of the science deck, or as many as remain, and keeps them all (spec 023). These cards are public. Then suspicion rises. The action needs 2 parts in hand and a non-empty science deck.
 
 **Charity.** An action buys 1 to a configured maximum of units, default 1, each at the configured price and reduction; never more than the player can afford or than it takes to reach 0. With a maximum above 1, the player chooses `units` (spec 011).
 
-**Hire.** **Ruling:** a hired Igor can act immediately, the same day or that night. An Igor may hire another Igor.
+**Vespers.** A low-value fallback: free, unlimited, and open to any worker. Parish Benefactor does not affect it.
 
-**Prepare.** The body need not be complete when the Scientist is placed, only when the attempt resolves (spec 025). Preparing is public and binding.
+**Hire.** **Ruling:** a hired Igor can act at once, by day or that night, and may itself hire.
 
-**Garrison.** The Igor stays counted until dawn, covering that round's resolution. It is needed to subdue another player's monster, not one's own (spec 025).
+**Prepare.** The player chooses six parts from their hand: two arms, two legs, a chest and a head. Their Vitality total, plus the player's Vitality science, must be at least the threshold when the Scientist is placed (spec 025). The parts leave the hand at once for the player's body slots, where they can't be changed. Preparing is public and binding.
 
-There is no direct trading between players.
+**Garrison.** The Igor stays counted until dawn, covering that round's resolution (spec 025).
+
+There is no trading between players.

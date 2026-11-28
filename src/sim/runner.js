@@ -107,7 +107,7 @@ function budgetExceeded(state, commands, maxCommands, maxRounds) {
   return null;
 }
 
-// A bot holding more money or loose parts than this is no longer playing
+// A bot holding more money or parts in hand than this is no longer playing
 // realistically, so the game stops teaching anything (spec 014).
 export const DEFAULT_HOARD_LIMIT = { money: 25, parts: 25 };
 
@@ -121,7 +121,7 @@ function hoarder(state, limit, policyFor) {
   for (const [i, p] of state.players.entries()) {
     if (policyFor(p.id, i).realistic === false) continue;
     if (limit.money != null && p.money > limit.money) return { playerId: p.id, resource: 'money', value: p.money, limit: limit.money };
-    if (limit.parts != null && p.loose.length > limit.parts) return { playerId: p.id, resource: 'parts', value: p.loose.length, limit: limit.parts };
+    if (limit.parts != null && p.hand.length > limit.parts) return { playerId: p.id, resource: 'parts', value: p.hand.length, limit: limit.parts };
   }
   return null;
 }
@@ -192,7 +192,7 @@ export function runBatch({ games = 100, seedPrefix = 'batch', ...opts } = {}) {
 export function aggregate(results, config = null) {
   const agg = {
     games: results.length, truncated: 0, truncatedByReason: {}, hoardingBy: {}, byReason: {}, winsByObjective: {}, collectiveDefeats: 0,
-    avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, failed: 0, stable: 0, subdued: 0, unleashed: 0 },
+    avgRounds: 0, avgFinalSuspicion: 0, resurrections: { attempts: 0, stable: 0, subdued: 0, unleashed: 0 },
   };
   const dealt = {};
   for (const r of results) {

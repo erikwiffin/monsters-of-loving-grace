@@ -1,6 +1,6 @@
 # 021 — Round structure and workers
 
-A round is made up of four phases: day, night, resurrection resolution and dawn. Day is for legitimate activity that earns money; night is generally free but risky.
+A round is made up of four phases: day, night, resurrection resolution and dawn. Day is for legitimate activity that costs or earns money; night is generally free but raises suspicion (spec 022).
 
 ## Initiative
 
@@ -14,7 +14,7 @@ Day and night follow the same procedure. Starting with the first player and goin
 - A player with no legal placement at the moment is skipped automatically; they don't have to pass. If another player's action later makes one of their placements legal, they get another turn.
 - The phase ends automatically when nobody who hasn't passed has a legal placement.
 - Passing is always allowed when it is your turn.
-- There are no free actions. Publishing happens only through the research action (spec 023).
+- There are no free actions: everything a player does by day or night is a placement.
 
 At the start of night, everyone's pass status resets and the turn returns to the first player.
 
@@ -27,9 +27,9 @@ Each worker has a stable ID. There are two kinds.
 
 ## Resurrection resolution
 
-**Ruling: there is no secret commitment.** A player attempts a resurrection by placing their Scientist on Prepare resurrection during the night (spec 022). Preparing is public and binding. When night ends, the attempts of every player who prepared are announced together, then resolve in initiative order, with dice rolled automatically and research applied automatically (spec 025). A player whose body is not complete when their attempt comes up does nothing: the attempt is called off and logged, and no parts are consumed. If nobody prepared, the phase passes immediately.
+**Ruling: there is no secret commitment.** A player attempts a resurrection by placing their Scientist on Prepare resurrection during the night, laying out a full set of body parts whose Vitality meets the threshold (spec 025). Preparing is public and binding, and the chosen parts are committed at once. When night ends, the attempts of every player who prepared are announced together, then resolve in initiative order: each is a single Humanity roll, made automatically (spec 025). If nobody prepared, the phase passes immediately.
 
-Each stable Creature is recorded as a stable transition for the round. When an attempt creates a monster, resolution pauses while players decide in its control chain, starting with its creator and going clockwise (spec 025), and continues with the next attempt once the monster is subdued. If the mob forms or a monster is unleashed during resolution, resolution stops at once: attempts not yet resolved consume no parts and have no effect.
+Each stable Creature is recorded as a stable transition for the round. When an attempt creates a monster, resolution pauses while garrisoned players decide in its control chain, starting with its creator and going clockwise (spec 025), and continues with the next attempt once the monster is subdued. If the mob forms or a monster is unleashed during resolution, resolution stops at once: attempts not yet resolved have no effect.
 
 ## Dawn
 

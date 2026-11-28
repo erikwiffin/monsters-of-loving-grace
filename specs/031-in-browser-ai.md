@@ -16,7 +16,7 @@ In New Game, each player row has a *Played by* selector with three options: Huma
 
 ## Privacy screens
 
-Privacy screens exist only for humans. Objective dealing skips AI seats; with exactly one human, it is a single screen, and with none, it is skipped. AI experiment picks, preparations and subdue decisions are public, and appear in the Chronicle and the resurrection report.
+Privacy screens exist only for humans. Objective dealing skips AI seats; with exactly one human, it is a single screen, and with none, it is skipped. AI specimen picks, preparations and subdue decisions are public, and appear in the Chronicle and the resurrection report.
 
 ## Pausing and waiting
 

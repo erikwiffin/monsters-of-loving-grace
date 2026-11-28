@@ -4,8 +4,9 @@ Each player is a scientist competing to create life or to fulfil a secret ambiti
 
 ## Setup
 
-- Each player starts with 3 money, one Scientist, one Igor, 3 control attempts (spec 025), no loose or installed body parts, no research and no Creature.
+- Each player starts with 3 money, one Scientist, one Igor, no body parts, no science cards and no Creature.
 - Village suspicion starts at 0.
+- The body-part deck (spec 024) and the science deck (spec 023) are shuffled separately.
 - The starting player is chosen at random.
 
 The objective deck has N+1 cards for N players: one Inquisitor, one Unleasher, one Visionary, and Prometheus cards for the rest. For five players that is three Prometheus and one of each other role, six cards in all. **Ruling:** the six-player deck has two Unleashers, so it holds three Prometheus, one Inquisitor, one Visionary and two Unleashers. Both Unleashers win together, and neither knows the other. **Ruling:** the Visionary is only a viable role with four or more players, so the three-player deck has no Visionary: two Prometheus, one Inquisitor and one Unleasher. The deck is shuffled, and each player is dealt one card face down. The remaining card stays unseen until the game ends.
@@ -51,10 +52,11 @@ When the game ends for any reason, every objective, including the unseen card, i
 
 Only these things raise suspicion:
 
-- a discovery roll on robbing graves, selling parts or conducting experiments (spec 022);
-- a failed resurrection, meaning a failed Vitality roll (+1);
+- robbing graves, selling parts or conducting experiments, which each add exactly 1 (spec 022);
 - subduing a monster (+1 per subdue);
 - declining to subdue a monster when able to (+2 per player who declines).
+
+Only these things lower it: donating to charity, attending vespers and conducting research with Public Lectures (specs 022 and 023).
 
 **Ruling:** a stable Creature adds no suspicion. A subdue destroys the monster before its +1 is added, so a mob formed by a subdue is an ordinary mob, won by the Inquisitor (spec 025).
 

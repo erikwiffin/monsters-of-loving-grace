@@ -1,6 +1,6 @@
 # 000 — Specs
 
-This directory holds the specifications that direct development of Monsters of Loving Grace. Each spec describes one behaviour we want: an architectural capability, such as the command bus, or a gameplay mechanic, such as publishing research.
+This directory holds the specifications that direct development of Monsters of Loving Grace. Each spec describes one behaviour we want: an architectural capability, such as the command bus, or a gameplay mechanic, such as resurrection.
 
 ## Purpose
 
@@ -53,8 +53,8 @@ Tests are the automated safety net; the manual review against specs is required 
 | 020 | Setup, objectives, suspicion and game end |
 | 021 | Round structure and workers |
 | 022 | Action spaces |
-| 023 | Research engine and publishing |
-| 024 | Body parts and assembly |
+| 023 | Science |
+| 024 | Body parts |
 | 025 | Resurrection |
 | 030 | Hot-seat browser interface |
 | 031 | In-browser AI seats |

@@ -28,7 +28,7 @@ const FEEDBACK_SCHEMA = {
   type: 'object',
   properties: {
     unclearRules: { type: 'array', items: { type: 'string' }, description: 'Rules that were unclear or easy to misread, quoting the rulebook where you can.' },
-    neverWorthIt: { type: 'array', items: { type: 'string' }, description: 'Actions, research or parts that never seemed worth taking, and why.' },
+    neverWorthIt: { type: 'array', items: { type: 'string' }, description: 'Actions, science or parts that never seemed worth taking, and why.' },
     tooStrong: { type: 'array', items: { type: 'string' }, description: 'Anything that seemed too strong or decided the game.' },
     otherNotes: { type: 'array', items: { type: 'string' } },
   },
@@ -55,23 +55,23 @@ export function summarizeView(view, recent = []) {
   const me = view.players.find((p) => p.id === view.viewerId);
   const lines = [];
   lines.push(`Round ${view.round}, ${view.phase}. You are ${me.id}; your secret objective is ${view.private.objective}.`);
-  lines.push(`Suspicion ${view.suspicion}/${view.suspicionMax}. Initiative: ${(view.initiative || []).join(', ')}. Research deck: ${view.deckCount} cards.`);
-  lines.push(`Market: ${view.market.map((k) => `${k.id} ${cfg.research[k.type] ? cfg.research[k.type].name : k.type}`).join('; ') || 'empty'}.`);
+  lines.push(`Suspicion ${view.suspicion}/${view.suspicionMax}. Initiative: ${(view.initiative || []).join(', ')}. Science deck: ${view.deckCount} cards. Body-part deck: ${view.partsDeckCount} cards; discard pile: ${view.partsDiscard.length}.`);
+  lines.push(`Market: ${view.market.map((k) => `${k.id} ${cfg.science[k.type] ? cfg.science[k.type].name : k.type}`).join('; ') || 'empty'}.`);
   const player = (p, self) => {
-    const body = Object.entries(p.body).map(([sl, x]) => `${sl}=${x ? variantName(cfg, x.variantId) : '-'}`).join(', ');
-    const research = Object.entries(p.effectiveResearch).filter(([, n]) => n > 0).map(([t, n]) => `${cfg.research[t].name}×${n}`).join(', ') || 'none';
+    const body = p.bodyComplete ? ` Prepared body: ${Object.entries(p.body).map(([sl, x]) => `${sl}=${variantName(cfg, x.variantId)}`).join(', ')}.` : '';
+    const science = Object.entries(p.scienceCounts).map(([t, n]) => `${cfg.science[t].name}${n > 1 ? `×${n}` : ''}`).join(', ') || 'none';
     const workers = p.workers.map((w) => `${w.kind}${w.availableNow ? '' : ' (used)'}`).join(', ');
-    const odds = p.resurrectionOdds ? ` Odds if attempted now: stable ${pct(p.resurrectionOdds.pStable)}, monster ${pct(p.resurrectionOdds.pMonster)}, failure ${pct(p.resurrectionOdds.pFailed)}.` : '';
-    return `${self ? 'You' : p.id}: money ${p.money}; workers ${workers}; control attempts ${p.controlAttempts} (control roll ${pct(p.controlChance)})${p.garrisoned ? ', garrisoned' : ''}${p.passed ? ', passed' : ''}.
-  Body: ${body}.
-  Loose parts: ${p.loose.map((x) => `${x.id} ${variantName(cfg, x.variantId)}`).join(', ') || 'none'}.
-  Effective research: ${research}.${odds}`;
+    const odds = p.resurrectionOdds ? ` Vitality ${p.resurrectionOdds.vitality.total}; stable ${pct(p.resurrectionOdds.pStable)}, monster ${pct(p.resurrectionOdds.pMonster)}.` : '';
+    const best = p.bestVitality == null ? 'no full set' : `best Vitality ${p.bestVitality} (needs ${cfg.resurrection.thresholds.vitality})`;
+    return `${self ? 'You' : p.id}: money ${p.money}; workers ${workers}; control roll ${pct(p.controlChance)}${p.garrisoned ? ', garrisoned' : ''}${p.passed ? ', passed' : ''}.
+  Hand: ${p.hand.map((x) => `${x.id} ${variantName(cfg, x.variantId)}`).join(', ') || 'none'} (${best}).
+  Science: ${science}.${body}${odds}`;
   };
   lines.push(player(me, true));
   for (const p of view.players) if (p.id !== me.id) lines.push(player(p, false));
   if ((view.prepared || []).length) lines.push(`Prepared to resurrect tonight: ${view.prepared.join(', ')}.`);
   if (view.control) lines.push(`A monster made by ${view.control.creatorId} is loose; you decide now whether to try to subdue it. Players after you who could still subdue it: ${view.control.upcoming.join(', ') || 'none'}.`);
-  if (view.pendingPick) lines.push(`Your experiment drew: ${view.pendingPick.cards.map((k) => `${k.id} ${cfg.research[k.type].name}`).join('; ')}. Keep one.`);
+  if (view.pendingPick) lines.push(`Your specimens: ${view.pendingPick.parts.map((x) => `${x.id} ${variantName(cfg, x.variantId)}`).join('; ')}. Keep one.`);
   if (recent.length) lines.push(`Your recent moves: ${recent.map((r) => `${r.move} (${r.reason})`).join(' | ')}`);
   return lines.join('\n');
 }
@@ -81,20 +81,19 @@ export function describeMove(view, cmd) {
   const cfg = view.config;
   if (cmd.type === 'PASS_TURN') return 'Pass for the rest of this phase.';
   if (cmd.type === 'SUBDUE_MONSTER') return cmd.subdue ? 'Try to subdue the monster.' : 'Decline to subdue the monster.';
-  if (cmd.type === 'PICK_RESEARCH') {
-    const k = view.pendingPick.cards.find((x) => x.id === cmd.cardId);
-    return `Keep ${cfg.research[k.type].name}.`;
+  if (cmd.type === 'PICK_PART') {
+    const x = view.pendingPick.parts.find((y) => y.id === cmd.partId);
+    return `Keep ${variantName(cfg, x.variantId)}.`;
   }
   const def = cfg.actions[cmd.actionId];
   const me = view.players.find((p) => p.id === view.viewerId);
   const partName = (id) => {
-    const x = me.loose.find((y) => y.id === id) || Object.values(me.body).find((y) => y && y.id === id);
-    return x ? `${variantName(cfg, x.variantId)}${me.loose.some((y) => y.id === id) ? '' : ' (installed)'}` : id;
+    const x = me.hand.find((y) => y.id === id);
+    return x ? variantName(cfg, x.variantId) : id;
   };
   const c = cmd.choices || {};
   let detail = '';
-  if (c.researchCardId) detail = `: ${cfg.research[view.market.find((k) => k.id === c.researchCardId).type].name}`;
-  if (c.partTypes) detail = `: ${c.partTypes.join(', ')}`;
+  if (c.researchCardId) detail = `: ${cfg.science[view.market.find((k) => k.id === c.researchCardId).type].name}`;
   if (c.partIds) detail = `: ${c.partIds.map(partName).join(', ')}`;
   if (c.units) detail = `: ${c.units} unit(s)`;
   return `${cmd.workerId.startsWith('scientist') ? 'Scientist' : 'Igor'} → ${def.name}${detail}.`;

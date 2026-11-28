@@ -4,7 +4,7 @@
 //   node bin/quick-check.mjs change.json [--players 3,5] [--games 200] [--skip-scenarios]
 //
 // 1. Scenario tests under the changed rules: do the bots still behave sensibly?
-// 2. Exact metamorphic checks under the changed rules: renaming research or
+// 2. Exact metamorphic checks under the changed rules: renaming science or
 //    players changes no game (the AI reads effects, not IDs).
 // 3. A screening comparison, standard heuristic, the same seeds with and
 //    without the change: catches changes in win rate of about ±7 points.
@@ -60,7 +60,7 @@ console.log(`2. Exact checks under the change: ${exact.join('; ')} (${elapsed()}
 // 3 and 4. Screening comparison and uptake, on the same games.
 console.log(`3. Screening comparison, standard heuristic, ${games} games per arm (same seeds):`);
 const touched = {
-  research: Object.keys(change.research || {}),
+  science: Object.keys(change.science || {}),
   actions: Object.keys(change.actions || {}),
   variants: Object.keys(change.partVariants || {}),
 };
@@ -88,14 +88,14 @@ for (const n of players) {
   const ua = aggregate(ra, resolveConfig({ playerCount: n })).uptake;
   const ab = aggregate(rb, resolveConfig({ ...change, playerCount: n }));
   const ub = ab.uptake;
-  for (const t of touched.research) {
-    const x = ua.research[t];
-    const y = ub.research[t];
+  for (const t of touched.science) {
+    const x = ua.science[t];
+    const y = ub.science[t];
     if (!y) continue;
     const bought = (u) => (u ? u.perGame.research : 0);
-    uptakeLines.push(`${n}p research ${t}: in ${pct(x ? x.acquiredInGames : 0)}→${pct(y.acquiredInGames)} of games; researched ${bought(x).toFixed(2)}→${bought(y).toFixed(2)}/game; applied ${(x ? x.perGame.appliedInRolls : 0).toFixed(2)}→${y.perGame.appliedInRolls.toFixed(2)}/game`);
+    uptakeLines.push(`${n}p science ${t}: in ${pct(x ? x.acquiredInGames : 0)}→${pct(y.acquiredInGames)} of games; researched ${bought(x).toFixed(2)}→${bought(y).toFixed(2)}/game; applied ${(x ? x.perGame.appliedInRolls : 0).toFixed(2)}→${y.perGame.appliedInRolls.toFixed(2)}/game`);
     if (x && bought(x) > 0.2 && bought(y) < 0.5 * bought(x)) flags.push(`${n}p bots research ${t} far less after the change (${bought(x).toFixed(2)} → ${bought(y).toFixed(2)} per game): weaker card, or the AI doesn't understand it`);
-    if (!x && y.acquiredInGames < 0.05) flags.push(`${n}p new research ${t} is almost never taken: the AI may not value its effect`);
+    if (!x && y.acquiredInGames < 0.05) flags.push(`${n}p new science ${t} is almost never taken: the AI may not value its effect`);
   }
   for (const id of touched.actions) {
     const x = (aggregate(ra).actions[id] || {}).perRound || 0;

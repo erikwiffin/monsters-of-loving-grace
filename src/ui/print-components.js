@@ -23,56 +23,6 @@ export const LAYOUTS = {
 
 const range = (n) => Array.from({ length: n }, (_, i) => i);
 const configFor = (cfg, playerCount) => ({ ...cfg, playerCount });
-const PART_COPIES_PER_SLOT = 4;
-
-// ---------------------------------------------------------------------------
-// Dice tables: turn integer weights into a physical roll with the same odds.
-// ---------------------------------------------------------------------------
-
-/**
- * entries: [{ id, label, weight }] with positive integer weights.
- * Returns { die, rows: [{ id, label, from, to }], rerollFrom } or null when
- * no single die can represent the weights. Each weight unit gets the same
- * number of faces; faces above the last row (rerollFrom..die) are rerolled.
- */
-export function diceTable(entries) {
-  if (!entries.length || entries.some((e) => !Number.isInteger(e.weight) || e.weight < 1)) return null;
-  const total = entries.reduce((a, e) => a + e.weight, 0);
-  const dice = [...E.ALLOWED_DICE].sort((a, b) => a - b);
-  let die = dice.find((d) => d % total === 0);
-  if (!die) die = dice.find((d) => d >= total);
-  if (!die) return null;
-  const per = Math.floor(die / total);
-  let face = 1;
-  const rows = entries.map((e) => {
-    const from = face;
-    face += e.weight * per;
-    return { id: e.id, label: e.label, from, to: face - 1 };
-  });
-  return { die, rows, rerollFrom: face <= die ? face : null };
-}
-
-/** The two-step body-part draw of spec 024 as dice tables. */
-export function partDrawTables(cfg) {
-  const type = diceTable(Object.entries(cfg.partTypes).map(([id, t]) => ({ id, label: t.name, weight: t.weight })));
-  const variants = {};
-  for (const id of Object.keys(cfg.partTypes)) {
-    variants[id] = diceTable(Object.entries(cfg.partVariants)
-      .filter(([, v]) => v.type === id)
-      .map(([vid, v]) => ({ id: vid, label: v.name, weight: 1 })));
-  }
-  return { type, variants };
-}
-
-const faces = (r) => (r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`);
-
-function diceTableHtml(t, caption) {
-  if (!t) return `<p class="pp-small">${esc(caption)}: shuffle one of each option face down and draw one.</p>`;
-  return `<table class="pp-dice"><caption>${esc(caption)} — roll d${t.die}</caption>
-    ${t.rows.map((r) => `<tr><td>${faces(r)}</td><td>${esc(r.label)}</td></tr>`).join('')}
-    ${t.rerollFrom ? `<tr><td>${t.rerollFrom === t.die ? t.die : `${t.rerollFrom}–${t.die}`}</td><td>roll again</td></tr>` : ''}
-  </table>`;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers read from configuration via the engine
@@ -86,10 +36,11 @@ function capacities(cfg, actionId) {
   });
 }
 
-/** Copies of a research type in the deck: its own count, or the default (spec 023). */
-export function researchCopiesOf(cfg, type) {
-  return cfg.research[type].copies ?? cfg.researchCopies;
-}
+/** Copies of a science type in the deck (spec 023). */
+export const scienceCopiesOf = (cfg, type) => cfg.science[type].copies;
+
+/** Cards in the body-part deck (spec 024). */
+export const partDeckSize = (cfg) => Object.values(cfg.partVariants).reduce((a, v) => a + v.copies, 0);
 
 /** The most copies of each objective that any player count's deck needs. */
 export function objectiveCopies(cfg) {
@@ -135,21 +86,25 @@ const brand = '<span class="pp-brand">Monsters of Loving Grace</span>';
 function villageBoard(cfg) {
   const track = range(cfg.suspicionMax + 1).map((v) => `<span class="pp-box${v === cfg.suspicionMax ? ' pp-mob' : ''}">${v}${v === cfg.suspicionMax ? '<small>MOB</small>' : ''}</span>`).join('');
   const market = range(cfg.marketSize).map((i) => `<div class="pp-cardslot"><b>Market</b><small>slot ${i + 1}</small></div>`).join('');
-  const deckSize = Object.keys(cfg.research).reduce((a, t) => a + researchCopiesOf(cfg, t), 0);
+  const deckSize = Object.keys(cfg.science).reduce((a, t) => a + scienceCopiesOf(cfg, t), 0);
   return `<div class="pp-board">
     <h2>${brand}<span>The village</span></h2>
     <section><h3>Suspicion <small>starts at 0 · the mob forms at ${cfg.suspicionMax}</small></h3><div class="pp-track pp-track-line">${track}</div></section>
     <section class="pp-market">
-      <div class="pp-cardslot pp-deck"><b>Research deck</b><small>${deckSize} cards, face down. Experiments draw from the top and return cards to the bottom.</small></div>
+      <div class="pp-cardslot pp-deck"><b>Science deck</b><small>${deckSize} cards, face down. Experiments draw from the top.</small></div>
       ${market}
     </section>
     <p class="pp-small">When a market card is taken, refill the slot from the top of the deck at once. When the deck runs out, the market shrinks.</p>
+    <section class="pp-market">
+      <div class="pp-cardslot pp-deck"><b>Body-part deck</b><small>${partDeckSize(cfg)} cards, face down.</small></div>
+      <div class="pp-cardslot pp-deck"><b>Discard pile</b><small>Face up. When the deck runs out, shuffle this pile to form a new deck.</small></div>
+    </section>
   </div>`;
 }
 
 function actionTile(cfg, id, def) {
   const phase = def.phase === 'day' ? '☀ Day' : '☾ Night';
-  const note = id === 'charity' ? '<p class="pp-small">Only while suspicion is above 0.</p>' : '';
+  const note = id === 'charity' || id === 'vespers' ? '<p class="pp-small">Only while suspicion is above 0.</p>' : '';
   return `<div class="pp-tile pp-${def.phase}">
     <div class="pp-tile-text">
       <div class="pp-tile-head"><span>${phase} · ${esc(def.location)}</span><span>${[costText(id, def), permissionText(def)].filter(Boolean).join(' · ')}</span></div>
@@ -163,24 +118,19 @@ function actionTile(cfg, id, def) {
 
 function playerSheet(cfg, seat) {
   const slot = (s) => `<div class="pp-bodyslot" style="grid-area:${s}"><b>${esc(cfg.partTypes[s.replace(/\d$/, '')]?.name || s)}</b></div>`;
-  // Every printed copy of an extra-attempt card could end up counting for one player.
-  const attemptsMax = cfg.control.startingAttempts + Object.keys(cfg.research).reduce((a, t) => a + researchCopiesOf(cfg, t)
-    * cfg.research[t].effects.filter((e) => e.kind === 'controlAttempts').reduce((x, e) => x + e.amount, 0), 0);
-  const attempts = range(attemptsMax + 1).map((v) => `<span class="pp-box pp-box-s${v === cfg.control.startingAttempts ? ' pp-start' : ''}">${v}</span>`).join('');
-  const t = partDrawTables(cfg);
   const r = cfg.resurrection;
   const c = cfg.control;
+  const night = Object.values(cfg.actions).filter((a) => a.phase === 'night' && a.suspicion).map((a) => a.name);
   return `<div class="pp-player" style="--seat:${SEAT_COLOURS[seat]}">
     <h2>${brand}<span>${SEAT_NAMES[seat]} scientist</span></h2>
     <div class="pp-player-top">
       <div class="pp-body">${E.SLOT_ORDER.map(slot).join('')}</div>
       <div>
-        <h4>Random body part</h4>
-        ${diceTableHtml(t.type, 'Type')}
-        ${Object.entries(t.variants).map(([id, v]) => diceTableHtml(v, cfg.partTypes[id].name)).join('')}
+        <h4>Preparing a resurrection</h4>
+        <p>Choose two arms, two legs, a chest and a head from your hand and lay them on these slots. Add up their Vitality, plus your Vitality science: you may prepare only if the total is <b>${r.thresholds.vitality} or more</b>.</p>
+        <p class="pp-small">The parts stay here until resolution; they can't be sold, discarded or changed.</p>
       </div>
     </div>
-    <section><h3>Control attempts <small>start at ${c.startingAttempts}; +1 per effective Neural Conditioning</small></h3><div class="pp-track pp-track-line">${attempts}</div></section>
     <div class="pp-aid-cols">
       <div>
         <h4>Round</h4>
@@ -188,16 +138,13 @@ function playerSheet(cfg, seat) {
           <li><b>Night</b>: the same. Scientists refresh; Igors used by day stay used.</li>
           <li><b>Resolution</b>: prepared resurrections, in turn order.</li>
           <li><b>Dawn</b>: any stable Creature ends the game. Otherwise the rester goes first, or initiative passes left.</li></ol>
-        <p class="pp-small">Keep money and loose parts beside this sheet. Lay research cards above it, face up: those you <b>published</b> in one row, those <b>kept from experiments</b> in another.</p>
+        <p class="pp-small">${esc(night.join(', '))}: suspicion +1 each. Keep money, your hand of parts and your science cards face up beside this sheet. Every science card you hold applies.</p>
       </div>
       <div>
         <h4>Resurrection</h4>
-        <p>Discard all six installed parts. Roll d${r.baseDie} + modifiers for Vitality (${r.thresholds.vitality}+) and Humanity (${r.thresholds.humanity}+).</p>
-        <ul><li>Vitality fails: keep ${r.failedVitalityRefund} of the parts at random; suspicion +${r.failedVitalitySuspicion}.</li>
-          <li>Both succeed: a stable Creature.</li>
-          <li>Humanity fails: a monster. Control chain from its creator, clockwise.</li></ul>
-        <h4>Control roll</h4>
-        <p>Spend an attempt: d${c.baseDie} + control research, ${c.threshold}+ subdues (take ${c.subdueSalvage} parts at random, suspicion +${c.subdueSuspicion}). Declining: suspicion +${c.declineSuspicion}. Other players' monsters need your Igor in the garrison.</p>
+        <p>Roll d${r.baseDie} plus every Humanity die from the six parts and your science. <b>${r.thresholds.humanity}+</b>: a stable Creature. Otherwise: a monster. Discard the six parts either way.</p>
+        <h4>Control chain</h4>
+        <p>From the monster's creator, clockwise. Only players with an Igor in the garrison may try. Try: d${c.baseDie} + control science, ${c.threshold}+ destroys it (suspicion +${c.subdueSuspicion}); a miss passes it on. Decline: suspicion +${c.declineSuspicion}. Nobody subdues it: unleashed.</p>
       </div>
     </div>
   </div>`;
@@ -208,9 +155,11 @@ function objectiveCard(id) {
   return `<div class="pp-card pp-objective"><div class="pp-kind">Secret objective</div><h3>${esc(o.name)}</h3><p class="pp-summary">${esc(o.summary)}</p><p>${esc(o.condition)}</p><div class="pp-foot">${brand}</div></div>`;
 }
 
-function researchCard(cfg, id) {
-  const r = cfg.research[id];
-  return `<div class="pp-card pp-research"><div class="pp-kind">Research</div><h3>${esc(r.name)}</h3><p>${esc(r.text)}</p><p class="pp-small">Every effective copy applies: your own discovery, plus one for each publication by another player.</p><div class="pp-foot">${brand}</div></div>`;
+const KIND_NAMES = { vitality: 'Vitality', humanity: 'Humanity', control: 'Control', other: 'Science' };
+
+function scienceCard(cfg, id) {
+  const r = cfg.science[id];
+  return `<div class="pp-card pp-research pp-kind-${esc(r.kind)}"><div class="pp-kind">${esc(KIND_NAMES[r.kind] || 'Science')}</div><h3>${esc(r.name)}</h3><p>${esc(r.text)}</p><p class="pp-small">Applies for as long as you hold it. Every card you hold applies.</p><div class="pp-foot">${brand}</div></div>`;
 }
 
 function partCard(cfg, id) {
@@ -286,14 +235,14 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
       Object.keys(E.OBJECTIVE_INFO).filter((id) => objectives[id]).map((id) => ({
         id: `objective:${id}`, name: E.OBJECTIVE_INFO[id].name, copies: objectives[id], render: () => objectiveCard(id),
       })) },
-    { id: 'research', name: 'Research cards', layout: 'card', components:
-      Object.keys(cfg.research).map((id) => ({
-        id: `research:${id}`, name: cfg.research[id].name, copies: researchCopiesOf(cfg, id), render: () => researchCard(cfg, id),
+    { id: 'science', name: 'Science cards', layout: 'card', components:
+      Object.keys(cfg.science).map((id) => ({
+        id: `science:${id}`, name: cfg.science[id].name, copies: scienceCopiesOf(cfg, id), render: () => scienceCard(cfg, id),
       })) },
     { id: 'parts', name: 'Body parts', layout: 'part', components:
       Object.keys(cfg.partVariants).map((id) => ({
         id: `part:${id}`, name: cfg.partVariants[id].name,
-        copies: cfg.partTypes[cfg.partVariants[id].type].slots.length * PART_COPIES_PER_SLOT,
+        copies: cfg.partVariants[id].copies,
         render: () => partCard(cfg, id),
       })) },
     { id: 'workers', name: 'Workers', layout: 'worker', components: seats.map((seat) => ({
@@ -303,7 +252,6 @@ export function buildSections({ config = {}, rulebookHtml = '' } = {}) {
     { id: 'tokens', name: 'Tokens', layout: 'token', components: [
       { id: 'marker:suspicion', name: 'Suspicion marker', copies: 1, render: () => token('<b>!</b><small>suspicion</small>', 'pp-marker') },
       { id: 'marker:first', name: 'First-player marker', copies: 1, render: () => token('<b>1st</b><small>player</small>', 'pp-marker') },
-      { id: 'marker:control', name: 'Control-attempt markers', copies: MAX_PLAYERS, render: (i) => token('<b>⚡</b><small>control</small>', 'pp-marker pp-seat', `--seat:${SEAT_COLOURS[i]}`) },
     ] },
   ];
 }

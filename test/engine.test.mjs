@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import {
   createGame, dispatch, getLegalCommands, enumerateLegalCommands, getPlayerView, getPublicView,
-  serialize, deserialize, replay, getReplayRecord, researchCount, estimateResurrection, estimateControl, controlAttempts,
-  effectiveCopies, controlThreshold, canSubdueOthers,
+  serialize, deserialize, replay, getReplayRecord, scienceCount, estimateResurrection, estimateControl,
+  bestVitality, vitalityBonus, canSubdue,
 } from '../src/engine/index.js';
 import { heuristicPolicy } from '../src/sim/policies.js';
 import { runGame, runBatch, aggregate } from '../src/sim/runner.js';
@@ -23,14 +23,27 @@ const passAllUntil = (s, pred) => {
   }
   return s;
 };
-function fullBody(s, pid, variants = {}) {
-  const p = s.players.find((x) => x.id === pid);
-  const pick = { arm1: 'ordinary_arm', arm2: 'ordinary_arm', leg1: 'ordinary_leg', leg2: 'ordinary_leg', chest: 'ordinary_chest', head: 'ordinary_head', ...variants };
-  for (const [slot, variantId] of Object.entries(pick)) {
+const player = (s, pid) => s.players.find((p) => p.id === pid);
+// Adds parts of the given variants to a player's hand; returns their IDs.
+function give(s, pid, variants) {
+  const p = player(s, pid);
+  return variants.map((variantId) => {
     s.counters.part += 1;
-    p.body[slot] = { id: `part-${s.counters.part}`, variantId, type: s.config.partVariants[variantId].type };
-  }
+    const part = { id: `part-${s.counters.part}`, variantId, type: s.config.partVariants[variantId].type };
+    p.hand.push(part);
+    return part.id;
+  });
 }
+const ORDINARY = ['ordinary_arm', 'ordinary_arm', 'ordinary_leg', 'ordinary_leg', 'ordinary_chest', 'ordinary_head'];
+const STRONG = ['labourer_arm', 'labourer_arm', 'athlete_leg', 'athlete_leg', 'robust_chest', 'ordinary_head']; // Vitality 16
+// Gives a full set to a player's hand, replacing the named slots' variants.
+function giveBody(s, pid, swap = {}) {
+  const v = [...ORDINARY];
+  const idx = { arm1: 0, arm2: 1, leg1: 2, leg2: 3, chest: 4, head: 5 };
+  for (const [slot, id] of Object.entries(swap)) v[idx[slot]] = id;
+  return give(s, pid, v);
+}
+const giveScience = (s, pid, ...types) => { for (const type of types) player(s, pid).science.push({ id: `card-x${player(s, pid).science.length}-${type}`, type }); };
 
 test('createGame is deterministic for a seed and differs across seeds', () => {
   assert.equal(serialize(createGame({}, 'alpha')), serialize(createGame({}, 'alpha')));
@@ -38,7 +51,7 @@ test('createGame is deterministic for a seed and differs across seeds', () => {
   assert.throws(() => createGame({}));
 });
 
-test('setup follows section 3', () => {
+test('setup: money, empty hands, shuffled decks and N+1 objectives', () => {
   for (const n of [3, 4, 5, 6]) {
     const s = createGame({ playerCount: n }, `setup-${n}`);
     assert.equal(s.players.length, n);
@@ -54,15 +67,25 @@ test('setup follows section 3', () => {
     assert.equal(s.unseenObjectives.length, 1);
     for (const p of s.players) {
       assert.equal(p.money, 3);
-      assert.equal(p.loose.length, 0);
-      assert.deepEqual(p.research, []);
+      assert.deepEqual(p.hand, []);
+      assert.deepEqual(p.science, []);
+      assert.ok(Object.values(p.body).every((x) => x === null));
     }
     assert.equal(s.market.length, 4);
-    assert.equal(s.deck.length, 32, '9 research types x 4 copies, minus the market');
+    assert.equal(s.deck.length, 31 - 4, '31 science cards, minus the market');
+    assert.equal(s.partsDeck.length, 60);
+    assert.deepEqual(s.partsDiscard, []);
     assert.equal(s.suspicion, 0);
     assert.equal(s.phase, 'day');
     assert.equal(s.activePlayerId, s.players[s.firstPlayerIndex].id);
   }
+  // Every copy of every variant is in the deck, once.
+  const s = createGame({}, 'deck');
+  const counts = {};
+  for (const x of s.partsDeck) counts[x.variantId] = (counts[x.variantId] || 0) + 1;
+  for (const [id, v] of Object.entries(s.config.partVariants)) assert.equal(counts[id] || 0, v.copies, id);
+  assert.equal(new Set(s.partsDeck.map((x) => x.id)).size, 60);
+  assert.notDeepEqual(s.partsDeck.map((x) => x.variantId), createGame({}, 'deck-2').partsDeck.map((x) => x.variantId), 'shuffled by seed');
   assert.throws(() => createGame({ playerCount: 2 }, 'x'));
   assert.throws(() => createGame({ playerCount: 7 }, 'x'));
 });
@@ -79,9 +102,11 @@ test('rejected commands leave state, RNG and history unchanged', () => {
     { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' },
     { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'research', choices: {} },
     { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'medicine', choices: { foo: 1 } },
+    { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['arm'] } },
     { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'hire' },
     { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' },
     { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(other), actionId: 'medicine' },
+    { type: 'PICK_PART', playerId: pid, partId: 'part-1' },
     { type: 'PICK_RESEARCH', playerId: pid, cardId: 'card-1' },
     { type: 'PUBLISH_RESEARCH', playerId: pid, researchType: 'medicine' },
     { type: 'PASS_TURN', playerId: pid, seq: 99 },
@@ -97,46 +122,58 @@ test('rejected commands leave state, RNG and history unchanged', () => {
   assert.equal(serialize(s), before);
 });
 
-test('medicine income, Igor income and stacking research bonus', () => {
-  let s = createGame({}, 'medicine');
-  const pid = s.activePlayerId;
-  const p = () => s.players.find((x) => x.id === pid);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'medicine' });
-  assert.equal(p().money, 6);
-
-  s = createGame({}, 'medicine2');
-  const a = s.activePlayerId;
-  const others = s.players.filter((x) => x.id !== a);
-  s.players.find((x) => x.id === a).research = ['medicine'];
-  s.publications.push({ playerId: others[0].id, type: 'medicine', round: 1 });
-  s.publications.push({ playerId: a, type: 'medicine', round: 1 }); // own publication doesn't double-count
-  assert.equal(researchCount(s, a, 'medicine'), 2);
-  assert.equal(researchCount(s, others[1].id, 'medicine'), 2);
-  assert.equal(researchCount(s, others[0].id, 'medicine'), 1);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: a, workerId: sci(a), actionId: 'medicine' });
-  assert.equal(s.players.find((x) => x.id === a).money, 3 + 3 + 2);
+test('the configuration has no discovery rolls, assembly, publishing or control attempts', () => {
+  const cfg = createGame({}, 'cfg').config;
+  assert.ok(!('assemble' in cfg.actions));
+  assert.ok(!('research' in cfg), 'science replaces research');
+  for (const a of Object.values(cfg.actions)) assert.ok(a.suspicion === undefined || Number.isInteger(a.suspicion), 'suspicion is a flat integer');
+  assert.ok(!('startingAttempts' in cfg.control));
+  assert.ok(!('subdueSalvage' in cfg.control));
+  assert.ok(!('failedVitalityRefund' in cfg.resurrection));
+  assert.deepEqual(cfg.resurrection.thresholds, { vitality: 10, humanity: 20 });
+  for (const n of [3, 4, 5, 6]) assert.equal(createGame({ playerCount: n }, 'susp').config.suspicionMax, 10);
+  // Validation: Vitality is fixed, Humanity is dice, science is positive.
+  assert.throws(() => createGame({ partVariants: { ordinary_arm: { effects: [{ attribute: 'vitality', op: 'die', die: 6, sign: 1 }] } } }, 'x'), /Vitality/);
+  assert.throws(() => createGame({ partVariants: { ordinary_arm: { effects: [{ attribute: 'humanity', op: 'fixed', amount: 2 }] } } }, 'x'), /Humanity/);
+  assert.throws(() => createGame({ science: { galvanism: { effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'fixed', amount: -1 }] } } }, 'x'), /positive/);
+  assert.throws(() => createGame({ science: { mesmerism: { effects: [{ kind: 'control', op: 'die', die: 6, sign: -1 }] } } }, 'x'), /positive/);
+  assert.throws(() => createGame({ science: { medicine: { effects: [{ kind: 'discoveryRollBonus', amount: 1 }] } } }, 'x'), /unknown effect kind/);
+  assert.throws(() => createGame({ actions: { graves: { suspicion: -1 } } }, 'x'), /suspicion/);
 });
 
-test('capacity tiers follow the player count; medicine is unlimited', () => {
+test('medicine income; every Medical Expertise card held adds 1', () => {
+  let s = createGame({}, 'medicine');
+  const pid = s.activePlayerId;
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'medicine' });
+  assert.equal(player(s, pid).money, 6);
+  s = createGame({}, 'medicine2');
+  const a = s.activePlayerId;
+  giveScience(s, a, 'medicine', 'medicine');
+  // Another player's cards never help.
+  giveScience(s, s.players.find((p) => p.id !== a).id, 'medicine');
+  assert.equal(scienceCount(s, a, 'medicine'), 2);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: a, workerId: sci(a), actionId: 'medicine' });
+  assert.equal(player(s, a).money, 3 + 3 + 2);
+});
+
+test('capacity tiers follow the player count; medicine and vespers are unlimited', () => {
   for (const [n, cap] of [[3, 2], [4, 2], [5, 3], [6, 3]]) {
     let s = createGame({ playerCount: n }, `capacity-${n}`);
-    assert.equal(getPublicView(s).capacities.research, cap);
-    assert.equal(getPublicView(s).capacities.medicine, null);
-    assert.equal(getPublicView(s).capacities.rest, 1);
-    const placed = [];
+    const v = getPublicView(s);
+    assert.equal(v.capacities.research, cap);
+    assert.equal(v.capacities.medicine, null);
+    assert.equal(v.capacities.vespers, null);
+    assert.equal(v.capacities.rest, 1);
     for (let i = 0; i < cap; i++) {
       const pid = s.activePlayerId;
-      placed.push(pid);
-      s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['arm'] } });
+      s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'research', choices: { researchCardId: s.market[0].id } });
     }
     const next = s.activePlayerId;
-    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: next, workerId: sci(next), actionId: 'specimens', choices: { partTypes: ['arm'] } });
+    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: next, workerId: sci(next), actionId: 'research', choices: { researchCardId: s.market[0].id } });
     assert.equal(r.error.code, 'SPACE_FULL');
-    assert.ok(!getLegalCommands(s, next).some((c) => c.actionId === 'specimens'));
-    // Medicine never fills.
+    assert.ok(!getLegalCommands(s, next).some((c) => c.actionId === 'research'));
     for (let i = 0; i < n; i++) s = ok(s, { type: 'PLACE_MEEPLE', playerId: s.activePlayerId, workerId: `igor-${s.activePlayerId}-1`, actionId: 'medicine' });
   }
-  // A flat number and extra tiers also work.
   assert.equal(getPublicView(createGame({ playerCount: 6, actions: { graves: { capacity: { 3: 1, 4: 2, 6: 4 } } } }, 'tiers')).capacities.graves, 4);
   assert.equal(getPublicView(createGame({ playerCount: 4, actions: { graves: { capacity: { 3: 1, 4: 2, 6: 4 } } } }, 'tiers')).capacities.graves, 2);
   assert.equal(getPublicView(createGame({ actions: { graves: { capacity: 5 } } }, 'flat')).capacities.graves, 5);
@@ -148,193 +185,198 @@ test('everyone starts with an Igor; hired Igors act at once; an Igor acts once p
   let s = createGame({ playerCount: 3, startingMoney: 20 }, 'igor');
   const pid = s.activePlayerId;
   for (const p of s.players) assert.equal(s.workers[`igor-${p.id}-1`].active, true);
-  // Igors earn the full medicine income.
   s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'medicine' });
-  assert.equal(s.players.find((p) => p.id === pid).money, 23);
+  assert.equal(player(s, pid).money, 23);
   s = passAllUntil(s, (x) => x.activePlayerId === pid);
   s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'hire' });
-  assert.equal(s.players.find((p) => p.id === pid).money, 19, 'the first hire costs 4');
+  assert.equal(player(s, pid).money, 19, 'a hire costs 4');
   assert.equal(s.workers[`igor-${pid}-2`].active, true, 'a hired Igor is available at once');
   s = passAllUntil(s, (x) => x.activePlayerId === pid);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-2`, actionId: 'specimens', choices: { partTypes: ['leg'] } });
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-2`, actionId: 'medicine' });
   s = passAllUntil(s, (x) => x.phase === 'night' && x.activePlayerId === pid);
   const legal = getLegalCommands(s, pid);
   assert.ok(!legal.some((c) => c.workerId === `igor-${pid}-1` || c.workerId === `igor-${pid}-2`), 'Igors act only once per round');
   assert.ok(legal.some((c) => c.workerId === sci(pid)), 'Scientist refreshes for night');
-  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'graves' });
-  assert.equal(r.ok, false);
 });
 
-test('Igors may take every action except prepare; only Igors garrison', () => {
+test('Igors may take every action except prepare; only Igors garrison; three Igors at most', () => {
   const cfg = createGame({}, 'perms').config.actions;
   for (const [id, a] of Object.entries(cfg)) {
     assert.equal(a.igor, id !== 'prepare', id);
     assert.equal(a.scientist !== false, id !== 'garrison', id);
   }
-  // An Igor can hire an Igor.
-  let s = createGame({ playerCount: 3, startingMoney: 10 }, 'igor-hire');
-  const pid = s.activePlayerId;
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'hire' });
-  assert.equal(s.players.find((p) => p.id === pid).money, 6);
-  assert.ok(s.workers[`igor-${pid}-2`]);
-});
-
-test('hire has a flat cost; lecture and the morgue are gone; three Igors at most', () => {
-  const cfg = createGame({}, 'caps').config.actions;
-  assert.ok(!('lecture' in cfg));
-  assert.ok(!('morgue' in cfg));
-  assert.ok(!('publish' in cfg));
   let s = createGame({ playerCount: 3, startingMoney: 30 }, 'max-igors');
   const pid = s.activePlayerId;
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'hire' });
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'hire' });
   s = passAllUntil(s, (x) => x.activePlayerId === pid);
   s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-2`, actionId: 'hire' });
-  assert.equal(s.players.find((p) => p.id === pid).money, 22, 'every hire costs 4');
+  assert.equal(player(s, pid).money, 22, 'every hire costs 4');
   s = passAllUntil(s, (x) => x.round === 2 && x.activePlayerId === pid);
   assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-3`, actionId: 'hire' }).error.code, 'MAX_IGORS');
 });
 
-test('graves suspicion follows the d6 table; each copy of Discreet Methods adds 1 to the roll', () => {
-  for (let i = 0; i < 30; i++) {
-    let s = createGame({ playerCount: 3 }, `graves-${i}`);
-    s = passAllUntil(s, (x) => x.phase === 'night');
-    const pid = s.activePlayerId;
-    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
-    const roll = r.events.find((e) => e.type === 'DIE_ROLLED').result;
-    assert.equal(r.state.suspicion, roll <= 4 ? 1 : 0);
-    assert.equal(r.state.players.find((p) => p.id === pid).loose.length, 2);
-
-    // One copy: the same die roll, plus 1.
-    s.players.find((p) => p.id === pid).research = ['discretion'];
-    const r2 = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
-    const d2 = r2.events.find((e) => e.type === 'DISCOVERY_RESOLVED');
-    assert.equal(d2.roll, roll);
-    assert.equal(d2.rollBonus, 1);
-    assert.equal(r2.state.suspicion, roll + 1 <= 4 ? 1 : 0);
-    assert.equal(d2.unmodifiedSuspicion, roll <= 4 ? 1 : 0);
-  }
+test('buy specimens: pay 2, draw 3 public parts, keep one with PICK_PART, discard the rest', () => {
+  let s = createGame({ playerCount: 3 }, 'specimens');
+  const pid = s.activePlayerId;
+  const top = s.partsDeck.slice(0, 3).map((x) => x.id);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens' });
+  assert.equal(player(s, pid).money, 1);
+  assert.deepEqual(s.pendingPick.parts.map((x) => x.id), top, 'the top three cards');
+  assert.ok(s.events.some((e) => e.type === 'SPECIMENS_DRAWN'));
+  assert.equal(s.activePlayerId, pid, 'the buyer picks before play moves on');
+  const legal = getLegalCommands(s, pid);
+  assert.deepEqual(legal.map((c) => c.type), ['PICK_PART', 'PICK_PART', 'PICK_PART']);
+  assert.equal(dispatch(s, { type: 'PASS_TURN', playerId: pid }).error.code, 'PICK_PENDING');
+  assert.equal(dispatch(s, { type: 'PICK_PART', playerId: pid, partId: 'part-999' }).error.code, 'INVALID_TARGET');
+  s = ok(s, { type: 'PICK_PART', playerId: pid, partId: top[1] });
+  assert.deepEqual(player(s, pid).hand.map((x) => x.id), [top[1]]);
+  assert.deepEqual(s.partsDiscard.map((x) => x.id), [top[0], top[2]]);
+  assert.equal(s.partsDeck.length, 57);
+  assert.notEqual(s.activePlayerId, pid);
+  assert.equal(s.suspicion, 0, 'day actions never raise suspicion');
+  // No money: not legal.
+  const poor = createGame({ playerCount: 3, startingMoney: 1 }, 'specimens-poor');
+  assert.equal(dispatch(poor, { type: 'PLACE_MEEPLE', playerId: poor.activePlayerId, workerId: sci(poor.activePlayerId), actionId: 'specimens' }).error.code, 'INSUFFICIENT_MONEY');
 });
 
-test('Discreet Methods stacks: published copies add to the roll', () => {
-  let s = createGame({ playerCount: 4 }, 'discretion-stack');
+test('the parts deck reshuffles its discard pile when it runs out; with neither, nothing is drawn', () => {
+  let s = createGame({ playerCount: 3 }, 'reshuffle');
   s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
-  const others = s.players.filter((p) => p.id !== pid);
-  s.players.find((p) => p.id === pid).research = ['discretion'];
-  // Three rivals published it: four effective copies, so a graves roll is 5 to 10 and never noticed.
-  for (const o of others) { o.research = ['discretion']; o.published = ['discretion']; s.publications.push({ playerId: o.id, type: 'discretion', round: 1 }); }
-  assert.equal(effectiveCopies(s, pid, 'discretion'), 4);
-  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
-  const d = r.events.find((e) => e.type === 'DISCOVERY_RESOLVED');
-  assert.equal(d.rollBonus, 4);
-  assert.equal(d.result, d.roll + 4);
-  assert.equal(r.state.suspicion, 0);
+  s.partsDiscard = s.partsDeck.splice(1); // one card left in the deck
+  const left = s.partsDeck[0].id;
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
+  const hand = player(s, pid).hand;
+  assert.equal(hand.length, 2);
+  assert.equal(hand[0].id, left, 'the deck is drawn out first');
+  assert.ok(s.events.some((e) => e.type === 'PARTS_DECK_RESHUFFLED' && e.deckSize === 59));
+  assert.equal(s.partsDiscard.length, 0);
+  assert.equal(s.partsDeck.length, 58);
+  // With nothing left anywhere, the part-drawing spaces are closed.
+  let t = createGame({ playerCount: 3 }, 'empty');
+  t.partsDeck = [];
+  const tp = t.activePlayerId;
+  assert.equal(dispatch(t, { type: 'PLACE_MEEPLE', playerId: tp, workerId: sci(tp), actionId: 'specimens' }).error.code, 'NO_PARTS');
 });
 
-test('the old flat reduction still works for saved games and experiments', () => {
-  const config = { playerCount: 3, research: { discretion: { effects: [{ kind: 'suspicionReduction', amount: 1 }] } } };
-  for (let i = 0; i < 10; i++) {
-    let s = createGame(config, `flat-${i}`);
-    s = passAllUntil(s, (x) => x.phase === 'night');
-    const pid = s.activePlayerId;
-    s.players.find((p) => p.id === pid).research = ['discretion'];
-    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
-    assert.equal(r.state.suspicion, 0);
-  }
-});
-
-test('suspicion rolls are configurable: die, bands and amounts', () => {
-  const suspicion = { die: 8, bands: [{ max: 2, amount: 3 }, { max: 5, amount: 1 }] };
-  for (let i = 0; i < 40; i++) {
-    let s = createGame({ playerCount: 3, actions: { graves: { suspicion } } }, `bands-${i}`);
-    s = passAllUntil(s, (x) => x.phase === 'night');
-    const pid = s.activePlayerId;
-    const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
-    const die = r.events.find((e) => e.type === 'DIE_ROLLED');
-    assert.equal(die.die, 8);
-    assert.equal(r.state.suspicion, die.result <= 2 ? 3 : die.result <= 5 ? 1 : 0);
-  }
-  assert.throws(() => createGame({ actions: { graves: { suspicion: { die: 7, bands: [] } } } }, 'x'));
-  assert.throws(() => createGame({ actions: { graves: { suspicion: { die: 6, bands: [{ max: 4, amount: 1 }, { max: 3, amount: 1 }] } } } }, 'x'));
-  assert.throws(() => createGame({ actions: { graves: { suspicion: { die: 6, bands: [{ max: 7, amount: 1 }] } } } }, 'x'));
-});
-
-test('charity: one bundle by default; scalable units when maxUnits > 1', () => {
-  let s = createGame({ playerCount: 3, startingMoney: 10 }, 'charity');
+test('rob graves: draw 2 parts, then suspicion +1, no dice', () => {
+  let s = createGame({ playerCount: 3 }, 'graves');
+  s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
-  s.suspicion = 5;
-  assert.ok(!getLegalCommands(s, pid).find((c) => c.actionId === 'charity').choiceConstraints, 'no choice with one unit');
-  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' });
-  assert.equal(r.state.suspicion, 3);
-  assert.equal(r.state.players.find((p) => p.id === pid).money, 7);
-  // Scalable: 1 money per unit, 1 suspicion per unit, up to 4 units; capacity 1.
-  let t = createGame({ playerCount: 3, startingMoney: 3, actions: { charity: { cost: 1, reduction: 1, maxUnits: 4, capacity: 1 } } }, 'charity2');
-  const q = t.activePlayerId;
-  t.suspicion = 2;
-  const tmpl = getLegalCommands(t, q).find((c) => c.actionId === 'charity');
-  assert.deepEqual(tmpl.choiceConstraints.units.values, [1, 2], 'capped by what it takes to reach 0');
-  assert.equal(dispatch(t, { type: 'PLACE_MEEPLE', playerId: q, workerId: sci(q), actionId: 'charity', choices: { units: 3 } }).error.code, 'INVALID_CHOICE');
-  t.suspicion = 9;
-  assert.deepEqual(getLegalCommands(t, q).find((c) => c.actionId === 'charity').choiceConstraints.units.values, [1, 2, 3], 'capped by money');
-  t = ok(t, { type: 'PLACE_MEEPLE', playerId: q, workerId: sci(q), actionId: 'charity', choices: { units: 1 } });
-  assert.equal(t.suspicion, 8);
-  assert.equal(t.players.find((p) => p.id === q).money, 2);
-  assert.ok(!getLegalCommands(t, t.activePlayerId).some((c) => c.actionId === 'charity'), 'one unit blocks the only slot');
+  const rngBefore = [...s.rng];
+  const top = s.partsDeck.slice(0, 2).map((x) => x.id);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
+  assert.deepEqual(player(s, pid).hand.map((x) => x.id), top);
+  assert.equal(s.suspicion, 1);
+  assert.deepEqual(s.rng, rngBefore, 'no randomness is used');
+  assert.ok(!s.events.some((e) => e.type === 'DIE_ROLLED'));
+  const sus = s.events.filter((e) => e.type === 'SUSPICION_CHANGED');
+  assert.equal(sus[sus.length - 1].reason, 'graves');
+  assert.equal(sus[sus.length - 1].playerId, pid);
+  // The amount is configurable.
+  let t = createGame({ playerCount: 3, actions: { graves: { suspicion: 2 } } }, 'graves-2');
+  t = passAllUntil(t, (x) => x.phase === 'night');
+  t = ok(t, { type: 'PLACE_MEEPLE', playerId: t.activePlayerId, workerId: sci(t.activePlayerId), actionId: 'graves' });
+  assert.equal(t.suspicion, 2);
 });
 
-test('sell parts: exactly N loose parts for money, then a discovery roll', () => {
+test('sell parts: exactly 2 parts from the hand for 7 money, then suspicion +1', () => {
   let s = createGame({ playerCount: 3 }, 'sell');
   s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
-  const p = () => s.players.find((x) => x.id === pid);
-  assert.ok(!getLegalCommands(s, pid).some((c) => c.actionId === 'sell'), 'needs 2 loose parts');
-  p().loose.push({ id: 'part-a', variantId: 'ordinary_arm', type: 'arm' }, { id: 'part-b', variantId: 'ordinary_leg', type: 'leg' }, { id: 'part-c', variantId: 'poet_brain', type: 'head' });
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'sell', choices: { partIds: ['part-a'] } }).error.code, 'INVALID_CHOICE');
-  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'sell', choices: { partIds: ['part-a', 'part-c'] } });
-  s = r.state;
-  assert.deepEqual(p().loose.map((x) => x.id), ['part-b']);
-  assert.equal(p().money, 3 + 7, 'selling pays 7: more than medicine, since it costs two parts');
-  const roll = r.events.find((e) => e.type === 'DIE_ROLLED').result;
-  assert.equal(s.suspicion, roll <= 2 ? 1 : 0);
+  assert.ok(!getLegalCommands(s, pid).some((c) => c.actionId === 'sell'), 'needs two parts');
+  const ids = give(s, pid, ['ordinary_arm', 'damaged_arm', 'ordinary_head']);
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'sell', choices: { partIds: [ids[0]] } }).error.code, 'INVALID_CHOICE');
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'sell', choices: { partIds: [ids[0], ids[1]] } });
+  assert.equal(player(s, pid).money, 10);
+  assert.deepEqual(player(s, pid).hand.map((x) => x.id), [ids[2]]);
+  assert.deepEqual(s.partsDiscard.map((x) => x.id), [ids[0], ids[1]]);
+  assert.equal(s.suspicion, 1);
 });
 
-test('experiment: discard loose or installed parts, draw that many cards, keep one eligible; the rest go under the deck', () => {
+test('experiment: discard 2 parts, draw 2 science cards from the deck and keep both, suspicion +1', () => {
   let s = createGame({ playerCount: 3 }, 'experiment');
   s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
-  const p = () => s.players.find((x) => x.id === pid);
-  assert.ok(!getLegalCommands(s, pid).some((c) => c.actionId === 'experiment'), 'needs a part');
-  p().loose.push({ id: 'part-l1', variantId: 'ordinary_arm', type: 'arm' });
-  assert.deepEqual(getLegalCommands(s, pid).find((c) => c.actionId === 'experiment').choiceConstraints.partIds.values, ['part-l1'], 'a loose part will do');
-  p().loose = [];
-  fullBody(s, pid);
-  const tmpl = getLegalCommands(s, pid).find((c) => c.actionId === 'experiment');
-  assert.equal(tmpl.choiceConstraints.partIds.max, 3);
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'experiment', choices: { partIds: ['part-1', 'part-2', 'part-3', 'part-4'] } }).error.code, 'INVALID_CHOICE');
-  p().research = [s.deck[0].type];
-  const top = s.deck.slice(0, 3);
-  const deckBefore = s.deck.length;
-  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'experiment', choices: { partIds: ['part-1', 'part-5', 'part-6'] } });
-  s = r.state;
-  const types = r.events.map((e) => e.type);
-  assert.ok(types.indexOf('RESEARCH_DRAWN') < types.indexOf('DIE_ROLLED'), 'cards are drawn before the die');
-  assert.equal(p().body.arm1, null);
-  assert.equal(p().body.chest, null);
-  assert.equal(p().body.head, null);
-  assert.ok(p().body.arm2);
-  assert.deepEqual(s.pendingPick.cards.map((c) => c.id), top.map((c) => c.id));
-  const legal = getLegalCommands(s, pid);
-  assert.ok(legal.every((c) => c.type === 'PICK_RESEARCH'));
-  assert.ok(!legal.some((c) => c.cardId === top[0].id), 'an already discovered type cannot be kept');
-  assert.equal(dispatch(s, { type: 'PASS_TURN', playerId: pid }).error.code, 'PICK_PENDING');
-  const keep = legal[0].cardId;
-  s = ok(s, { type: 'PICK_RESEARCH', playerId: pid, cardId: keep });
-  assert.ok(p().research.includes(top.find((c) => c.id === keep).type));
-  assert.deepEqual(p().published, [], 'experiment discoveries stay private');
-  assert.equal(s.publications.length, 0);
-  assert.equal(s.deck.length, deckBefore - 1);
-  assert.deepEqual(s.deck.slice(-2).map((c) => c.id), top.filter((c) => c.id !== keep).map((c) => c.id));
-  assert.notEqual(s.activePlayerId, pid, 'play moves on after the pick');
+  const ids = give(s, pid, ['ordinary_arm', 'ordinary_leg']);
+  const top = s.deck.slice(0, 2);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'experiment', choices: { partIds: ids } });
+  assert.deepEqual(player(s, pid).science.map((c) => c.id).sort(), top.map((c) => c.id).sort());
+  assert.deepEqual(player(s, pid).hand, []);
+  assert.equal(s.partsDiscard.length, 2);
+  assert.equal(s.deck.length, 27 - 2);
+  assert.equal(s.suspicion, 1);
+  assert.equal(s.pendingPick, null, 'nothing to pick: every card is kept');
+  // Duplicates are kept too.
+  let t = createGame({ playerCount: 3 }, 'experiment-dup');
+  t = passAllUntil(t, (x) => x.phase === 'night');
+  const tp = t.activePlayerId;
+  giveScience(t, tp, 'galvanism');
+  t.deck.unshift({ id: 'card-g1', type: 'galvanism' }, { id: 'card-g2', type: 'galvanism' });
+  const tids = give(t, tp, ['ordinary_arm', 'ordinary_leg']);
+  t = ok(t, { type: 'PLACE_MEEPLE', playerId: tp, workerId: sci(tp), actionId: 'experiment', choices: { partIds: tids } });
+  assert.equal(scienceCount(t, tp, 'galvanism'), 3);
+  assert.equal(vitalityBonus(t, tp), 6);
+  // An empty deck closes the space.
+  let u = createGame({ playerCount: 3 }, 'experiment-empty');
+  u = passAllUntil(u, (x) => x.phase === 'night');
+  u.deck = [];
+  give(u, u.activePlayerId, ['ordinary_arm', 'ordinary_leg']);
+  assert.ok(!getLegalCommands(u, u.activePlayerId).some((c) => c.actionId === 'experiment'));
+});
+
+test('vespers: free, unlimited, any worker, suspicion −1; only while suspicion is above 0', () => {
+  let s = createGame({ playerCount: 3 }, 'vespers');
+  s = passAllUntil(s, (x) => x.phase === 'night');
+  const pid = s.activePlayerId;
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'vespers' }).error.code, 'NO_SUSPICION');
+  s.suspicion = 3;
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'vespers' });
+  assert.equal(s.suspicion, 2);
+  assert.equal(player(s, pid).money, 3, 'free');
+  s = passAllUntil(s, (x) => x.activePlayerId === pid);
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'vespers' });
+  assert.equal(s.suspicion, 1);
+  assert.equal(s.events.filter((e) => e.type === 'WORKER_PLACED' && e.actionId === 'vespers').length, 2, 'unlimited');
+});
+
+test('conduct research: pay 2, take any market card (even a duplicate), refill; Public Lectures calms', () => {
+  let s = createGame({ playerCount: 3, startingMoney: 10 }, 'research');
+  const pid = s.activePlayerId;
+  const card = s.market[1];
+  const next = s.deck[0];
+  giveScience(s, pid, card.type, 'lectures');
+  s.suspicion = 3;
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'research', choices: { researchCardId: card.id } });
+  assert.equal(player(s, pid).money, 8);
+  assert.equal(scienceCount(s, pid, card.type), card.type === 'lectures' ? 3 : 2, 'a second copy of a type is allowed');
+  assert.equal(s.market.length, 4);
+  assert.equal(s.market[3].id, next.id, 'the market refills from the deck');
+  assert.equal(s.suspicion, 2, 'Public Lectures: −1');
+  assert.ok(!s.events.some((e) => e.type === 'RESEARCH_PUBLISHED'), 'there is no publishing');
+  for (const p of s.players) if (p.id !== pid) assert.deepEqual(p.science, [], 'nobody else gains anything');
+  // An empty market closes the space.
+  const t = createGame({ playerCount: 3 }, 'research-empty');
+  t.market = [];
+  assert.equal(dispatch(t, { type: 'PLACE_MEEPLE', playerId: t.activePlayerId, workerId: sci(t.activePlayerId), actionId: 'research', choices: { researchCardId: 'card-1' } }).error.code, 'MARKET_EMPTY');
+});
+
+test('charity: one bundle by default; scalable units when maxUnits > 1; Parish Benefactor adds 1 per unit', () => {
+  let s = createGame({ playerCount: 3, startingMoney: 10 }, 'charity');
+  const pid = s.activePlayerId;
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' }).error.code, 'NO_SUSPICION');
+  s.suspicion = 6;
+  giveScience(s, pid, 'benefactor');
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' });
+  assert.equal(s.suspicion, 3);
+  assert.equal(player(s, pid).money, 7);
+  let t = createGame({ playerCount: 3, startingMoney: 10, actions: { charity: { cost: 1, reduction: 1, maxUnits: 4 } } }, 'charity-units');
+  t.suspicion = 3;
+  const tp = t.activePlayerId;
+  const c = getLegalCommands(t, tp).find((x) => x.actionId === 'charity');
+  assert.deepEqual(c.choiceConstraints.units.values, [1, 2, 3], 'no more than it takes to reach 0');
+  t = ok(t, { type: 'PLACE_MEEPLE', playerId: tp, workerId: sci(tp), actionId: 'charity', choices: { units: 2 } });
+  assert.equal(t.suspicion, 1);
 });
 
 test('rest: the resting player goes first next round; otherwise first player rotates', () => {
@@ -353,52 +395,72 @@ test('rest: the resting player goes first next round; otherwise first player rot
   assert.equal(s.firstPlayerIndex, (before + 1) % 3, 'nobody rested: rotate one seat');
 });
 
+// ---------------------------------------------------------------------------
+// Preparing and resolving resurrections (spec 025)
+// ---------------------------------------------------------------------------
 
-
-test('specimens buy one part; assemble installs any number of fitting parts, up to a whole body', () => {
-  let s = createGame({ playerCount: 3, startingMoney: 10 }, 'assemble');
+test('prepare: Scientist only; a full set from the hand with Vitality at least 10', () => {
+  let s = createGame({ playerCount: 3 }, 'prepare');
+  s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
-  assert.ok(!('anatomy' in s.config.research), 'Advanced Anatomy is retired');
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['leg', 'leg'] } }).error.code, 'INVALID_CHOICE');
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['athlete_leg'] } }).error.code, 'INVALID_TARGET', 'specimens choose a type, not a variant');
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['leg'] } });
-  const p = () => s.players.find((x) => x.id === pid);
-  assert.deepEqual(p().loose.map((x) => x.type), ['leg']);
-  const bought = p().loose[0].variantId;
-  assert.equal(s.config.partVariants[bought].type, 'leg', 'the variant is drawn from the chosen type');
-  assert.equal(p().money, 8);
-  const extra = [['ordinary_arm', 'arm'], ['ordinary_arm', 'arm'], ['ordinary_leg', 'leg'], ['ordinary_chest', 'chest'], ['poet_brain', 'head'], ['poet_brain', 'head']];
-  extra.forEach(([variantId, type], i) => p().loose.push({ id: `part-x${i}`, variantId, type }));
-  s = passAllUntil(s, (x) => x.phase === 'night' && x.activePlayerId === pid);
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: ['part-x4', 'part-x5'] } }).error.code, 'NO_MATCHING_SLOT');
-  const all = p().loose.filter((x) => x.id !== 'part-x5').map((x) => x.id);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'assemble', choices: { partIds: all } });
-  assert.equal(p().body.leg1.variantId, bought);
-  assert.equal(p().body.head.id, 'part-x4');
-  assert.ok(Object.values(p().body).every(Boolean), 'a whole body in one action');
-  assert.deepEqual(p().loose.map((x) => x.id), ['part-x5']);
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'prepare', choices: { partIds: [] } }).error.code, 'NOT_A_FULL_SET');
+  const weak = giveBody(s, pid); // Vitality 6
+  assert.equal(bestVitality(s, pid), 6);
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'prepare', choices: { partIds: weak } }).error.code, 'VITALITY_TOO_LOW');
+  assert.ok(!getLegalCommands(s, pid).some((c) => c.actionId === 'prepare'), 'no legal body, no placement');
+  // Science adds to Vitality: 6 + 2 + 2 = 10.
+  giveScience(s, pid, 'galvanism', 'galvanism');
+  assert.equal(bestVitality(s, pid), 10);
+  const t = getLegalCommands(s, pid).find((c) => c.actionId === 'prepare');
+  assert.deepEqual(t.choiceConstraints.partIds.perPartType, { arm: 2, leg: 2, chest: 1, head: 1 });
+  assert.equal(t.choiceConstraints.partIds.minVitality, 10);
+  assert.equal(t.choiceConstraints.partIds.vitalityBonus, 4);
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'prepare', choices: { partIds: weak } }).error.code, 'IGOR_NOT_PERMITTED');
+  // Not a full set: three arms.
+  const arm = give(s, pid, ['labourer_arm'])[0];
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'prepare', choices: { partIds: [arm, ...weak.slice(0, 5)] } }).error.code, 'NOT_A_FULL_SET');
+  // Prepared: the parts leave the hand for the body slots, in slot order.
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'prepare', choices: { partIds: weak } });
+  const p = player(s, pid);
+  assert.deepEqual(p.hand.map((x) => x.id), [arm]);
+  assert.deepEqual(Object.values(p.body).map((x) => x.id), weak);
+  const ev = s.events.find((e) => e.type === 'RESURRECTION_PREPARED');
+  assert.equal(ev.vitality, 10);
+  // Committed parts can't be sold.
+  s = passAllUntil(s, (x) => x.activePlayerId === pid);
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'sell', choices: { partIds: [weak[0], arm] } }).error.code, 'INSUFFICIENT_PARTS');
 });
 
-test('conducting research takes a market card, publishes it and refills; there is no free publishing', () => {
-  let s = createGame({ playerCount: 3, startingMoney: 10 }, 'research');
+test('prepare options enumerate distinct full sets that meet the threshold', () => {
+  let s = createGame({ playerCount: 3 }, 'prepare-enum');
+  s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
-  const card = s.market[0];
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'research', choices: { researchCardId: card.id } });
-  const p = s.players.find((x) => x.id === pid);
-  assert.deepEqual(p.research, [card.type]);
-  assert.deepEqual(p.published, [card.type]);
-  assert.deepEqual(s.publications.map((x) => [x.playerId, x.type]), [[pid, card.type]]);
-  assert.ok(s.events.some((e) => e.type === 'RESEARCH_PUBLISHED' && e.playerId === pid));
-  assert.equal(p.money, 8);
-  for (const q of s.players) assert.ok(!getLegalCommands(s, q.id).some((c) => c.type === 'PUBLISH_RESEARCH'));
-  assert.equal(s.market.length, 4);
-  assert.equal(s.deck.length, 31);
-  const dupe = s.market.find((c) => c.type === card.type);
-  if (dupe) {
-    assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: s.activePlayerId, workerId: sci(s.activePlayerId), actionId: 'research', choices: { researchCardId: 'card-999' } }).ok, false);
+  give(s, pid, [...STRONG, 'damaged_arm', 'labourer_arm', 'gangrenous_arm']);
+  const opts = enumerateLegalCommands(s, pid).filter((c) => c.actionId === 'prepare');
+  // Arms: {lab,lab}, {lab,dam}, {lab,gan}, {dam,gan}; Vitality 16, 12, 10, 6 → three qualify.
+  assert.equal(opts.length, 3);
+  for (const c of opts) assert.ok(dispatch(s, c).ok);
+  const all = enumerateLegalCommands(s, pid, { dedupe: false }).filter((c) => c.actionId === 'prepare');
+  assert.ok(all.length > opts.length);
+  for (const c of all) assert.ok(dispatch(s, c).ok);
+});
+
+// Sets up the first night: `setup` hands out parts, then every player in
+// `attempters` (by default, everyone with a full set) prepares and the rest
+// pass. Returns the state once resolution has started (or later).
+function resurrectionGame(config, setup, attempters) {
+  let s = createGame({ playerCount: 3, ...config, resurrection: { thresholds: { vitality: 0, humanity: 20 }, ...(config.resurrection || {}) } }, 'res');
+  s = passAllUntil(s, (x) => x.phase === 'night');
+  setup(s);
+  const who = attempters || s.players.filter((p) => bestVitality(s, p.id) !== null).map((p) => p.id);
+  while (s.phase === 'night') {
+    const pid = s.activePlayerId;
+    const prep = enumerateLegalCommands(s, pid).find((c) => c.actionId === 'prepare');
+    if (who.includes(pid) && prep && !(s.occupancy.night.prepare || []).includes(sci(pid))) s = ok(s, prep);
+    else s = ok(s, { type: 'PASS_TURN', playerId: pid });
   }
-});
-
+  return s;
+}
 function declineChain(s) {
   let guard = 0;
   while (!s.result && s.control) {
@@ -407,94 +469,96 @@ function declineChain(s) {
   }
   return s;
 }
+const STABLE = { resurrection: { thresholds: { vitality: 0, humanity: -100 } } };
+const MONSTERS = { resurrection: { thresholds: { vitality: 0, humanity: 100 } } };
+const garrison = (st, ...pids) => { st.occupancy.day.garrison = pids.map((pid) => `igor-${pid}-1`); };
 
-// Sets up the first night, then every player in `attempters` (by default,
-// everyone whose body is complete) prepares a resurrection and the rest pass.
-// Returns the state once resolution has started.
-function resurrectionGame(config, setup, attempters) {
-  let s = createGame({ playerCount: 3, ...config }, 'res');
-  s = passAllUntil(s, (x) => x.phase === 'night');
-  setup(s);
-  const who = attempters || s.players.filter((p) => Object.values(p.body).every(Boolean)).map((p) => p.id);
-  while (s.phase === 'night') {
-    const pid = s.activePlayerId;
-    if (who.includes(pid) && !(s.occupancy.night.prepare || []).includes(sci(pid))) s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'prepare' });
-    else s = ok(s, { type: 'PASS_TURN', playerId: pid });
-  }
-  return s;
-}
-
-test('unleashed Creature ends the game immediately; Unleasher wins', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => {
-    st.objectives = { p1: 'unleasher', p2: 'prometheus', p3: 'visionary' };
-    for (const p of st.players) fullBody(st, p.id);
+test('a resurrection is one Humanity roll: base d20, part dice in slot order, then science; itemised', () => {
+  const s = resurrectionGame({}, (st) => {
+    giveBody(st, 'p1', { arm1: 'strangler_arm', leg1: 'dancer_leg', chest: 'priest_chest', head: 'criminal_brain' });
+    giveScience(st, 'p1', 'philosophy', 'galvanism', 'philosophy');
   });
-  assert.equal(s.phase, 'resolution');
-  const first = s.resolution.order[0];
-  assert.deepEqual([...s.resolution.order].sort(), ['p1', 'p2', 'p3']);
-  assert.equal(s.activePlayerId, first, 'the creator decides first');
-  s = declineChain(s);
-  assert.equal(s.result.reason, 'unleashed');
+  const rolled = s.events.find((e) => e.type === 'RESURRECTION_ROLLED');
+  const h = rolled.humanity;
+  assert.deepEqual(h.dice.map((d) => (d.source.kind === 'base' ? 'base' : d.source.slot || d.source.scienceType)), ['base', 'arm1', 'leg1', 'chest', 'head', 'philosophy', 'philosophy']);
+  assert.deepEqual(h.dice.map((d) => d.sign * d.die), [20, -6, 4, 6, -6, 6, 6]);
+  assert.equal(h.score, h.dice.reduce((a, d) => a + d.value, 0));
+  assert.equal(h.success, h.score >= 20);
+  // Vitality: 2 + 1 + 1 + 1 + 1 + 0 + 2 (Galvanic Mastery) = 8.
+  assert.equal(rolled.vitality.total, 8);
+  assert.equal(rolled.vitality.sources.reduce((a, x) => a + x.amount, 0), 8);
+  assert.equal(s.resurrections[0].vitality, 8);
+  assert.ok(!s.events.some((e) => e.type === 'DIE_ROLLED' && e.attribute === 'vitality'), 'Vitality is never rolled');
+  // The six parts go to the discard pile, whatever the outcome.
+  assert.equal(s.events.find((e) => e.type === 'PARTS_DISCARDED' && e.reason === 'resurrection').parts.length, 6);
+});
+
+test('estimateResurrection gives the Vitality total and exact Humanity odds, for a hand or a prepared body', () => {
+  const s = createGame({ playerCount: 3 }, 'odds');
+  const ids = giveBody(s, 'p1');
+  const o = estimateResurrection(s, 'p1', ids);
+  assert.deepEqual(o.vitality, { total: 6, threshold: 10, ok: false });
+  assert.ok(Math.abs(o.pStable - 0.05) < 1e-9, 'a bare d20 reaches 20 only on a 20');
+  assert.ok(Math.abs(o.pMonster - 0.95) < 1e-9);
+  assert.equal(estimateResurrection(s, 'p1'), null, 'nothing prepared');
+  assert.equal(estimateResurrection(s, 'p2', ids), null, 'not their parts');
+  // Brain of a scholar (+d6): d20 + d6 >= 20 has probability 27/120.
+  const ids2 = giveBody(s, 'p2', { head: 'scholar_brain' });
+  assert.ok(Math.abs(estimateResurrection(s, 'p2', ids2).pStable - 27 / 120) < 1e-9);
+  // A negative die can make success impossible.
+  const ids3 = giveBody(s, 'p3', { head: 'criminal_brain' });
+  assert.equal(estimateResurrection(s, 'p3', ids3).pStable, 0);
+});
+
+test('unleashed Creature ends the game immediately; Unleasher wins; later attempts never resolve', () => {
+  let s = resurrectionGame(MONSTERS, (st) => {
+    st.objectives = { p1: 'unleasher', p2: 'prometheus', p3: 'visionary' };
+    for (const p of st.players) giveBody(st, p.id);
+  });
+  assert.equal(s.result.reason, 'unleashed', 'nobody is garrisoned: unleashed at once');
   assert.deepEqual(s.result.winners, ['p1']);
-  // Only the first attempt in initiative order resolved; later attempts consumed nothing.
+  const first = s.events.find((e) => e.type === 'RESURRECTIONS_ANNOUNCED').playerIds[0];
   assert.equal(s.resurrections.length, 1);
   assert.equal(s.resurrections[0].playerId, first);
-  for (const p of s.players) if (p.id !== first) assert.ok(p.body.head !== null);
+  for (const p of s.players) if (p.id !== first) assert.ok(p.body.head !== null, 'later bodies are untouched');
+  assert.ok(s.events.filter((e) => e.type === 'CONTROL_SKIPPED').length === 3, 'every player is skipped, the creator included');
   assert.equal(dispatch(s, { type: 'PASS_TURN', playerId: 'p1' }).error.code, 'GAME_OVER');
 });
 
 test('collective defeat if the matching antagonist was not dealt', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => {
+  const s = resurrectionGame(MONSTERS, (st) => {
     st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
     st.unseenObjectives = ['unleasher'];
-    fullBody(st, 'p1');
+    giveBody(st, 'p1');
   });
-  s = declineChain(s);
   assert.equal(s.result.reason, 'unleashed');
   assert.deepEqual(s.result.winners, []);
   assert.equal(s.result.collectiveDefeat, true);
 });
 
-test('failed Vitality refunds 3 parts and adds suspicion', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: 100, humanity: 0 } } }, (st) => fullBody(st, 'p2'));
-  const p = s.players.find((x) => x.id === 'p2');
-  assert.equal(p.loose.length, 3);
-  assert.equal(p.body.head, null);
-  assert.equal(s.suspicion, 1);
-  assert.equal(s.resurrections[0].outcome, 'failed');
-  assert.equal(s.round, 2);
-});
-
-test('only prepared players attempt; a prepared player with an incomplete body does nothing', () => {
-  const s = resurrectionGame({}, (st) => { fullBody(st, 'p1'); fullBody(st, 'p2'); }, ['p1', 'p3']);
+test('only prepared players attempt', () => {
+  const s = resurrectionGame(STABLE, (st) => { giveBody(st, 'p1'); giveBody(st, 'p2'); }, ['p1']);
   const announced = s.events.find((e) => e.type === 'RESURRECTIONS_ANNOUNCED');
-  assert.deepEqual([...announced.playerIds].sort(), ['p1', 'p3'], 'preparation is public; p2 did not prepare');
-  assert.ok(s.players.find((p) => p.id === 'p2').body.head !== null, 'an unprepared body is untouched');
-  assert.ok(s.events.some((e) => e.type === 'RESURRECTION_CANCELLED' && e.playerId === 'p3'));
-  assert.equal(s.resurrections.filter((r) => r.playerId === 'p3').length, 0);
-  // Prepare is Scientist-only.
-  let t = createGame({ playerCount: 3 }, 'prep');
-  t = passAllUntil(t, (x) => x.phase === 'night');
-  const pid = t.activePlayerId;
-  assert.equal(dispatch(t, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'prepare' }).error.code, 'IGOR_NOT_PERMITTED');
+  assert.deepEqual(announced.playerIds, ['p1']);
+  assert.equal(player(s, 'p2').hand.length, 6, "an unprepared player's parts are untouched");
 });
 
 test('Prometheus wins at dawn with the only stable Creature', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
+  const s = resurrectionGame(STABLE, (st) => {
     st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
-    fullBody(st, 'p1');
+    giveBody(st, 'p1');
   });
   assert.equal(s.result.reason, 'objective');
   assert.deepEqual(s.result.winners, ['p1']);
-  assert.ok(!Object.values(s.workers).some((w) => w.kind === 'creature'), 'stable Creatures never become workers');
+  assert.equal(s.suspicion, 0, 'a stable Creature adds no suspicion');
 });
 
 test('a lone stable Creature owned by a non-Prometheus ends the game with everyone losing', () => {
   for (const owner of ['visionary', 'inquisitor', 'unleasher']) {
-    let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
+    const s = resurrectionGame(STABLE, (st) => {
       const others = ['prometheus', 'inquisitor', 'unleasher', 'visionary'].filter((o) => o !== owner);
       st.objectives = { p1: owner, p2: others[0], p3: others[1] };
-      fullBody(st, 'p1');
+      giveBody(st, 'p1');
     });
     assert.equal(s.result.reason, 'objective', owner);
     assert.deepEqual(s.result.winners, [], owner);
@@ -502,17 +566,23 @@ test('a lone stable Creature owned by a non-Prometheus ends the game with everyo
   }
 });
 
-test('Visionary wins when two Creatures stabilize in one round', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
+test('Visionary wins when two Creatures stabilize in one round; two Prometheus both lose', () => {
+  let s = resurrectionGame(STABLE, (st) => {
     st.objectives = { p1: 'unleasher', p2: 'inquisitor', p3: 'visionary' };
-    fullBody(st, 'p1'); fullBody(st, 'p2');
+    giveBody(st, 'p1'); giveBody(st, 'p2');
   });
-  assert.equal(s.result.reason, 'objective');
   assert.deepEqual(s.result.winners, ['p3']);
+  s = resurrectionGame(STABLE, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'prometheus', p3: 'inquisitor' };
+    st.unseenObjectives = ['visionary'];
+    giveBody(st, 'p1'); giveBody(st, 'p2');
+  });
+  assert.deepEqual(s.result.winners, []);
+  assert.equal(s.result.collectiveDefeat, true);
 });
 
 test('mob forms at the threshold; Inquisitor wins', () => {
-  let s = createGame({ playerCount: 3, suspicionMax: 1, actions: { graves: { suspicion: { die: 6, bands: [{ max: 6, amount: 1 }] } } } }, 'mob');
+  let s = createGame({ playerCount: 3, suspicionMax: 1 }, 'mob');
   s.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'visionary' };
   s = passAllUntil(s, (x) => x.phase === 'night');
   const pid = s.activePlayerId;
@@ -522,37 +592,157 @@ test('mob forms at the threshold; Inquisitor wins', () => {
   assert.ok(s.events.some((e) => e.type === 'SCIENTISTS_ARRESTED'));
 });
 
-test('resurrection rolls are fully itemised and consistent', () => {
-  let s = resurrectionGame({}, (st) => {
-    fullBody(st, 'p1', { arm1: 'labourer_arm', arm2: 'damaged_arm', leg1: 'frail_leg', chest: 'robust_chest', head: 'criminal_brain' });
-    st.players[0].research = ['galvanism', 'philosophy'];
-  });
-  const rolled = s.events.find((e) => e.type === 'RESURRECTION_ROLLED');
-  const v = rolled.attributes.vitality;
-  assert.deepEqual(v.dice.map((d) => d.source.kind === 'base' ? 'base' : d.source.slot || d.source.researchType), ['base', 'arm1', 'arm2', 'chest', 'galvanism']);
-  assert.deepEqual(v.fixed.map((f) => f.amount), [-2]);
-  assert.equal(v.score, v.dice.reduce((a, d) => a + d.value, 0) - 2);
-  const h = rolled.attributes.humanity;
-  assert.equal(h.threshold, 23);
-  assert.deepEqual(h.fixed.map((f) => f.amount), [3]);
-  for (const a of Object.values(rolled.attributes)) assert.equal(a.success, a.score >= a.threshold);
+// ---------------------------------------------------------------------------
+// Control chain (spec 025)
+// ---------------------------------------------------------------------------
+
+test('everyone needs a garrisoned Igor to subdue, the creator included; Neural Conditioning waives it for your own', () => {
+  const s = createGame({ playerCount: 3 }, 'garrison-rule');
+  garrison(s, 'p2');
+  assert.equal(canSubdue(s, 'p1', 'p1'), false, 'the creator needs a garrison too');
+  assert.equal(canSubdue(s, 'p2', 'p1'), true);
+  assert.equal(canSubdue(s, 'p3', 'p1'), false);
+  giveScience(s, 'p1', 'neurology');
+  assert.equal(canSubdue(s, 'p1', 'p1'), true, 'Neural Conditioning: your own monster without a garrison');
+  assert.equal(canSubdue(s, 'p1', 'p2'), false, 'but not anyone else\'s');
+  assert.equal(getPublicView(s).players[0].subdueOwn, true);
 });
 
-test('estimateResurrection matches base odds', () => {
-  const s = createGame({ playerCount: 3 }, 'odds');
-  fullBody(s, 'p1');
-  const o = estimateResurrection(s, 'p1');
-  assert.ok(Math.abs(o.attributes.vitality.success - 0.05) < 1e-9, 'a bare d20 reaches Vitality 20 only on a 20');
-  assert.ok(Math.abs(o.attributes.humanity.success - 0.05) < 1e-9, 'a bare d20 reaches Humanity 20 only on a 20');
-  assert.ok(!('control' in o.attributes));
-  assert.ok(Math.abs(o.pStable - 0.0025) < 1e-9);
-  assert.ok(Math.abs(o.pMonster - 0.0475) < 1e-9);
-  assert.ok(Math.abs(o.pFailed + o.pStable + o.pMonster - 1) < 1e-9);
-  assert.equal(estimateResurrection(s, 'p2'), null);
-  // Brain of a scholar (+1d6 Humanity): d20 + d6 >= 20 has probability 27/120.
-  fullBody(s, 'p2', { head: 'scholar_brain' });
-  assert.ok(Math.abs(estimateResurrection(s, 'p2').attributes.humanity.success - 27 / 120) < 1e-9);
+test('the chain runs clockwise from the creator over garrisoned players; each decline adds 2; a subdue destroys it, gives nothing and adds 1', () => {
+  let s = resurrectionGame({ ...MONSTERS, control: { threshold: -100 } }, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'prometheus', p3: 'inquisitor' };
+    garrison(st, 'p1', 'p2', 'p3');
+    giveBody(st, 'p2');
+  });
+  assert.deepEqual(s.control.chain, ['p2', 'p3', 'p1']);
+  assert.equal(s.activePlayerId, 'p2', 'the garrisoned creator decides first');
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
+  assert.equal(s.suspicion, 2);
+  assert.equal(s.activePlayerId, 'p3');
+  const handBefore = player(s, 'p3').hand.length;
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: true });
+  assert.equal(s.suspicion, 3);
+  assert.equal(player(s, 'p3').hand.length, handBefore, 'the subduer gains nothing');
+  assert.equal(s.creatures['creature-1'].status, 'destroyed');
+  assert.equal(s.resurrections[0].outcome, 'subdued');
+  assert.equal(s.resurrections[0].subduedBy, 'p3');
+  assert.equal(s.round, 2, 'the game goes on');
 });
+
+test('a control roll is d20 + control science against 20; a failure adds nothing and passes the monster on', () => {
+  let s = resurrectionGame({ ...MONSTERS, control: { threshold: 100 } }, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'unleasher', p3: 'inquisitor' };
+    garrison(st, 'p1', 'p3');
+    giveScience(st, 'p3', 'restraint', 'mesmerism');
+    giveBody(st, 'p1');
+  });
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p1', subdue: true });
+  const roll = s.events.filter((e) => e.type === 'CONTROL_ROLLED').pop();
+  assert.equal(roll.success, false);
+  assert.equal(s.suspicion, 0);
+  assert.ok(s.events.some((e) => e.type === 'CONTROL_SKIPPED' && e.playerId === 'p2'), 'ungarrisoned p2 is skipped');
+  assert.equal(s.activePlayerId, 'p3');
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: true });
+  const r3 = s.events.filter((e) => e.type === 'CONTROL_ROLLED').pop();
+  assert.deepEqual(r3.dice.map((d) => d.die), [20, 6]);
+  assert.deepEqual(r3.fixed.map((f) => f.amount), [3]);
+  assert.equal(r3.score, r3.dice[0].result + r3.dice[1].result + 3);
+  assert.equal(s.result.reason, 'unleashed');
+  // Exact odds: d20 alone 5%; d20 + 3 + d6 >= 20 is 45/120.
+  const t = createGame({ playerCount: 3 }, 'control-odds');
+  assert.ok(Math.abs(estimateControl(t, 'p1') - 0.05) < 1e-9);
+  giveScience(t, 'p1', 'restraint', 'mesmerism');
+  assert.ok(Math.abs(estimateControl(t, 'p1') - 45 / 120) < 1e-9);
+  assert.ok(Math.abs(getPublicView(t).players[0].controlChance - 45 / 120) < 1e-9);
+});
+
+test('if a decline brings the mob, the monster is unleashed: the Unleasher wins, not the Inquisitor', () => {
+  let s = resurrectionGame(MONSTERS, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'unleasher', p3: 'inquisitor' };
+    garrison(st, 'p1');
+    st.suspicion = 8;
+    giveBody(st, 'p1');
+  });
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p1', subdue: false });
+  assert.equal(s.result.reason, 'unleashed');
+  assert.deepEqual(s.result.winners, ['p2']);
+  assert.ok(s.events.some((e) => e.type === 'MOB_FORMED' && e.overwhelmed));
+});
+
+test('a subdue that forms the mob is an ordinary mob, won by the Inquisitor', () => {
+  let s = resurrectionGame({ ...MONSTERS, control: { threshold: -100 } }, (st) => {
+    st.objectives = { p1: 'prometheus', p2: 'unleasher', p3: 'inquisitor' };
+    garrison(st, 'p1');
+    st.suspicion = 9;
+    giveBody(st, 'p1');
+  });
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p1', subdue: true });
+  assert.equal(s.result.reason, 'mob');
+  assert.deepEqual(s.result.winners, ['p3']);
+});
+
+test('resolution continues with the next attempt after a monster is subdued', () => {
+  let s = resurrectionGame({ ...MONSTERS, control: { threshold: -100 } }, (st) => {
+    garrison(st, 'p1', 'p2', 'p3');
+    giveBody(st, 'p1'); giveBody(st, 'p2');
+  });
+  const order = s.resolution.order;
+  assert.equal(order.length, 2);
+  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: true });
+  assert.ok(s.control, 'the second attempt made a monster too');
+  assert.equal(s.control.creatorId, order[1]);
+  assert.equal(dispatch(createGame({}, 'nm'), { type: 'SUBDUE_MONSTER', playerId: 'p1', subdue: true }).ok, false, 'no monster, no subdue');
+});
+
+test('garrison is a day action for Igors only, capacity 3 at every player count, free, and lasts until dawn', () => {
+  for (const n of [3, 6]) assert.equal(getPublicView(createGame({ playerCount: n }, 'g')).capacities.garrison, 3);
+  let s = createGame({ playerCount: 3 }, 'garrison');
+  const pid = s.activePlayerId;
+  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'garrison' }).error.code, 'SCIENTIST_NOT_PERMITTED');
+  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: `igor-${pid}-1`, actionId: 'garrison' });
+  assert.equal(player(s, pid).money, 3);
+  assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, true);
+  s = passAllUntil(s, (x) => x.round === 2);
+  assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, false);
+});
+
+test('heuristic: the Unleasher never subdues; the Inquisitor subdues rather than let a decline bring the mob', () => {
+  const decide = (objective, suspicion) => {
+    const s = resurrectionGame(MONSTERS, (st) => {
+      st.objectives = { p1: 'prometheus', p2: 'prometheus', p3: 'prometheus' };
+      garrison(st, 'p1', 'p2', 'p3');
+      st.suspicion = suspicion;
+      giveBody(st, 'p1');
+    });
+    const pid = s.activePlayerId;
+    s.objectives[pid] = objective;
+    return heuristicPolicy('h', { noise: 0 }).decide({ playerId: pid, view: getPlayerView(s, pid), legal: enumerateLegalCommands(s, pid) }).subdue;
+  };
+  assert.equal(decide('unleasher', 0), false);
+  assert.equal(decide('inquisitor', 8), true);
+  assert.equal(decide('prometheus', 0), true, 'a Prometheus subdues its own monster');
+});
+
+test('heuristic: suspicion is shared, so only danger or idle money justifies charity; the Inquisitor blocks a scarce charity slot', () => {
+  const decideDay = (objective, suspicion, config = {}) => {
+    const s = createGame({ playerCount: 3, startingMoney: 8, ...config }, 'h-charity');
+    const pid = s.activePlayerId;
+    s.objectives[pid] = objective;
+    s.suspicion = suspicion;
+    const legal = enumerateLegalCommands(s, pid).filter((c) => c.actionId === 'charity' || c.actionId === 'medicine');
+    return heuristicPolicy('h', { noise: 0 }).decide({ playerId: pid, view: getPlayerView(s, pid), legal });
+  };
+  assert.equal(decideDay('prometheus', 3).actionId, 'medicine', 'no charity while the mob is far off');
+  assert.equal(decideDay('prometheus', 9).actionId, 'charity', 'charity when the mob is near');
+  const scarce = { actions: { charity: { cost: 1, reduction: 1, maxUnits: 4, capacity: 1 } } };
+  const inq = decideDay('inquisitor', 6, scarce);
+  assert.equal(inq.actionId, 'charity', 'the Inquisitor takes the only charity slot');
+  assert.equal(inq.choices.units, 1, 'and spends as little as possible');
+});
+
+// ---------------------------------------------------------------------------
+// Views, saves and tooling
+// ---------------------------------------------------------------------------
 
 test('player views hide secrets', () => {
   const s = createGame({}, 'views');
@@ -568,6 +758,15 @@ test('player views hide secrets', () => {
   const pub = getPublicView(s);
   assert.ok(!pub.events.some((e) => e.type === 'OBJECTIVE_ASSIGNED'));
   assert.ok(!('private' in pub));
+});
+
+test('views hide the order of both decks but show the discard pile', () => {
+  const s = createGame({}, 'views-decks');
+  const v = getPublicView(s);
+  assert.ok(!('partsDeck' in v) && !('deck' in v));
+  assert.equal(v.partsDeckCount, 60);
+  assert.equal(v.deckCount, 27);
+  assert.deepEqual(v.partsDiscard, []);
 });
 
 test('serialize/deserialize round-trips; replay reproduces; tampering is detected', () => {
@@ -586,6 +785,16 @@ test('serialize/deserialize round-trips; replay reproduces; tampering is detecte
     const legal = enumerateLegalCommands(back, back.activePlayerId);
     assert.ok(dispatch(back, legal[0]).ok);
   }
+});
+
+test('saves made under different default rules still load and keep their rules', () => {
+  const legacy = replay({ config: { playerCount: 3, resurrection: { thresholds: { vitality: 8, humanity: 18 } } }, seed: 'old-rules', commands: [] });
+  legacy.configOverrides = { playerCount: 3 };
+  let st = legacy;
+  for (let i = 0; i < 30 && !st.result; i++) st = dispatch(st, enumerateLegalCommands(st, st.activePlayerId)[0]).state;
+  const back = deserialize(serialize(st));
+  assert.equal(back.config.resurrection.thresholds.humanity, 18);
+  assert.equal(serialize(back), serialize(st));
 });
 
 test('stale seq prevents duplicate execution', () => {
@@ -607,11 +816,18 @@ test('every enumerated legal command is accepted', () => {
 
 test('batch simulations terminate without invalid commands', () => {
   for (const policies of ['random', 'heuristic', ['heuristic', 'random']]) {
-    // The rules always reach an end; the hoarding stop (a runner choice) is off here.
-    const { results } = runBatch({ games: 15, policies, includeCommands: false, seedPrefix: `t-${policies}`, hoardLimit: null });
+    // There is no forced ending (spec 020). Random play, which rarely builds
+    // a body and often attends vespers, may run to the round budget. A bot
+    // that hoards (an Inquisitor starving the finite parts deck, say) is
+    // stopped and flagged by the runner (spec 014). Either is reported as
+    // truncated, never as a result; nothing else may stall.
+    const { results } = runBatch({ games: 15, policies, includeCommands: false, seedPrefix: `t-${policies}` });
     for (const r of results) {
       assert.equal(r.invalidCommands, 0);
-      assert.equal(r.terminal, true);
+      if (!r.terminal) {
+        assert.equal(r.truncationReason, policies === 'random' ? 'round_budget' : 'hoarding', r.seed);
+        continue;
+      }
       assert.ok(['mob', 'unleashed', 'objective'].includes(r.terminalReason));
     }
   }
@@ -621,7 +837,7 @@ test('batch simulations terminate without invalid commands', () => {
   assert.equal(t.truncationReason, 'command_budget');
 });
 
-test('runner stops and flags a bot that hoards money or loose parts', () => {
+test('runner stops and flags a bot that hoards money or parts', () => {
   // A tiny limit trips at once; the summary names who, what and their objective.
   const t = runGame({ seed: 'hoard', policies: 'heuristic', hoardLimit: { money: 3, parts: 25 } }).summary;
   assert.equal(t.truncated, true);
@@ -649,232 +865,6 @@ test('engine source has no DOM, storage, timers or unseeded randomness', () => {
   }
 });
 
-test('two Prometheus players stabilizing in one round both lose; game ends without Visionary', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
-    st.objectives = { p1: 'prometheus', p2: 'prometheus', p3: 'inquisitor' };
-    st.unseenObjectives = ['visionary'];
-    fullBody(st, 'p1'); fullBody(st, 'p2');
-  });
-  assert.equal(s.result.reason, 'objective');
-  assert.deepEqual(s.result.winners, []);
-  assert.equal(s.result.collectiveDefeat, true);
-});
-
-test('Prometheus and another player stabilizing together: only the Visionary wins', () => {
-  let s = resurrectionGame({ resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
-    st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
-    fullBody(st, 'p1'); fullBody(st, 'p2');
-  });
-  assert.deepEqual(s.result.winners, ['p3']);
-});
-
-test('saves made under different default rules still load and keep their rules', () => {
-  // Simulate a save from before a balance change by giving it non-default thresholds
-  // in its resolved config while its overrides stay empty.
-  const legacy = replay({ config: { playerCount: 3, resurrection: { thresholds: { vitality: 18, humanity: 18 } } }, seed: 'old-rules', commands: [] });
-  legacy.configOverrides = { playerCount: 3 };
-  let st = legacy;
-  for (let i = 0; i < 30 && !st.result; i++) st = dispatch(st, enumerateLegalCommands(st, st.activePlayerId)[0]).state;
-  const back = deserialize(serialize(st));
-  assert.equal(back.config.resurrection.thresholds.humanity, 18);
-  assert.equal(serialize(back), serialize(st));
-});
-
-// ---------------------------------------------------------------------------
-// Control attempts and monsters (spec 025)
-// ---------------------------------------------------------------------------
-
-// Monsters every time, and control rolls that always succeed (see the control-roll tests).
-const MONSTER = { resurrection: { thresholds: { vitality: -100, humanity: 100 } }, control: { threshold: -100 } };
-const garrison = (st, ...pids) => { st.occupancy.day.garrison = pids.map(sci); };
-const player = (s, pid) => s.players.find((p) => p.id === pid);
-
-test('defaults: thresholds 20, suspicion track 10, three control attempts each', () => {
-  const s = createGame({}, 'defaults');
-  assert.deepEqual(s.config.resurrection.thresholds, { vitality: 20, humanity: 20 });
-  for (const n of [3, 4, 5, 6]) assert.equal(createGame({ playerCount: n }, 'susp').config.suspicionMax, 10, 'the same at every player count');
-  assert.equal(createGame({ playerCount: 6, suspicionMax: 12 }, 'susp').config.suspicionMax, 12, 'it is configurable');
-  for (const p of s.players) assert.equal(controlAttempts(s, p.id), 3);
-  assert.equal(getPublicView(s).players[0].controlAttempts, 3);
-});
-
-test('creator may subdue their own monster: destroyed, 3 parts salvaged, +1 suspicion, game continues', () => {
-  let s = resurrectionGame(MONSTER, (st) => fullBody(st, 'p2'));
-  assert.equal(s.phase, 'resolution');
-  assert.equal(s.activePlayerId, 'p2');
-  assert.deepEqual(getLegalCommands(s, 'p2').map((c) => c.subdue), [true, false]);
-  assert.deepEqual(getLegalCommands(s, 'p1'), []);
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
-  assert.equal(controlAttempts(s, 'p2'), 2);
-  assert.equal(player(s, 'p2').loose.length, 3);
-  assert.equal(s.suspicion, 1);
-  assert.equal(s.suspicionHistory.at(-1).reason, 'monster_subdued');
-  assert.equal(s.resurrections[0].outcome, 'subdued');
-  assert.equal(s.resurrections[0].subduedBy, 'p2');
-  assert.equal(s.creatures[s.resurrections[0].creatureId].status, 'destroyed');
-  assert.equal(s.result, null);
-  assert.equal(s.round, 2, 'a subdued monster is not stable, so the game continues past dawn');
-});
-
-test('the chain runs clockwise from the creator; each decline adds 2 suspicion; the subduer takes the parts', () => {
-  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p2'); garrison(st, 'p1', 'p3'); });
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
-  assert.equal(s.suspicion, 2);
-  assert.equal(s.activePlayerId, 'p3');
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
-  assert.equal(s.suspicion, 4);
-  assert.equal(s.activePlayerId, 'p1');
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p1', subdue: true });
-  assert.equal(player(s, 'p1').loose.length, 3);
-  assert.equal(player(s, 'p2').loose.length, 0);
-  assert.equal(controlAttempts(s, 'p1'), 2);
-  assert.equal(controlAttempts(s, 'p2'), 3);
-  assert.deepEqual(s.resurrections[0].controlDecisions.map(({ playerId, subdue }) => ({ playerId, subdue })), [
-    { playerId: 'p2', subdue: false }, { playerId: 'p3', subdue: false }, { playerId: 'p1', subdue: true },
-  ]);
-  assert.equal(s.result, null);
-});
-
-test('players with no control attempts are skipped without suspicion', () => {
-  let s = resurrectionGame(MONSTER, (st) => {
-    fullBody(st, 'p2');
-    garrison(st, 'p1', 'p3');
-    st.players.find((p) => p.id === 'p3').controlAttemptsUsed = 3;
-  });
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
-  assert.equal(s.activePlayerId, 'p1');
-  assert.equal(s.suspicion, 2);
-  assert.ok(s.events.some((e) => e.type === 'CONTROL_SKIPPED' && e.playerId === 'p3'));
-});
-
-test('a monster nobody can subdue is unleashed immediately', () => {
-  let s = resurrectionGame(MONSTER, (st) => {
-    st.objectives = { p1: 'prometheus', p2: 'unleasher', p3: 'visionary' };
-    fullBody(st, 'p2');
-    for (const p of st.players) p.controlAttemptsUsed = 3;
-  });
-  assert.equal(s.result.reason, 'unleashed');
-  assert.deepEqual(s.result.winners, ['p2']);
-  assert.equal(s.suspicion, 0);
-});
-
-test('if a decline brings the mob, the monster is unleashed: the Unleasher wins, not the Inquisitor', () => {
-  let s = resurrectionGame({ ...MONSTER, suspicionMax: 3 }, (st) => {
-    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
-    fullBody(st, 'p2');
-    garrison(st, 'p1', 'p3');
-  });
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
-  assert.equal(s.result, null);
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
-  assert.equal(s.suspicion, 3);
-  assert.equal(s.result.reason, 'unleashed');
-  assert.deepEqual(s.result.winners, ['p3']);
-  assert.ok(s.events.some((e) => e.type === 'MOB_FORMED' && e.overwhelmed));
-});
-
-test('resolution continues with the next commitment after a monster is subdued', () => {
-  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p1'); fullBody(st, 'p2'); garrison(st, 'p1', 'p2'); });
-  const order = s.resolution.order;
-  assert.equal(s.activePlayerId, order[0]);
-  assert.equal(player(s, order[1]).body.head !== null, true, 'the second attempt waits for the chain');
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: order[0], subdue: true });
-  assert.equal(s.activePlayerId, order[1], 'the second monster starts its own chain');
-  assert.equal(player(s, order[1]).body.head, null);
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: order[1], subdue: true });
-  assert.equal(s.resurrections.length, 2);
-  assert.equal(s.round, 2);
-});
-
-test('Neural Conditioning grants a control attempt per effective copy, including via publication', () => {
-  const s = createGame({ playerCount: 3 }, 'neuro');
-  player(s, 'p1').research = ['neurology'];
-  assert.equal(controlAttempts(s, 'p1'), 4);
-  assert.equal(controlAttempts(s, 'p2'), 3);
-  s.publications.push({ playerId: 'p1', type: 'neurology', round: 1 });
-  assert.equal(controlAttempts(s, 'p1'), 4, 'own publication does not count again');
-  assert.equal(controlAttempts(s, 'p2'), 4);
-});
-
-test('SUBDUE_MONSTER is rejected outside a control chain', () => {
-  const s = createGame({ playerCount: 3 }, 'nosubdue');
-  assert.equal(dispatch(s, { type: 'SUBDUE_MONSTER', playerId: s.activePlayerId, subdue: true }).error.code, 'WRONG_PHASE');
-});
-
-test('heuristic: the Inquisitor subdues rather than let a decline bring the mob', () => {
-  const decide = (suspicionMax) => {
-    let s = resurrectionGame({ ...MONSTER, suspicionMax }, (st) => {
-      st.objectives = { p1: 'prometheus', p2: 'inquisitor', p3: 'visionary' };
-      fullBody(st, 'p2');
-      garrison(st, 'p1', 'p3');
-    });
-    assert.equal(s.activePlayerId, 'p2');
-    return heuristicPolicy('h').decide({ playerId: 'p2', view: getPlayerView(s, 'p2'), legal: enumerateLegalCommands(s, 'p2') }).subdue;
-  };
-  assert.equal(decide(10), false, 'declines while the mob is out of reach');
-  assert.equal(decide(2), true, 'subdues when a decline would form the mob');
-});
-
-test('heuristic: non-Unleashers subdue when last in the chain; Unleashers never do', () => {
-  for (const objective of ['prometheus', 'visionary', 'inquisitor', 'unleasher']) {
-    let s = resurrectionGame(MONSTER, (st) => {
-      st.objectives = { p1: objective, p2: 'prometheus', p3: 'prometheus' };
-      fullBody(st, 'p2');
-      garrison(st, 'p1', 'p3');
-    });
-    s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
-    s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
-    assert.equal(s.activePlayerId, 'p1');
-    const view = getPlayerView(s, 'p1');
-    const cmd = heuristicPolicy('h').decide({ playerId: 'p1', view, legal: enumerateLegalCommands(s, 'p1') });
-    assert.equal(cmd.subdue, objective !== 'unleasher', objective);
-  }
-});
-
-test('only garrisoned players may subdue others\' monsters; the creator needs no garrison', () => {
-  let s = resurrectionGame(MONSTER, (st) => { fullBody(st, 'p2'); garrison(st, 'p1'); });
-  assert.equal(s.activePlayerId, 'p2', 'the creator decides without a garrison worker');
-  assert.deepEqual(getPublicView(s).control.upcoming, ['p1']);
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
-  assert.equal(s.activePlayerId, 'p1', 'p3 has nobody in the garrison and is skipped');
-  assert.ok(s.events.some((e) => e.type === 'CONTROL_SKIPPED' && e.playerId === 'p3' && e.reason === 'not_garrisoned'));
-  assert.equal(s.suspicion, 2, 'the skipped player adds no suspicion');
-});
-
-test('garrison is a day action for Igors only, capacity 3 at every player count, and lasts until dawn', () => {
-  const g = createGame({}, 'garrison').config.actions.garrison;
-  assert.deepEqual([g.phase, g.igor, g.scientist, g.capacity], ['day', true, false, 3]);
-  let s = createGame({ playerCount: 3 }, 'garrison2');
-  const pid = s.activePlayerId;
-  assert.equal(dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'garrison' }).error.code, 'SCIENTIST_NOT_PERMITTED');
-  const igor = `igor-${pid}-1`;
-  s.workers[igor] = { id: igor, kind: 'igor', ownerId: pid, active: true, usedThisRound: false };
-  s.workerOrder.push(igor);
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: igor, actionId: 'garrison' });
-  assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, true);
-  s = passAllUntil(s, (x) => x.round === 2);
-  assert.equal(getPublicView(s).players.find((p) => p.id === pid).garrisoned, false);
-});
-
-test('a stable Creature adds no suspicion; a subdue that forms the mob wins for the Inquisitor', () => {
-  let s = resurrectionGame({ suspicionMax: 1, resurrection: { thresholds: { vitality: -100, humanity: -100 } } }, (st) => {
-    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
-    fullBody(st, 'p2');
-  });
-  assert.equal(s.suspicion, 0);
-  assert.equal(s.result.reason, 'objective');
-  assert.deepEqual(s.result.winners, ['p2']);
-  let m = resurrectionGame({ ...MONSTER, suspicionMax: 1 }, (st) => {
-    st.objectives = { p1: 'inquisitor', p2: 'prometheus', p3: 'unleasher' };
-    fullBody(st, 'p2');
-  });
-  assert.equal(m.suspicion, 0, 'creating a monster adds nothing by itself');
-  m = ok(m, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
-  assert.equal(m.result.reason, 'mob');
-  assert.deepEqual(m.result.winners, ['p1']);
-  assert.equal(m.resurrections[0].outcome, 'subdued');
-});
-
 test('six players are supported', () => {
   const { results } = runBatch({ games: 3, policies: 'heuristic', config: { playerCount: 6 }, seedPrefix: 'six', includeCommands: false });
   for (const r of results) { assert.equal(r.playerCount, 6); assert.equal(r.invalidCommands, 0); }
@@ -891,46 +881,6 @@ test('batch aggregate reports win rate per dealt role', () => {
   }
 });
 
-test('a control attempt rolls d20 + research against 20; a failed roll spends the attempt, adds no suspicion and passes the monster on', () => {
-  let s = resurrectionGame({ ...MONSTER, control: { threshold: 100 } }, (st) => { fullBody(st, 'p2'); garrison(st, 'p1', 'p3'); });
-  const r = dispatch(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
-  s = r.state;
-  const roll = r.events.find((e) => e.type === 'CONTROL_ROLLED');
-  assert.equal(roll.success, false);
-  assert.equal(roll.dice[0].die, 20);
-  assert.equal(controlAttempts(s, 'p2'), 2, 'the attempt is spent');
-  assert.equal(s.suspicion, 0, 'a failed roll adds no suspicion');
-  assert.equal(s.activePlayerId, 'p3');
-  assert.equal(s.creatures[s.control.creatureId].status, 'monster');
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: false });
-  assert.equal(s.suspicion, 2, 'declining to try still adds 2');
-});
-
-test('control research: Mesmerism adds 1d6 and Restraining Apparatus +4 per effective copy', () => {
-  const s = createGame({ playerCount: 3 }, 'control-odds');
-  assert.ok(Math.abs(estimateControl(s, 'p1') - 0.05) < 1e-9, 'a bare d20 succeeds only on 20');
-  player(s, 'p1').research = ['mesmerism', 'restraint'];
-  // d20 + d6 >= 16 has probability 51/120.
-  assert.ok(Math.abs(estimateControl(s, 'p1') - 51 / 120) < 1e-9);
-  s.publications.push({ playerId: 'p1', type: 'restraint', round: 1 });
-  // p2 gets one copy of Restraining Apparatus through the publication: d20 >= 16.
-  assert.ok(Math.abs(estimateControl(s, 'p2') - 0.25) < 1e-9);
-  let t = resurrectionGame({ ...MONSTER, control: { threshold: 20 } }, (st) => {
-    fullBody(st, 'p2');
-    st.players.find((p) => p.id === 'p2').research = ['mesmerism', 'restraint'];
-  });
-  const r = dispatch(t, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
-  const roll = r.events.find((e) => e.type === 'CONTROL_ROLLED');
-  assert.deepEqual(roll.dice.map((d) => d.source.kind === 'base' ? 'base' : d.source.researchType), ['base', 'mesmerism']);
-  assert.deepEqual(roll.fixed.map((f) => f.amount), [4]);
-  assert.equal(roll.score, roll.dice.reduce((a, d) => a + d.value, 0) + 4);
-  assert.equal(roll.success, roll.score >= 20);
-});
-
-// ---------------------------------------------------------------------------
-// Parameter sweeps (spec 016)
-// ---------------------------------------------------------------------------
-
 test('sweep samplers: one-at-a-time, grid, random and Latin hypercube', async () => {
   const { samplePoints, paramValues } = await import('../src/sim/sweep.js');
   assert.deepEqual(paramValues({ min: 2, max: 6, step: 2 }), [2, 4, 6]);
@@ -946,15 +896,15 @@ test('sweep samplers: one-at-a-time, grid, random and Latin hypercube', async ()
 
 test('sweep points become validated configs; linked paths share a value', async () => {
   const { configForPoint } = await import('../src/sim/sweep.js');
-  const cfg = configForPoint({ startingMoney: 5 }, { 'actions.graves.suspicion.bands.0.max': 2, 'actions.research.capacity.5|actions.sell.capacity.5': 4 }, 6);
+  const cfg = configForPoint({ startingMoney: 5 }, { 'actions.graves.suspicion': 2, 'actions.research.capacity.5|actions.sell.capacity.5': 4, 'partVariants.ordinary_arm.copies': 7 }, 6);
   assert.equal(cfg.startingMoney, 5);
   assert.equal(cfg.playerCount, 6);
-  assert.deepEqual(cfg.actions.graves.suspicion, { die: 6, bands: [{ max: 2, amount: 1 }] });
+  assert.equal(cfg.actions.graves.suspicion, 2);
   assert.equal(cfg.actions.research.capacity[5], 4);
   assert.equal(cfg.actions.sell.capacity[5], 4);
-  assert.equal(createGame(cfg, 'x').config.actions.sell.capacity[5], 4);
+  assert.equal(createGame(cfg, 'x').partsDeck.filter((p) => p.variantId === 'ordinary_arm').length, 7);
   assert.throws(() => configForPoint({}, { 'actions.nope.gain': 1 }, 3), /does not exist/);
-  assert.throws(() => configForPoint({}, { 'actions.graves.suspicion.die': 7 }, 3), /supported die/);
+  assert.throws(() => configForPoint({}, { 'resurrection.baseDie': 7 }, 3), /supported die/);
 });
 
 test('sweep scoring penalises missed targets and explains why', async () => {
@@ -977,157 +927,6 @@ test('the cautious and bold heuristic styles play legal games', () => {
   for (const r of results) { assert.equal(r.invalidCommands, 0); assert.equal(r.terminal, true); }
 });
 
-test('heuristic: suspicion is shared, so only danger or idle money justifies charity; the Inquisitor blocks a scarce charity slot', () => {
-  const decideDay = (objective, suspicion, config = {}) => {
-    const s = createGame({ playerCount: 3, startingMoney: 8, ...config }, 'h-charity');
-    const pid = s.activePlayerId;
-    s.objectives[pid] = objective;
-    s.suspicion = suspicion;
-    const legal = enumerateLegalCommands(s, pid).filter((c) => c.actionId === 'charity' || c.actionId === 'medicine');
-    return heuristicPolicy('h', { noise: 0 }).decide({ playerId: pid, view: getPlayerView(s, pid), legal });
-  };
-  assert.equal(decideDay('prometheus', 3).actionId, 'medicine', 'no charity while the mob is far off');
-  assert.equal(decideDay('prometheus', 9).actionId, 'charity', 'charity when the mob is near');
-  assert.equal(decideDay('prometheus', 3, { startingMoney: 24 }).actionId, 'charity', 'money with nothing else to buy goes to charity, not more medicine');
-  const scarce = { actions: { charity: { cost: 1, reduction: 1, maxUnits: 4, capacity: 1 } } };
-  const inq = decideDay('inquisitor', 6, scarce);
-  assert.equal(inq.actionId, 'charity', 'the Inquisitor takes the only charity slot');
-  assert.equal(inq.choices.units, 1, 'and spends as little as possible');
-});
-
-test('experiment: a loose part and an installed part of the same variant are different choices', () => {
-  let s = createGame({ playerCount: 3 }, 'experiment-loose');
-  s = passAllUntil(s, (x) => x.phase === 'night');
-  const pid = s.activePlayerId;
-  const p = () => s.players.find((x) => x.id === pid);
-  fullBody(s, pid);
-  p().loose.push({ id: 'part-l1', variantId: 'ordinary_arm', type: 'arm' });
-  const singles = enumerateLegalCommands(s, pid).filter((c) => c.actionId === 'experiment' && c.choices.partIds.length === 1);
-  assert.ok(singles.some((c) => c.choices.partIds[0] === 'part-l1'), 'the loose arm');
-  assert.ok(singles.some((c) => c.choices.partIds[0] === p().body.arm1.id), 'an installed arm');
-  const r = dispatch(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'experiment', choices: { partIds: ['part-l1'] } });
-  assert.equal(r.ok, true);
-  assert.deepEqual(r.state.players.find((x) => x.id === pid).loose, []);
-  assert.ok(Object.values(r.state.players.find((x) => x.id === pid).body).every(Boolean), 'the body is untouched');
-});
-
-// Experimental research effect kinds (inert in the default configuration).
-test('research: stacks false caps effective copies at one; copies sets the deck count', () => {
-  const s = createGame({ playerCount: 3, research: { restraint: { stacks: false, copies: 2 } } }, 'special');
-  assert.equal(s.deck.length + s.market.length, 8 * 4 + 2);
-  player(s, 'p1').research = ['restraint'];
-  s.publications.push({ playerId: 'p2', type: 'restraint', round: 1 }, { playerId: 'p3', type: 'restraint', round: 1 });
-  assert.equal(researchCount(s, 'p1', 'restraint'), 3);
-  assert.equal(effectiveCopies(s, 'p1', 'restraint'), 1);
-  assert.ok(Math.abs(estimateControl(s, 'p1') - 0.25) < 1e-9, 'only one +4 applies');
-  assert.throws(() => createGame({ research: { x: { name: 'X', effects: [{ kind: 'bogus' }] } } }, 'bad'));
-});
-
-test('research: ferocity raises the control threshold against its holder\'s monsters', () => {
-  const research = { fury: { name: 'Fury', effects: [{ kind: 'ferocity', amount: 3 }] } };
-  let s = createGame({ playerCount: 3, research }, 'fury');
-  player(s, 'p2').research = ['fury'];
-  assert.equal(controlThreshold(s, 'p2'), 23);
-  assert.equal(controlThreshold(s, 'p1'), 20);
-  assert.equal(estimateControl(s, 'p1', 'p2'), 0, 'a bare d20 cannot reach 23');
-  s = resurrectionGame({ research, resurrection: { thresholds: { vitality: -100, humanity: 100 } } }, (st) => { fullBody(st, 'p2'); player(st, 'p2').research = ['fury']; });
-  const r = dispatch(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: true });
-  const roll = r.events.find((e) => e.type === 'CONTROL_ROLLED');
-  assert.equal(roll.threshold, 23);
-  assert.equal(roll.success, roll.score >= 23);
-});
-
-test('research: noGarrison lets its holder subdue rivals\' monsters without a garrison', () => {
-  const research = { hounds: { name: 'Bloodhounds', stacks: false, effects: [{ kind: 'noGarrison' }] } };
-  let s = resurrectionGame({ ...MONSTER, research }, (st) => { fullBody(st, 'p2'); player(st, 'p3').research = ['hounds']; });
-  assert.equal(canSubdueOthers(s, 'p3'), true);
-  assert.equal(canSubdueOthers(s, 'p1'), false);
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
-  assert.equal(s.activePlayerId, 'p3', 'p3 is not skipped');
-});
-
-test('research: a reroll ability retries a failed attribute once per game, and the odds include it', () => {
-  const research = { rod: { name: 'Lightning Rod', stacks: false, effects: [{ kind: 'reroll', attribute: 'vitality', uses: 1 }] } };
-  let s = createGame({ playerCount: 3, research }, 'rod');
-  fullBody(s, 'p1');
-  const before = estimateResurrection(s, 'p1').attributes.vitality.success;
-  player(s, 'p1').research = ['rod'];
-  const after = estimateResurrection(s, 'p1').attributes.vitality.success;
-  assert.ok(Math.abs(after - (1 - (1 - before) ** 2)) < 1e-9);
-  s = resurrectionGame({ research, resurrection: { thresholds: { vitality: 100, humanity: 100 } } }, (st) => { fullBody(st, 'p2'); player(st, 'p2').research = ['rod']; });
-  assert.equal(player(s, 'p2').rerollsUsed, 1);
-  assert.equal(s.events.filter((e) => e.type === 'ATTRIBUTE_REROLLED').length, 1);
-});
-
-test('research: rivalPrepared applies a resurrection effect once per rival who prepared', () => {
-  const research = { corr: { name: 'Correspondence', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'fixed', amount: 5, per: 'rivalPrepared' }] } };
-  const s = createGame({ playerCount: 3, research, resurrection: { thresholds: { vitality: 20, humanity: 30 } } }, 'corr');
-  fullBody(s, 'p1');
-  player(s, 'p1').research = ['corr'];
-  assert.equal(estimateResurrection(s, 'p1').attributes.humanity.success, 0, 'nobody else prepared: d20 cannot reach 30');
-  s.occupancy.night.prepare = [sci('p1'), sci('p2'), sci('p3')];
-  assert.ok(Math.abs(estimateResurrection(s, 'p1').attributes.humanity.success - 0.05) < 1e-9, 'two rivals: d20 + 10 >= 30');
-});
-
-test('research: researchCalm lowers suspicion when its holder conducts research', () => {
-  let s = createGame({ playerCount: 3, research: { lectures: { name: 'Public Lectures', effects: [{ kind: 'researchCalm', amount: 1 }] } } }, 'calm');
-  s.suspicion = 4;
-  const pid = s.activePlayerId;
-  const p = player(s, pid);
-  p.research = ['lectures']; p.money = 10;
-  const card = s.market.find((c) => c.type !== 'lectures');
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'research', choices: { researchCardId: card.id } });
-  assert.equal(s.suspicion, 3);
-});
-
-test('research: pursuit gives its holders one more control roll before a monster is unleashed', () => {
-  const research = { arctic: { name: 'Arctic Pursuit', stacks: false, effects: [{ kind: 'pursuit', uses: 1 }] } };
-  let s = resurrectionGame({ research, resurrection: { thresholds: { vitality: -100, humanity: 100 } }, control: { threshold: 100 } }, (st) => { fullBody(st, 'p2'); player(st, 'p3').research = ['arctic']; });
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p2', subdue: false });
-  assert.equal(s.suspicion, 2);
-  assert.equal(s.activePlayerId, 'p3', 'p3 is in the pursuit though not garrisoned');
-  assert.equal(getPublicView(s).control.pursuit, true);
-  s = ok(s, { type: 'SUBDUE_MONSTER', playerId: 'p3', subdue: true });
-  assert.equal(player(s, 'p3').pursuitsUsed, 1);
-  assert.equal(s.result.reason, 'unleashed', 'the one pursuit failed');
-});
-
-test('research: rivalHunters ferocity grows with each rival able to subdue; discoveryBoost worsens noticed discoveries', () => {
-  const research = { blood: { name: 'Transfusion', effects: [{ kind: 'ferocity', amount: 1, per: 'rivalHunters' }] } };
-  const s = createGame({ playerCount: 4, research }, 'hunters');
-  player(s, 'p1').research = ['blood'];
-  assert.equal(controlThreshold(s, 'p1'), 20);
-  garrison(s, 'p2', 'p3');
-  assert.equal(controlThreshold(s, 'p1'), 22);
-  let t = createGame({ playerCount: 3, research: { pamph: { name: 'Pamphlets', stacks: false, effects: [{ kind: 'discoveryBoost', amount: 1 }] } }, actions: { graves: { suspicion: { die: 6, bands: [{ max: 6, amount: 1 }] } } } }, 'pamph');
-  t = passAllUntil(t, (x) => x.phase === 'night');
-  const pid = t.activePlayerId;
-  player(t, pid).research = ['pamph'];
-  t = ok(t, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'graves' });
-  assert.equal(t.suspicion, 2);
-});
-
-test('default research: Parish Benefactor adds 1 to each charity unit; Moral Philosophy is +3', () => {
-  assert.equal(createGame({}, 'cat').config.research.philosophy.effects[0].amount, 3);
-  let s = createGame({ playerCount: 3 }, 'benefactor');
-  s.suspicion = 5;
-  const pid = s.activePlayerId;
-  player(s, pid).research = ['benefactor'];
-  s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'charity' });
-  assert.equal(s.suspicion, 2, 'charity -2, Benefactor -1');
-});
-
-test('research: per-hunter ferocity may skip the first hunters and never goes below zero', () => {
-  const research = { blood: { name: 'Transfusion', effects: [{ kind: 'ferocity', amount: 2, per: 'rivalHunters', beyond: 1 }] } };
-  const s = createGame({ playerCount: 4, research }, 'beyond');
-  player(s, 'p1').research = ['blood'];
-  assert.equal(controlThreshold(s, 'p1'), 20, 'no hunters');
-  garrison(s, 'p2');
-  assert.equal(controlThreshold(s, 'p1'), 20, 'the first hunter is free');
-  garrison(s, 'p2', 'p3', 'p4');
-  assert.equal(controlThreshold(s, 'p1'), 24);
-});
-
 test('objective deck: unleashers may be tiered by player count', () => {
   const cfg = { unleashers: { 3: 1, 6: 2 } };
   const count = (n) => createGame({ ...cfg, playerCount: n }, 'u').unseenObjectives.concat(Object.values(createGame({ ...cfg, playerCount: n }, 'u').objectives)).filter((o) => o === 'unleasher').length;
@@ -1135,43 +934,6 @@ test('objective deck: unleashers may be tiered by player count', () => {
   assert.equal(count(6), 2);
   const s = createGame({ ...cfg, playerCount: 6 }, 'u');
   assert.equal(Object.values(s.objectives).length + s.unseenObjectives.length, 7);
-});
-
-test('specimens draw every variant of the chosen type, and only that type', () => {
-  const seen = new Set();
-  for (let i = 0; i < 40; i++) {
-    let s = createGame({ playerCount: 3 }, `specimen-variants-${i}`);
-    const pid = s.activePlayerId;
-    s = ok(s, { type: 'PLACE_MEEPLE', playerId: pid, workerId: sci(pid), actionId: 'specimens', choices: { partTypes: ['head'] } });
-    const part = s.players.find((x) => x.id === pid).loose[0];
-    assert.equal(part.type, 'head');
-    seen.add(part.variantId);
-  }
-  const cfg = createGame({ playerCount: 3 }, 'cfg').config;
-  const heads = Object.keys(cfg.partVariants).filter((id) => cfg.partVariants[id].type === 'head');
-  assert.deepEqual([...seen].sort(), heads.sort());
-});
-
-test('heuristic: replaces harmful installed parts and never installs them', () => {
-  let s = createGame({ playerCount: 3 }, 'h-repair');
-  s = passAllUntil(s, (x) => x.phase === 'night');
-  const pid = s.activePlayerId;
-  s.objectives[pid] = 'prometheus';
-  const p = s.players.find((x) => x.id === pid);
-  fullBody(s, pid, { arm1: 'damaged_arm', head: 'criminal_brain' });
-  p.loose.push({ id: 'part-l1', variantId: 'ordinary_arm', type: 'arm' });
-  const decide = (filter) => heuristicPolicy('h', { noise: 0 }).decide({ playerId: pid, view: getPlayerView(s, pid), legal: enumerateLegalCommands(s, pid).filter(filter) });
-  const ex = decide((c) => c.actionId === 'experiment' || c.type === 'PASS_TURN');
-  assert.equal(ex.actionId, 'experiment', 'an experiment repairs the body');
-  assert.ok(ex.choices.partIds.includes(p.body.arm1.id) && ex.choices.partIds.includes(p.body.head.id), 'by discarding the harmful parts');
-  assert.ok(!ex.choices.partIds.includes('part-l1'), 'and keeping the replacement arm');
-
-  // With loose parts for a whole body, a harmful one is left out of assembly.
-  for (const slot of Object.keys(p.body)) p.body[slot] = null;
-  p.loose = ['ordinary_arm', 'ordinary_arm', 'ordinary_leg', 'ordinary_leg', 'ordinary_chest', 'criminal_brain']
-    .map((variantId, i) => ({ id: `part-a${i}`, variantId, type: s.config.partVariants[variantId].type }));
-  const asm = decide((c) => c.actionId === 'assemble' || c.type === 'PASS_TURN');
-  assert.ok(asm.type === 'PASS_TURN' || !asm.choices.partIds.includes('part-a5'), 'the criminal brain is not installed');
 });
 
 test('dispatch shares frozen configuration and log entries, and never mutates the state it was given', () => {
@@ -1184,8 +946,7 @@ test('dispatch shares frozen configuration and log entries, and never mutates th
     assert.equal(r.state.config, s.config);
     s = r.state;
   }
-  for (const log of [s.suspicionHistory, s.publications, s.resurrections]) for (const x of log) assert.ok(Object.isFrozen(x));
-  // Views share the frozen entries: a policy cannot change the game through them.
+  for (const log of [s.suspicionHistory, s.resurrections]) for (const x of log) assert.ok(Object.isFrozen(x));
   const view = getPlayerView(s, s.players[0].id);
   assert.throws(() => { view.config.suspicionMax = 99; });
   assert.throws(() => { view.suspicionHistory[0].value = 99; });

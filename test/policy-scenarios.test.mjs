@@ -20,8 +20,9 @@ const merge = (a, b) => {
   return out;
 };
 
-const GOOD_BODY = { arm1: 'labourer_arm', arm2: 'labourer_arm', leg1: 'athlete_leg', leg2: 'athlete_leg', chest: 'robust_chest', head: 'scholar_brain' };
-const POOR_BODY = { arm1: 'damaged_arm', arm2: 'damaged_arm', leg1: 'frail_leg', leg2: 'frail_leg', chest: 'scarred_chest', head: 'criminal_brain' };
+// A strong full set (Vitality 16) with a humane brain, and a weak one (Vitality −7).
+const GOOD_HAND = ['labourer_arm', 'labourer_arm', 'athlete_leg', 'athlete_leg', 'robust_chest', 'scholar_brain'];
+const POOR_HAND = ['labourer_arm', 'strangler_arm', 'athlete_leg', 'highwayman_leg', 'prizefighter_chest', 'criminal_brain']; // Vitality 16, Humanity hopeless
 
 function part(s, variantId) {
   s.counters.part += 1;
@@ -38,17 +39,15 @@ function pass(s) {
  * A game at the start of the given phase, with the active player (the
  * subject) set up as described. Rivals keep their starting position.
  */
-function scenario({ players = 4, seed = 'scenario', phase = 'day', config = {}, objective = 'prometheus', money, body, loose = [], research = [], suspicion, edit } = {}) {
+function scenario({ players = 4, seed = 'scenario', phase = 'day', config = {}, objective = 'prometheus', money, hand = [], science = [], suspicion, edit } = {}) {
   let s = createGame(merge(BASE, { playerCount: players, ...config }), seed);
   if (phase === 'night') while (s.phase !== 'night') s = pass(s);
   const pid = s.activePlayerId;
   const p = s.players.find((x) => x.id === pid);
   s.objectives[pid] = objective;
   if (money !== undefined) p.money = money;
-  if (body) for (const [slot, v] of Object.entries(body)) p.body[slot] = part(s, v);
-  for (const v of loose) p.loose.push(part(s, v));
-  for (const t of research) p.research.push(t);
-  p.research.sort();
+  for (const v of hand) p.hand.push(part(s, v));
+  science.forEach((t, i) => p.science.push({ id: `card-s${i}`, type: t }));
   if (suspicion !== undefined) s.suspicion = suspicion;
   if (edit) edit(s, p);
   return { s, pid, p };
@@ -83,28 +82,36 @@ const BUILDERS = ['heuristic', 'bt'];
 for (const policy of BUILDERS) {
   test(`${policy}: a Prometheus with a body likely to stabilize prepares a resurrection`, () => {
     // Humanity made easy, so the body is a strong attempt by any measure.
-    const { s, pid } = scenario({ phase: 'night', config: { resurrection: { thresholds: { humanity: 4 } } }, body: GOOD_BODY });
+    const { s, pid } = scenario({ phase: 'night', config: { resurrection: { thresholds: { humanity: 8 } } }, hand: GOOD_HAND });
     const { cmds } = playPhase(s, pid, policy);
     assert.equal(placed(cmds, 'prepare').length, 1, JSON.stringify(cmds));
   });
 
   test(`${policy}: a Prometheus with a hopeless body does not attempt it`, () => {
-    const { s, pid } = scenario({ phase: 'night', body: POOR_BODY });
+    const { s, pid } = scenario({ phase: 'night', hand: POOR_HAND });
     const { cmds } = playPhase(s, pid, policy);
     assert.equal(placed(cmds, 'prepare').length, 0, JSON.stringify(cmds));
   });
 
-  test(`${policy}: a Prometheus discards a harmful installed head when a better one is loose`, () => {
-    const { s, pid, p } = scenario({ phase: 'night', body: { ...GOOD_BODY, head: 'criminal_brain' }, loose: ['scholar_brain'] });
-    const bad = p.body.head.id;
+  test(`${policy}: a Prometheus prepares its most humane body, leaving a harmful head in hand`, () => {
+    const { s, pid, p } = scenario({ phase: 'night', config: { resurrection: { thresholds: { humanity: 8 } } }, hand: [...GOOD_HAND, 'criminal_brain'] });
+    const bad = p.hand[6].id;
     const { cmds } = playPhase(s, pid, policy);
-    assert.ok(placed(cmds, 'experiment').some((c) => c.choices.partIds.includes(bad)), JSON.stringify(cmds));
+    const prep = placed(cmds, 'prepare');
+    assert.equal(prep.length, 1, JSON.stringify(cmds));
+    assert.ok(!prep[0].choices.partIds.includes(bad), JSON.stringify(prep[0]));
   });
 
   test(`${policy}: with the mob one step away, a Prometheus takes no risky night action`, () => {
-    const { s, pid } = scenario({ phase: 'night', suspicion: 9, loose: ['ordinary_arm', 'ordinary_leg', 'ordinary_arm'] });
+    const { s, pid } = scenario({ phase: 'night', suspicion: 9, hand: ['ordinary_arm', 'ordinary_leg', 'ordinary_arm'] });
     const { cmds } = playPhase(s, pid, policy);
     for (const id of ['graves', 'sell', 'experiment']) assert.equal(placed(cmds, id).length, 0, `${id}: ${JSON.stringify(cmds)}`);
+  });
+
+  test(`${policy}: with the mob close, a Prometheus attends vespers at night`, () => {
+    const { s, pid } = scenario({ phase: 'night', suspicion: 8 });
+    const { cmds } = playPhase(s, pid, policy);
+    assert.ok(placed(cmds, 'vespers').length >= 1, JSON.stringify(cmds));
   });
 
   test(`${policy}: with the mob close and money in hand, a Prometheus pays for charity`, () => {
@@ -113,42 +120,18 @@ for (const policy of BUILDERS) {
     assert.equal(placed(cmds, 'charity').length, 1, JSON.stringify(cmds));
   });
 
-  test(`${policy}: a Prometheus that lacks only a head buys one`, () => {
-    const { s, pid } = scenario({ phase: 'day', money: 6, loose: ['ordinary_arm', 'ordinary_arm', 'ordinary_leg', 'ordinary_leg', 'ordinary_chest'] });
+  test(`${policy}: a Prometheus that lacks only a head buys specimens when the market has nothing`, () => {
+    // Three random draws find a head less than half the time, so a good
+    // science card may rightly come first; with the market empty, specimens.
+    const { s, pid } = scenario({ phase: 'day', money: 8, config: { maxIgors: 1 }, hand: ['labourer_arm', 'labourer_arm', 'athlete_leg', 'athlete_leg', 'robust_chest'], edit: (st) => { st.market = []; } });
     const { cmds } = playPhase(s, pid, policy);
-    assert.ok(placed(cmds, 'specimens').some((c) => c.choices.partTypes.includes('head')), JSON.stringify(cmds));
+    assert.ok(placed(cmds, 'specimens').length >= 1, JSON.stringify(cmds));
   });
 
   test(`${policy}: a Prometheus with far more money than it can spend stops practising medicine`, () => {
-    const { s, pid } = scenario({ phase: 'day', money: 24, body: GOOD_BODY, edit: (st, me) => { me.research.push(...Object.keys(st.config.research)); } });
+    const { s, pid } = scenario({ phase: 'day', money: 24, hand: GOOD_HAND, edit: (st) => { st.market = []; } });
     const { cmds } = playPhase(s, pid, policy);
     assert.equal(placed(cmds, 'medicine').length, 0, JSON.stringify(cmds));
-  });
-}
-
-/** Gives the subject Discreet Methods, and `published` rivals a published copy each. */
-const discretion = (published) => (st, me) => {
-  me.research.push('discretion');
-  for (const o of st.players.filter((x) => x.id !== me.id).slice(0, published)) {
-    o.research.push('discretion');
-    o.published.push('discretion');
-    st.publications.push({ playerId: o.id, type: 'discretion', round: 1 });
-  }
-};
-
-for (const policy of BUILDERS) {
-  // Four effective copies: a graves roll is 5 to 10, never noticed.
-  test(`${policy}: with Discreet Methods making graves unnoticeable, a Prometheus robs graves even with the mob one step away`, () => {
-    const { s, pid } = scenario({ phase: 'night', suspicion: 9, edit: discretion(3) });
-    const { cmds } = playPhase(s, pid, policy);
-    assert.ok(placed(cmds, 'graves').length >= 1, JSON.stringify(cmds));
-  });
-
-  // One copy: graves is noticed on 1 to 3, still a risk of the mob.
-  test(`${policy}: with one copy of Discreet Methods, graves is still too risky one step from the mob`, () => {
-    const { s, pid } = scenario({ phase: 'night', suspicion: 9, edit: discretion(0) });
-    const { cmds } = playPhase(s, pid, policy);
-    assert.equal(placed(cmds, 'graves').length, 0, JSON.stringify(cmds));
   });
 }
 
@@ -194,8 +177,9 @@ test('heuristic: an Unleasher never subdues a monster', () => {
   assert.equal(decideAt(at, 'heuristic').subdue, false);
 });
 
-test('heuristic: an Inquisitor near the mob robs graves at night', () => {
+test('heuristic: an Inquisitor near the mob robs graves at night and never attends vespers', () => {
   const { s, pid } = scenario({ phase: 'night', objective: 'inquisitor', suspicion: 8 });
   const { cmds } = playPhase(s, pid, 'heuristic');
   assert.ok(placed(cmds, 'graves').length >= 1, JSON.stringify(cmds));
+  assert.equal(placed(cmds, 'vespers').length, 0, JSON.stringify(cmds));
 });

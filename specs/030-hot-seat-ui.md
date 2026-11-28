@@ -25,9 +25,9 @@ The shared board always shows only public information:
 
 - the round and phase, and a plain suspicion meter showing value and maximum;
 - a turn bar showing the active player, a selector for their available workers (an Igor is selected first, when one is available), and the pass button;
-- every day and night action space, with its location, cost and effect text (including the odds of any discovery roll), its capacity at this player count, any worker restriction ("No Scientist" or "No Igor", left blank when any worker may go there) and the workers occupying it. On a human's turn, spaces in the current phase that the selected worker cannot legally take are hatched out, and the rest are outlined. When a space is unavailable, it explains why;
-- the research market and deck count, plus the publication record;
-- one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), effective research (own copies, copies via publication, published marks), a body diagram, remaining control attempts and whether they are garrisoned, odds for a complete body, loose parts and Creatures;
+- every day and night action space, with its location, cost and effect text (including any suspicion it adds), its capacity at this player count, any worker restriction ("No Scientist" or "No Igor", left blank when any worker may go there) and the workers occupying it. On a human's turn, spaces in the current phase that the selected worker cannot legally take are hatched out, and the rest are outlined. When a space is unavailable, it explains why;
+- the science market and deck count, and the body-part deck count and discard pile;
+- one panel per player in initiative order, showing money, workers (used, pending, Scientist or Igor), science cards held (with counts), their hand of body parts, a body diagram while a resurrection is prepared with its Vitality total and Humanity odds, their control chance and whether they can subdue this round, and Creatures;
 - the Chronicle, a readable log of public events.
 
 The page switches between a light "day" palette and a dark "night" palette. It works at phone width without horizontal scrolling.
@@ -37,19 +37,19 @@ The page switches between a light "day" palette and a dark "night" palette. It w
 Choosing a space opens a confirmation dialog for the action's choices:
 
 - market cards for research;
-- a part-type picker for specimens;
-- loose parts for assemble and sell, and installed parts for experiment;
+- parts in hand for sell and experiment;
+- a body picker for prepare, choosing two arms, two legs, a chest and a head, with the live Vitality total against the threshold and the exact Humanity odds;
 - a summary for simple actions.
 
-Nothing is sent until the player confirms. The prepare dialog says whether the body is complete and that preparing is public and binding. After an experiment, a dialog shows the drawn research cards with their effects, and the player chooses which eligible card to keep. Invalid choices are reported using the engine's error message, and the dialog stays open. Passing asks for confirmation first.
+Nothing is sent until the player confirms. The prepare dialog says that preparing is public and binding, and allows confirming only a full set that meets the Vitality threshold. After buying specimens, a dialog shows the drawn parts with their effects, and the player chooses which to keep. Invalid choices are reported using the engine's error message, and the dialog stays open. Passing asks for confirmation first.
 
 ## Reports and game over
 
-After resolution, a resurrection report shows who attempted and, for every attempt, each attribute's dice, sources, modifiers, threshold, score and outcome. It stays until dismissed. When a monster is created, the report appears before the control chain begins, and again after each decision that produced new events, so it also shows every control roll with its dice and modifiers, every decline, skip and suspicion change. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
+After resolution, a resurrection report shows who attempted and, for every attempt, the body's Vitality total, and the Humanity roll's dice, sources, threshold, score and outcome. It stays until dismissed. When a monster is created, the report appears before the control chain begins, and again after each decision that produced new events, so it also shows every control roll with its dice and modifiers, every decline, skip and suspicion change. The game-over screen shows the reason, the winners and their roles, every player's objective, the unseen card, the final round and suspicion, and buttons to view the board, export the save or start a new game.
 
 ## Subduing monsters
 
-Subduing is a public decision, so there is no pass-the-device screen. While a human player is deciding in a control chain (spec 025), a dialog over the board names the monster's creator and shows the player's remaining control attempts, their exact chance of a successful control roll, what a success gives them, the suspicion a decline adds, and who comes next in the chain, or that nobody else can stop the monster. It offers Try to subdue and Let it pass. Every player panel shows that player's remaining control attempts and control chance, and the turn bar names who is deciding.
+Subduing is a public decision, so there is no pass-the-device screen. While a human player is deciding in a control chain (spec 025), a dialog over the board names the monster's creator and shows the player's exact chance of a successful control roll, what a success gives them, the suspicion a decline adds, and who comes next in the chain, or that nobody else can stop the monster. It offers Try to subdue and Let it pass. Every player panel shows that player's control chance and whether they can subdue, and the turn bar names who is deciding.
 
 ## Game controls
 
