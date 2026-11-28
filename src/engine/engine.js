@@ -3,7 +3,7 @@
 // All gameplay state changes go through dispatch(state, command).
 
 import {
-  ENGINE_VERSION, SCHEMA_VERSION, SLOT_ORDER, ATTRIBUTES, ALLOWED_DICE, PHASES, DEFAULT_CONFIG,
+  ENGINE_VERSION, SCHEMA_VERSION, SLOT_ORDER, ALLOWED_DICE, PHASES, DEFAULT_CONFIG,
 } from './data.js';
 import { seedState, randInt, rollDie, shuffle, isRngState } from './rng.js';
 
@@ -50,49 +50,52 @@ export function resolveConfig(overrides = {}) {
   return cfg;
 }
 
+const isNonNegInt = (x) => Number.isInteger(x) && x >= 0;
+
 function validateConfig(cfg) {
   const n = cfg.playerCount;
   if (!Number.isInteger(n) || n < 3 || n > 6) throw new Error('playerCount must be an integer from 3 to 6');
   if (!Number.isInteger(cfg.suspicionMax) || cfg.suspicionMax < 1) throw new Error('suspicionMax must be a positive integer');
   if (!Number.isInteger(cfg.startingIgors) || cfg.startingIgors < 0 || cfg.startingIgors > cfg.maxIgors) throw new Error('startingIgors must be an integer from 0 to maxIgors');
-  for (const attr of ATTRIBUTES) {
-    if (!Number.isInteger(cfg.resurrection.thresholds[attr])) throw new Error(`resurrection threshold for ${attr} must be an integer`);
-  }
-  for (const k of ['failedVitalitySuspicion']) {
-    if (!Number.isInteger(cfg.resurrection[k]) || cfg.resurrection[k] < 0) throw new Error(`resurrection.${k} must be a non-negative integer`);
+  if (!isNonNegInt(cfg.marketSize)) throw new Error('marketSize must be a non-negative integer');
+  const rc = cfg.resurrection;
+  if (!ALLOWED_DICE.includes(rc.baseDie)) throw new Error('resurrection.baseDie must be a supported die');
+  for (const attr of ['vitality', 'humanity']) {
+    if (!Number.isInteger(rc.thresholds[attr])) throw new Error(`resurrection threshold for ${attr} must be an integer`);
   }
   if (!ALLOWED_DICE.includes(cfg.control.baseDie)) throw new Error('control.baseDie must be a supported die');
   if (!Number.isInteger(cfg.control.threshold)) throw new Error('control.threshold must be an integer');
-  for (const k of ['startingAttempts', 'declineSuspicion', 'subdueSuspicion', 'subdueSalvage']) {
-    if (!Number.isInteger(cfg.control[k]) || cfg.control[k] < 0) throw new Error(`control.${k} must be a non-negative integer`);
+  for (const k of ['declineSuspicion', 'subdueSuspicion']) {
+    if (!isNonNegInt(cfg.control[k])) throw new Error(`control.${k} must be a non-negative integer`);
   }
+  for (const [t, def] of Object.entries(cfg.partTypes)) {
+    if (!Array.isArray(def.slots) || !def.slots.length || def.slots.some((sl) => !SLOT_ORDER.includes(sl))) throw new Error(`part type ${t} must list body slots`);
+  }
+  if (Object.values(cfg.partTypes).reduce((a, d) => a + d.slots.length, 0) !== SLOT_ORDER.length) throw new Error('part types must cover every body slot once');
   for (const [id, v] of Object.entries(cfg.partVariants)) {
     if (!cfg.partTypes[v.type]) throw new Error(`part variant ${id} has unknown type ${v.type}`);
-    for (const e of v.effects) validateEffect(e, `part variant ${id}`);
+    if (!isNonNegInt(v.copies)) throw new Error(`part variant ${id}: copies must be a non-negative integer`);
+    for (const e of v.effects) validateResurrectionEffect(e, `part variant ${id}`, false);
   }
   for (const t of Object.keys(cfg.partTypes)) {
     if (!Object.values(cfg.partVariants).some((v) => v.type === t)) throw new Error(`part type ${t} has no variants`);
   }
-  for (const [id, r] of Object.entries(cfg.research)) {
-    if (r.copies !== undefined && (!Number.isInteger(r.copies) || r.copies < 0)) throw new Error(`research ${id}: copies must be a non-negative integer`);
-    if (r.stacks !== undefined && typeof r.stacks !== 'boolean') throw new Error(`research ${id}: stacks must be a boolean`);
+  for (const [id, r] of Object.entries(cfg.science)) {
+    if (!isNonNegInt(r.copies)) throw new Error(`science ${id}: copies must be a non-negative integer`);
     for (const e of r.effects) {
-      if (!RESEARCH_KINDS.has(e.kind)) throw new Error(`research ${id}: unknown effect kind ${e.kind}`);
-      if (e.kind === 'resurrection') validateEffect(e, `research ${id}`);
-      if (e.kind === 'control') validateEffect({ ...e, attribute: ATTRIBUTES[0] }, `research ${id}`);
-      if (e.per !== undefined && !RESEARCH_MULTIPLIERS.has(e.per)) throw new Error(`research ${id}: unknown multiplier ${e.per}`);
-      if (e.kind === 'reroll' && !ATTRIBUTES.includes(e.attribute)) throw new Error(`research ${id}: reroll needs an attribute`);
-      if (e.amount !== undefined && !Number.isInteger(e.amount)) throw new Error(`research ${id}: amount must be an integer`);
-      if (e.beyond !== undefined && (!Number.isInteger(e.beyond) || e.beyond < 0)) throw new Error(`research ${id}: beyond must be a non-negative integer`);
+      if (!SCIENCE_KINDS.has(e.kind)) throw new Error(`science ${id}: unknown effect kind ${e.kind}`);
+      if (e.kind === 'resurrection') validateResurrectionEffect(e, `science ${id}`, true);
+      else if (e.kind === 'control') validateControlEffect(e, `science ${id}`);
+      else if (e.kind !== 'subdueOwn' && !(Number.isInteger(e.amount) && e.amount > 0)) throw new Error(`science ${id}: amount must be a positive integer`);
     }
   }
   for (const [id, a] of Object.entries(cfg.actions)) {
     if (!HANDLERS[id]) throw new Error(`action ${id} has no rules handler`);
     if (a.phase !== 'day' && a.phase !== 'night') throw new Error(`action ${id} has invalid phase`);
     validateCapacity(a.capacity, id);
-    if (a.suspicion !== undefined) validateSuspicionRoll(a.suspicion, id);
+    if (a.suspicion !== undefined && !isNonNegInt(a.suspicion)) throw new Error(`action ${id}: suspicion must be a non-negative integer`);
     for (const k of HANDLERS[id].numbers || []) {
-      if (!Number.isInteger(a[k]) || a[k] < 0) throw new Error(`action ${id}: ${k} must be a non-negative integer`);
+      if (!isNonNegInt(a[k])) throw new Error(`action ${id}: ${k} must be a non-negative integer`);
     }
     for (const k of HANDLERS[id].positive || []) {
       if (!Number.isInteger(a[k]) || a[k] < 1) throw new Error(`action ${id}: ${k} must be a positive integer`);
@@ -104,17 +107,31 @@ function validateConfig(cfg) {
   if (!cfg.actions.prepare) throw new Error('the prepare action is required: it is the only way to attempt a resurrection');
 }
 
-// Research effect kinds (spec 023). Numeric kinds add `amount` per effective
-// copy; 'resurrection' and 'control' add dice or modifiers; 'reroll' and
-// 'noGarrison' are abilities.
-const RESEARCH_KINDS = new Set([
-  'medicineBonus', 'suspicionReduction', 'discoveryRollBonus', 'controlAttempts', 'control', 'resurrection',
-  'ferocity', 'gravesBonus', 'sellBonus', 'charityBonus', 'researchCalm', 'reroll', 'noGarrison',
-  'specimenDiscount', 'quietFailure', 'pursuit', 'discoveryBoost',
-]);
-// Resurrection effects may apply once per qualifying rival instead of once.
-// Ferocity may apply once per rival able to subdue the monster ('rivalHunters').
-const RESEARCH_MULTIPLIERS = new Set(['rivalPrepared', 'rivalHunters']);
+// Science effect kinds (spec 023). Every effect is positive.
+const SCIENCE_KINDS = new Set(['resurrection', 'control', 'medicineBonus', 'researchCalm', 'charityBonus', 'subdueOwn']);
+
+/** Vitality is a whole number; Humanity is a die. Science effects must be positive. */
+function validateResurrectionEffect(e, where, positive) {
+  if (e.attribute === 'vitality') {
+    if (e.op !== 'fixed' || !Number.isInteger(e.amount)) throw new Error(`${where}: a Vitality effect must be a fixed whole number`);
+    if (positive && e.amount <= 0) throw new Error(`${where}: science effects must be positive`);
+  } else if (e.attribute === 'humanity') {
+    if (e.op !== 'die' || !ALLOWED_DICE.includes(e.die) || (e.sign !== 1 && e.sign !== -1)) throw new Error(`${where}: a Humanity effect must be a signed supported die`);
+    if (positive && e.sign !== 1) throw new Error(`${where}: science effects must be positive`);
+  } else {
+    throw new Error(`${where}: unknown attribute ${e.attribute}`);
+  }
+}
+
+function validateControlEffect(e, where) {
+  if (e.op === 'die') {
+    if (!ALLOWED_DICE.includes(e.die) || e.sign !== 1) throw new Error(`${where}: a control die must be a positive supported die`);
+  } else if (e.op === 'fixed') {
+    if (!(Number.isInteger(e.amount) && e.amount > 0)) throw new Error(`${where}: a control modifier must be a positive integer`);
+  } else {
+    throw new Error(`${where}: unknown op ${e.op}`);
+  }
+}
 
 function validateCapacity(c, id) {
   if (c === null) return;
@@ -132,16 +149,6 @@ function validateCapacity(c, id) {
   throw new Error(`action ${id}: capacity must be null, a positive integer or a tier object`);
 }
 
-function validateSuspicionRoll(r, id) {
-  if (!isPlainObject(r) || !ALLOWED_DICE.includes(r.die)) throw new Error(`action ${id}: suspicion.die must be a supported die`);
-  if (!Array.isArray(r.bands)) throw new Error(`action ${id}: suspicion.bands must be an array`);
-  let prev = 0;
-  for (const b of r.bands) {
-    if (!isPlainObject(b) || !Number.isInteger(b.max) || b.max <= prev || b.max > r.die) throw new Error(`action ${id}: suspicion band maxima must rise from 1 to the die size`);
-    if (!Number.isInteger(b.amount) || b.amount < 0) throw new Error(`action ${id}: suspicion band amounts must be non-negative integers`);
-    prev = b.max;
-  }
-}
 
 /** A number, or the value of the tier for this player count (tiers keyed by smallest player count). */
 function tierValue(v, n) {
@@ -165,17 +172,6 @@ export function capacityFor(cfg, actionId) {
   return best;
 }
 
-function validateEffect(e, where) {
-  if (!ATTRIBUTES.includes(e.attribute)) throw new Error(`${where}: unknown attribute ${e.attribute}`);
-  if (e.op === 'die') {
-    if (!ALLOWED_DICE.includes(e.die)) throw new Error(`${where}: unsupported die d${e.die}`);
-    if (e.sign !== 1 && e.sign !== -1) throw new Error(`${where}: die sign must be 1 or -1`);
-  } else if (e.op === 'fixed' || e.op === 'threshold') {
-    if (!Number.isInteger(e.amount)) throw new Error(`${where}: amount must be an integer`);
-  } else {
-    throw new Error(`${where}: unknown op ${e.op}`);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -197,16 +193,9 @@ function emptyBody() {
   return { arm1: null, arm2: null, leg1: null, leg2: null, chest: null, head: null };
 }
 
+/** Whether a player has a body laid out for a prepared resurrection. */
 export function bodyComplete(p) {
   return SLOT_ORDER.every((slot) => p.body[slot] !== null);
-}
-
-function openSlotsByType(s, p) {
-  const out = {};
-  for (const [type, def] of Object.entries(s.config.partTypes)) {
-    out[type] = def.slots.filter((slot) => p.body[slot] === null).length;
-  }
-  return out;
 }
 
 /** Initiative order (player ids) starting with this round's first player. */
@@ -217,53 +206,64 @@ export function initiativeOrder(s) {
   return out;
 }
 
-/**
- * Number of effective copies of a research type for a player:
- * 1 for a personal discovery, plus 1 for each publication of that type by
- * another player. (Ruling: research copies stack.)
- */
-export function researchCount(s, pid, type) {
+/** Cards of a science type a player holds. Every card applies (spec 023). */
+export function scienceCount(s, pid, type) {
   const p = getPlayer(s, pid);
-  let n = p && p.research.includes(type) ? 1 : 0;
-  for (const pub of s.publications) if (pub.type === type && pub.playerId !== pid) n++;
-  return n;
+  return p ? p.science.filter((c) => c.type === type).length : 0;
+}
+
+/** Each science effect a player holds, one entry per card, in type order. */
+function scienceEffects(s, pid, pred) {
+  const p = getPlayer(s, pid);
+  const out = [];
+  if (!p) return out;
+  const counts = {};
+  for (const c of p.science) counts[c.type] = (counts[c.type] || 0) + 1;
+  for (const type of Object.keys(counts).sort()) {
+    const def = s.config.science[type];
+    if (!def) continue;
+    for (let i = 0; i < counts[type]; i++) {
+      for (const e of def.effects) if (pred(e)) out.push({ e, source: { kind: 'science', scienceType: type, copy: i + 1 } });
+    }
+  }
+  return out;
+}
+
+function scienceBonus(s, pid, kind) {
+  return scienceEffects(s, pid, (e) => e.kind === kind).reduce((a, x) => a + (x.e.amount ?? 1), 0);
+}
+
+const hasAbility = (s, pid, kind) => scienceEffects(s, pid, (e) => e.kind === kind).length > 0;
+
+/** A player's Vitality from science: added to every body they prepare. */
+export function vitalityBonus(s, pid) {
+  return scienceEffects(s, pid, (e) => e.kind === 'resurrection' && e.attribute === 'vitality').reduce((a, x) => a + x.e.amount, 0);
+}
+
+/** A part variant's Vitality value (0 when it has none). */
+export function partVitality(cfg, variantId) {
+  return cfg.partVariants[variantId].effects.filter((e) => e.attribute === 'vitality').reduce((a, e) => a + e.amount, 0);
+}
+
+/** How many parts of each type a full set needs: { arm: 2, leg: 2, chest: 1, head: 1 }. */
+export function fullSetCounts(cfg) {
+  return Object.fromEntries(Object.entries(cfg.partTypes).map(([t, d]) => [t, d.slots.length]));
 }
 
 /**
- * Copies of a type whose effects apply: every copy for a stacking modifier,
- * at most one for a special ability (`stacks: false`).
+ * The highest Vitality total any full set in the player's hand can reach,
+ * science included, or null when the hand holds no full set.
  */
-export function effectiveCopies(s, pid, type) {
-  const n = researchCount(s, pid, type);
-  return s.config.research[type].stacks === false ? Math.min(1, n) : n;
-}
-
-/** Whether a player holds any effective research with an effect of this kind. */
-function hasAbility(s, pid, kind) {
-  return researchBonus(s, pid, kind, 1) > 0;
-}
-
-function researchBonus(s, pid, kind, dflt = 0) {
-  let total = 0;
-  for (const [type, def] of Object.entries(s.config.research)) {
-    const copies = effectiveCopies(s, pid, type);
-    if (!copies) continue;
-    for (const e of def.effects) if (e.kind === kind) total += copies * (e.amount ?? dflt);
+export function bestVitality(s, pid) {
+  const p = getPlayer(s, pid);
+  if (!p) return null;
+  let total = vitalityBonus(s, pid);
+  for (const [t, need] of Object.entries(fullSetCounts(s.config))) {
+    const vals = p.hand.filter((x) => x.type === t).map((x) => partVitality(s.config, x.variantId)).sort((a, b) => b - a);
+    if (vals.length < need) return null;
+    total += vals.slice(0, need).reduce((a, b) => a + b, 0);
   }
   return total;
-}
-
-/** Most parts one assemble action may install: the configured max, or a whole body when it is null. */
-export function assembleCapacity(s) {
-  const max = s.config.actions.assemble.max;
-  return max == null ? SLOT_ORDER.length : max;
-}
-
-/** Control attempts a player has left: the starting allowance, plus one per effective Neural Conditioning, minus those spent. */
-export function controlAttempts(s, pid) {
-  const p = getPlayer(s, pid);
-  if (!p) return 0;
-  return Math.max(0, s.config.control.startingAttempts + researchBonus(s, pid, 'controlAttempts') - p.controlAttemptsUsed);
 }
 
 function playerWorkers(s, pid) {
@@ -281,16 +281,17 @@ function occupancyOf(s, actionId) {
   return ph[actionId] || [];
 }
 
-function eligibleMarketCards(s, p) {
-  return s.market.filter((c) => !p.research.includes(c.type));
-}
-
 function igorCount(s, p) {
   return playerWorkers(s, p.id).filter((w) => w.kind === 'igor').length;
 }
 
 function nextIgorCost(s) {
   return s.config.actions.hire ? s.config.actions.hire.cost : null;
+}
+
+/** Parts still available to draw: the deck plus the discard pile, which is reshuffled into it. */
+function partsAvailable(s) {
+  return s.partsDeck.length + s.partsDiscard.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,51 +313,52 @@ function changeSuspicion(s, delta, reason, playerId = null, onMob = formMob) {
   if (delta > 0 && after >= max) onMob(s);
 }
 
-function makePart(s, variantId) {
-  const v = s.config.partVariants[variantId];
-  s.counters.part += 1;
-  return { id: `part-${s.counters.part}`, variantId, type: v.type };
-}
-
-function drawRandomPart(s) {
-  const types = Object.entries(s.config.partTypes);
-  const totalWeight = types.reduce((a, [, t]) => a + t.weight, 0);
-  let r = randInt(s.rng, totalWeight);
-  let chosen = types[0][0];
-  for (const [id, t] of types) {
-    if (r < t.weight) { chosen = id; break; }
-    r -= t.weight;
+/** Draws the top body part, first shuffling the discard pile into a new deck if the deck is empty. Null if none is left. */
+function drawPart(s) {
+  if (!s.partsDeck.length && s.partsDiscard.length) {
+    s.partsDeck = shuffle(s.rng, s.partsDiscard);
+    s.partsDiscard = [];
+    emit(s, 'PARTS_DECK_RESHUFFLED', { deckSize: s.partsDeck.length });
   }
-  return drawPartOfType(s, chosen);
+  return s.partsDeck.shift() || null;
 }
 
-// A uniformly random variant of the given part type (graves and specimens).
-function drawPartOfType(s, type) {
-  const variants = Object.keys(s.config.partVariants).filter((id) => s.config.partVariants[id].type === type);
-  return makePart(s, variants[randInt(s.rng, variants.length)]);
+function drawParts(s, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const part = drawPart(s);
+    if (!part) break;
+    out.push(part);
+  }
+  return out;
 }
 
-function gainResearch(s, p, card, via) {
-  p.research.push(card.type);
-  p.research.sort();
-  emit(s, 'RESEARCH_ACQUIRED', { playerId: p.id, cardId: card.id, researchType: card.type, via });
+function discardParts(s, p, parts, reason) {
+  s.partsDiscard.push(...parts);
+  emit(s, 'PARTS_DISCARDED', { playerId: p ? p.id : null, reason, parts: clone(parts), discardSize: s.partsDiscard.length });
 }
 
-function publish(s, p, type) {
-  p.published.push(type);
-  p.published.sort();
-  s.publications.push(Object.freeze({ playerId: p.id, type, round: s.round }));
-  emit(s, 'RESEARCH_PUBLISHED', { playerId: p.id, researchType: type });
+/** Removes parts from a player's hand by ID, in the order given. */
+function takeFromHand(p, ids) {
+  return ids.map((id) => p.hand.splice(p.hand.findIndex((x) => x.id === id), 1)[0]);
 }
 
-function acquireMarketResearch(s, p, cardId, via) {
+function gainScience(s, p, cards, via) {
+  for (const card of cards) {
+    p.science.push(card);
+    emit(s, 'SCIENCE_ACQUIRED', { playerId: p.id, cardId: card.id, scienceType: card.type, via });
+  }
+  p.science.sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
+}
+
+function takeMarketScience(s, p, cardId) {
   const idx = s.market.findIndex((c) => c.id === cardId);
   const [card] = s.market.splice(idx, 1);
-  gainResearch(s, p, card, via);
+  gainScience(s, p, [card], 'research');
   if (s.deck.length > 0) {
     const next = s.deck.shift();
     s.market.push(next);
-    emit(s, 'MARKET_REFILLED', { cardId: next.id, researchType: next.type, deckRemaining: s.deck.length });
+    emit(s, 'MARKET_REFILLED', { cardId: next.id, scienceType: next.type, deckRemaining: s.deck.length });
   } else {
     emit(s, 'MARKET_DECK_EMPTY', { marketSize: s.market.length });
   }
@@ -365,6 +367,11 @@ function acquireMarketResearch(s, p, cardId, via) {
 function addWorker(s, w) {
   s.workers[w.id] = { usedDay: false, usedNight: false, usedThisRound: false, ...w };
   s.workerOrder.push(w.id);
+}
+
+/** A night action's flat suspicion, added after its other effects (spec 022). */
+function actionSuspicion(s, p, def, actionId) {
+  if (def.suspicion > 0) changeSuspicion(s, def.suspicion, actionId, p.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -376,58 +383,18 @@ function addWorker(s, w) {
 // apply(s,p,w,def,c)         -> mutates state
 // ---------------------------------------------------------------------------
 
-function specimenCost(s, p, def) {
-  return Math.max(0, def.cost - researchBonus(s, p.id, 'specimenDiscount'));
-}
-
 function needMoney(p, amount) {
   return p.money < amount ? err('INSUFFICIENT_MONEY', `Requires ${amount} money; you have ${p.money}.`) : null;
 }
 
-function checkMarketCard(s, p, cardId) {
-  if (typeof cardId !== 'string') return err('INVALID_CHOICE', 'researchCardId must be a string.');
-  const card = s.market.find((c) => c.id === cardId);
-  if (!card) return err('INVALID_TARGET', `Card ${cardId} is not in the market.`);
-  if (p.research.includes(card.type)) return err('ALREADY_DISCOVERED', `You already discovered ${card.type}.`);
-  return null;
-}
-
-function checkLooseParts(p, partIds, min, max) {
+function checkHandParts(p, partIds, min, max) {
   if (!Array.isArray(partIds)) return err('INVALID_CHOICE', 'partIds must be an array.');
   if (partIds.length < min || partIds.length > max) return err('INVALID_CHOICE', `Select ${min === max ? min : `${min}–${max}`} parts.`);
   if (new Set(partIds).size !== partIds.length) return err('INVALID_CHOICE', 'partIds must be unique.');
   for (const id of partIds) {
-    if (!p.loose.some((x) => x.id === id)) return err('INVALID_TARGET', `Part ${id} is not in your loose inventory.`);
+    if (!p.hand.some((x) => x.id === id)) return err('INVALID_TARGET', `Part ${id} is not in your hand.`);
   }
   return null;
-}
-
-/**
- * The discovery roll for an action with a `suspicion` table: roll the die, add
- * the player's roll bonus (Discreet Methods), take the first band whose max is
- * at least the result, then apply any flat reduction.
- */
-function rollActionSuspicion(s, p, def, actionId) {
-  const r = def.suspicion;
-  const roll = rollDie(s.rng, r.die);
-  const rollBonus = researchBonus(s, p.id, 'discoveryRollBonus');
-  const result = roll + rollBonus;
-  const band = r.bands.find((b) => result <= b.max);
-  const base = band ? band.amount : 0;
-  // What the roll alone would have added: the bonus avoided the difference.
-  const unmodified = (r.bands.find((b) => roll <= b.max) || { amount: 0 }).amount;
-  // A flat cut per discovery (an older rule, still supported for saved games and experiments).
-  const reduction = researchBonus(s, p.id, 'suspicionReduction');
-  // Inflammatory research makes a discovery that is noticed worse.
-  const boost = base > 0 ? researchBonus(s, p.id, 'discoveryBoost') : 0;
-  const increase = Math.max(0, base + boost - reduction);
-  emit(s, 'DIE_ROLLED', { playerId: p.id, purpose: 'discovery', actionId, die: r.die, result: roll });
-  emit(s, 'DISCOVERY_RESOLVED', { playerId: p.id, actionId, die: r.die, roll, rollBonus, result, unmodifiedSuspicion: unmodified, baseSuspicion: base, reduction, increase });
-  if (increase > 0) changeSuspicion(s, increase, actionId, p.id);
-}
-
-function installedParts(p) {
-  return SLOT_ORDER.filter((slot) => p.body[slot] !== null).map((slot) => p.body[slot]);
 }
 
 /** Most charity units a player may buy now: the configured maximum, what they can afford, and no more than it takes to reach 0. */
@@ -438,9 +405,23 @@ function charityMaxUnits(s, p, def) {
   return Math.max(1, max);
 }
 
-/** Most installed parts an experiment may discard right now (0 if it can't be taken). */
-function experimentMax(s, p, def) {
-  return Math.min(def.maxParts, p.loose.length + installedParts(p).length, s.deck.length);
+/** The Vitality total of six parts from a hand, science included. */
+function vitalityOf(s, pid, parts) {
+  return parts.reduce((a, x) => a + partVitality(s.config, x.variantId), 0) + vitalityBonus(s, pid);
+}
+
+function checkBody(s, p, partIds) {
+  const total = SLOT_ORDER.length;
+  const e = checkHandParts(p, partIds, total, total);
+  if (e) return e;
+  const parts = partIds.map((id) => p.hand.find((x) => x.id === id));
+  for (const [t, need] of Object.entries(fullSetCounts(s.config))) {
+    if (parts.filter((x) => x.type === t).length !== need) return err('NOT_A_FULL_SET', 'Choose two arms, two legs, a chest and a head.');
+  }
+  const vitality = vitalityOf(s, p.id, parts);
+  const threshold = s.config.resurrection.thresholds.vitality;
+  if (vitality < threshold) return err('VITALITY_TOO_LOW', `That body's Vitality is ${vitality}; it needs ${threshold}.`);
+  return null;
 }
 
 export const HANDLERS = {
@@ -449,46 +430,38 @@ export const HANDLERS = {
     numbers: ['gain'],
     prereq: () => null,
     apply(s, p, w, def) {
-      changeMoney(s, p, def.gain + researchBonus(s, p.id, 'medicineBonus'), 'medicine');
+      changeMoney(s, p, def.gain + scienceBonus(s, p.id, 'medicineBonus'), 'medicine');
     },
   },
   research: {
     choiceKeys: ['researchCardId'],
-    prereq(s, p, w, def) {
-      return needMoney(p, def.cost) || (eligibleMarketCards(s, p).length ? null : err('NO_ELIGIBLE_RESEARCH', 'No eligible research card in the market.'));
-    },
-    checkChoices: (s, p, w, def, c) => checkMarketCard(s, p, c.researchCardId),
-    constraints: (s, p) => ({ researchCardId: { type: 'enum', values: eligibleMarketCards(s, p).map((c) => c.id) } }),
     numbers: ['cost'],
+    prereq(s, p, w, def) {
+      return needMoney(p, def.cost) || (s.market.length ? null : err('MARKET_EMPTY', 'The science market is empty.'));
+    },
+    checkChoices(s, p, w, def, c) {
+      if (typeof c.researchCardId !== 'string') return err('INVALID_CHOICE', 'researchCardId must be a string.');
+      return s.market.some((k) => k.id === c.researchCardId) ? null : err('INVALID_TARGET', `Card ${c.researchCardId} is not in the market.`);
+    },
+    constraints: (s) => ({ researchCardId: { type: 'enum', values: s.market.map((c) => c.id) } }),
     apply(s, p, w, def, c) {
       changeMoney(s, p, -def.cost, 'research');
-      const type = s.market.find((k) => k.id === c.researchCardId).type;
-      acquireMarketResearch(s, p, c.researchCardId, 'research');
-      // Conducting research always publishes the discovery (spec 023).
-      publish(s, p, type);
-      const calm = researchBonus(s, p.id, 'researchCalm');
+      takeMarketScience(s, p, c.researchCardId);
+      const calm = scienceBonus(s, p.id, 'researchCalm');
       if (calm > 0 && s.suspicion > 0) changeSuspicion(s, -calm, 'public_lecture', p.id);
     },
   },
   specimens: {
-    choiceKeys: ['partTypes'],
+    // Draw several parts, keep one (PICK_PART), discard the rest (spec 022).
+    choiceKeys: [],
     numbers: ['cost'],
-    positive: ['count'],
-    prereq: (s, p, w, def) => needMoney(p, specimenCost(s, p, def)),
-    checkChoices(s, p, w, def, c) {
-      const v = c.partTypes;
-      if (!Array.isArray(v) || v.length !== def.count) return err('INVALID_CHOICE', `partTypes must list exactly ${def.count} part types.`);
-      for (const t of v) if (typeof t !== 'string' || !Object.hasOwn(s.config.partTypes, t)) return err('INVALID_TARGET', `Unknown part type ${t}.`);
-      return null;
-    },
-    constraints: (s, p, w, def) => ({ partTypes: { type: 'multiset', count: def.count, values: Object.keys(s.config.partTypes) } }),
-    apply(s, p, w, def, c) {
-      const cost = specimenCost(s, p, def);
-      if (cost) changeMoney(s, p, -cost, 'specimens');
-      // The player chooses the type; the variant is random (spec 024).
-      const parts = c.partTypes.map((t) => drawPartOfType(s, t));
-      p.loose.push(...parts);
-      emit(s, 'PARTS_GAINED', { playerId: p.id, source: 'specimens', parts: clone(parts) });
+    positive: ['draw'],
+    prereq: (s, p, w, def) => needMoney(p, def.cost) || (partsAvailable(s) ? null : err('NO_PARTS', 'There are no body parts left to draw.')),
+    apply(s, p, w, def) {
+      if (def.cost) changeMoney(s, p, -def.cost, 'specimens');
+      const parts = drawParts(s, def.draw);
+      emit(s, 'SPECIMENS_DRAWN', { playerId: p.id, parts: clone(parts) });
+      s.pendingPick = { playerId: p.id, actionId: 'specimens', parts: clone(parts) };
     },
   },
   hire: {
@@ -531,12 +504,12 @@ export const HANDLERS = {
     apply(s, p, w, def, c) {
       const units = c.units || 1;
       changeMoney(s, p, -def.cost * units, 'charity');
-      changeSuspicion(s, -(def.reduction + researchBonus(s, p.id, 'charityBonus')) * units, 'charity', p.id);
+      changeSuspicion(s, -(def.reduction + scienceBonus(s, p.id, 'charityBonus')) * units, 'charity', p.id);
     },
   },
   garrison: {
-    // No effect of its own: a garrisoned worker lets its owner subdue other
-    // players' monsters during this round's resolution (spec 025).
+    // No effect of its own: a garrisoned Igor lets its owner try to subdue
+    // monsters during this round's resolution (spec 025).
     choiceKeys: [],
     prereq: () => null,
     apply() {},
@@ -544,38 +517,81 @@ export const HANDLERS = {
   graves: {
     choiceKeys: [],
     numbers: ['parts'],
-    prereq: () => null,
+    prereq: (s) => (partsAvailable(s) ? null : err('NO_PARTS', 'There are no body parts left to draw.')),
     apply(s, p, w, def) {
-      // The random parts are drawn first, then the discovery die is rolled.
-      const parts = [];
-      const n = def.parts + researchBonus(s, p.id, 'gravesBonus');
-      for (let i = 0; i < n; i++) parts.push(drawRandomPart(s));
-      p.loose.push(...parts);
+      const parts = drawParts(s, def.parts);
+      p.hand.push(...parts);
       emit(s, 'PARTS_GAINED', { playerId: p.id, source: 'graves', parts: clone(parts) });
-      rollActionSuspicion(s, p, def, 'graves');
+      actionSuspicion(s, p, def, 'graves');
     },
   },
   sell: {
     choiceKeys: ['partIds'],
     numbers: ['gain'],
     positive: ['parts'],
-    prereq: (s, p, w, def) => (p.loose.length < def.parts ? err('INSUFFICIENT_PARTS', `Requires ${def.parts} loose parts.`) : null),
-    checkChoices: (s, p, w, def, c) => checkLooseParts(p, c.partIds, def.parts, def.parts),
-    constraints: (s, p, w, def) => ({ partIds: { type: 'subset', min: def.parts, max: def.parts, values: p.loose.map((x) => x.id) } }),
+    prereq: (s, p, w, def) => (p.hand.length < def.parts ? err('INSUFFICIENT_PARTS', `Requires ${def.parts} parts in hand.`) : null),
+    checkChoices: (s, p, w, def, c) => checkHandParts(p, c.partIds, def.parts, def.parts),
+    constraints: (s, p, w, def) => ({ partIds: { type: 'subset', min: def.parts, max: def.parts, values: p.hand.map((x) => x.id) } }),
     apply(s, p, w, def, c) {
-      const sold = c.partIds.map((id) => p.loose.splice(p.loose.findIndex((x) => x.id === id), 1)[0]);
-      emit(s, 'PARTS_SPENT', { playerId: p.id, reason: 'sell', parts: clone(sold) });
-      changeMoney(s, p, def.gain + researchBonus(s, p.id, 'sellBonus'), 'sell');
-      rollActionSuspicion(s, p, def, 'sell');
+      discardParts(s, p, takeFromHand(p, c.partIds), 'sell');
+      changeMoney(s, p, def.gain, 'sell');
+      actionSuspicion(s, p, def, 'sell');
+    },
+  },
+  experiment: {
+    // Discard parts, draw science cards from the deck and keep them all.
+    choiceKeys: ['partIds'],
+    positive: ['parts', 'cards'],
+    prereq(s, p, w, def) {
+      if (p.hand.length < def.parts) return err('INSUFFICIENT_PARTS', `Requires ${def.parts} parts in hand.`);
+      return s.deck.length ? null : err('DECK_EMPTY', 'The science deck is empty.');
+    },
+    checkChoices: (s, p, w, def, c) => checkHandParts(p, c.partIds, def.parts, def.parts),
+    constraints: (s, p, w, def) => ({ partIds: { type: 'subset', min: def.parts, max: def.parts, values: p.hand.map((x) => x.id) } }),
+    apply(s, p, w, def, c) {
+      discardParts(s, p, takeFromHand(p, c.partIds), 'experiment');
+      const cards = s.deck.splice(0, def.cards);
+      emit(s, 'SCIENCE_DRAWN', { playerId: p.id, cards: clone(cards), deckRemaining: s.deck.length });
+      gainScience(s, p, cards, 'experiment');
+      actionSuspicion(s, p, def, 'experiment');
+    },
+  },
+  vespers: {
+    choiceKeys: [],
+    numbers: ['reduction'],
+    prereq: (s) => (s.suspicion > 0 ? null : err('NO_SUSPICION', 'Suspicion is already 0.')),
+    apply(s, p, w, def) {
+      changeSuspicion(s, -def.reduction, 'vespers', p.id);
     },
   },
   prepare: {
-    // Placing the Scientist here commits the player to a resurrection attempt
-    // in this round's resolution, if the body is complete by then (spec 025).
-    choiceKeys: [],
-    prereq: () => null,
-    apply(s, p) {
-      emit(s, 'RESURRECTION_PREPARED', { playerId: p.id, bodyComplete: bodyComplete(p) });
+    // The Scientist lays out a full set whose Vitality meets the threshold;
+    // the attempt resolves after night (spec 025).
+    choiceKeys: ['partIds'],
+    prereq(s, p) {
+      const best = bestVitality(s, p.id);
+      if (best === null) return err('NOT_A_FULL_SET', 'You have no full set of body parts.');
+      const threshold = s.config.resurrection.thresholds.vitality;
+      return best >= threshold ? null : err('VITALITY_TOO_LOW', `Your best body's Vitality is ${best}; it needs ${threshold}.`);
+    },
+    checkChoices: (s, p, w, def, c) => checkBody(s, p, c.partIds),
+    constraints: (s, p) => ({
+      partIds: {
+        type: 'subset', min: SLOT_ORDER.length, max: SLOT_ORDER.length, values: p.hand.map((x) => x.id),
+        perPartType: fullSetCounts(s.config), minVitality: s.config.resurrection.thresholds.vitality, vitalityBonus: vitalityBonus(s, p.id),
+      },
+    }),
+    apply(s, p, w, def, c) {
+      const parts = takeFromHand(p, c.partIds);
+      for (const part of parts) {
+        const slot = s.config.partTypes[part.type].slots.find((sl) => p.body[sl] === null);
+        p.body[slot] = part;
+      }
+      emit(s, 'RESURRECTION_PREPARED', {
+        playerId: p.id,
+        parts: SLOT_ORDER.map((slot) => ({ slot, partId: p.body[slot].id, variantId: p.body[slot].variantId })),
+        vitality: vitalityOf(s, p.id, parts),
+      });
     },
   },
   rest: {
@@ -587,98 +603,16 @@ export const HANDLERS = {
       emit(s, 'PLAYER_RESTED', { playerId: p.id });
     },
   },
-  assemble: {
-    choiceKeys: ['partIds'],
-    prereq(s, p) {
-      const open = openSlotsByType(s, p);
-      return p.loose.some((x) => open[x.type] > 0) ? null : err('NOTHING_TO_ASSEMBLE', 'No loose part fits an empty body slot.');
-    },
-    checkChoices(s, p, w, def, c) {
-      const e = checkLooseParts(p, c.partIds, 1, assembleCapacity(s, p.id));
-      if (e) return e;
-      const open = openSlotsByType(s, p);
-      for (const id of c.partIds) {
-        const part = p.loose.find((x) => x.id === id);
-        if (!(open[part.type] > 0)) return err('NO_MATCHING_SLOT', `No empty ${part.type} slot for ${id}.`);
-        open[part.type] -= 1;
-      }
-      return null;
-    },
-    constraints(s, p) {
-      const open = openSlotsByType(s, p);
-      return {
-        partIds: {
-          type: 'subset', min: 1, max: assembleCapacity(s, p.id),
-          values: p.loose.filter((x) => open[x.type] > 0).map((x) => x.id),
-          maxPerPartType: open,
-        },
-      };
-    },
-    apply(s, p, w, def, c) {
-      const installs = [];
-      for (const id of c.partIds) {
-        const idx = p.loose.findIndex((x) => x.id === id);
-        const [part] = p.loose.splice(idx, 1);
-        const slot = s.config.partTypes[part.type].slots.find((sl) => p.body[sl] === null);
-        p.body[slot] = part;
-        installs.push({ partId: part.id, variantId: part.variantId, slot });
-      }
-      emit(s, 'PARTS_INSTALLED', { playerId: p.id, installs, bodyComplete: bodyComplete(p) });
-    },
-  },
-  experiment: {
-    // Discard loose or installed parts, draw that many research cards from the
-    // deck, roll for discovery, then keep one eligible card (PICK_RESEARCH).
-    choiceKeys: ['partIds'],
-    positive: ['maxParts'],
-    prereq(s, p) {
-      if (!p.loose.length && !installedParts(p).length) return err('INSUFFICIENT_PARTS', 'Requires at least one part.');
-      return s.deck.length ? null : err('DECK_EMPTY', 'The research deck is empty.');
-    },
-    checkChoices(s, p, w, def, c) {
-      const ids = c.partIds;
-      const max = experimentMax(s, p, def);
-      if (!Array.isArray(ids)) return err('INVALID_CHOICE', 'partIds must be an array.');
-      if (ids.length < 1 || ids.length > max) return err('INVALID_CHOICE', `Select 1–${max} parts.`);
-      if (new Set(ids).size !== ids.length) return err('INVALID_CHOICE', 'partIds must be unique.');
-      const owned = [...p.loose, ...installedParts(p)];
-      for (const id of ids) if (!owned.some((x) => x.id === id)) return err('INVALID_TARGET', `Part ${id} is not yours.`);
-      return null;
-    },
-    constraints: (s, p, w, def) => ({ partIds: { type: 'subset', min: 1, max: experimentMax(s, p, def), values: [...p.loose, ...installedParts(p)].map((x) => x.id) } }),
-    apply(s, p, w, def, c) {
-      const spent = p.loose.filter((x) => c.partIds.includes(x.id));
-      p.loose = p.loose.filter((x) => !c.partIds.includes(x.id));
-      for (const slot of SLOT_ORDER) {
-        const part = p.body[slot];
-        if (part && c.partIds.includes(part.id)) { spent.push(part); p.body[slot] = null; }
-      }
-      emit(s, 'PARTS_SPENT', { playerId: p.id, reason: 'experiment', parts: clone(spent) });
-      const cards = s.deck.splice(0, spent.length);
-      emit(s, 'RESEARCH_DRAWN', { playerId: p.id, cards: clone(cards), deckRemaining: s.deck.length });
-      const eligible = cards.filter((k) => !p.research.includes(k.type));
-      if (eligible.length) s.pendingPick = { playerId: p.id, actionId: 'experiment', cards: clone(cards), eligible: eligible.map((k) => k.id) };
-      else returnToDeck(s, p, cards);
-      // A mob formed by this roll ends the game before the pick.
-      rollActionSuspicion(s, p, def, 'experiment');
-    },
-  },
 };
 
-/** Cards drawn by an experiment and not kept go to the bottom of the deck, in the order drawn. */
-function returnToDeck(s, p, cards) {
-  s.deck.push(...cards);
-  if (cards.length) emit(s, 'RESEARCH_RETURNED', { playerId: p.id, cards: clone(cards), deckRemaining: s.deck.length });
-}
-
-/** Whether a player has a worker in the garrison this round. */
+/** Whether a player has an Igor in the garrison this round. */
 export function garrisoned(s, pid) {
   return (s.occupancy.day.garrison || []).some((wid) => s.workers[wid] && s.workers[wid].ownerId === pid);
 }
 
-/** Whether a player may subdue other players' monsters this round: a garrison, or a research ability that waives it. */
-export function canSubdueOthers(s, pid) {
-  return garrisoned(s, pid) || hasAbility(s, pid, 'noGarrison');
+/** Whether a player may try to subdue a monster made by `creatorId`: a garrison, or Neural Conditioning for their own. */
+export function canSubdue(s, pid, creatorId) {
+  return garrisoned(s, pid) || (pid === creatorId && hasAbility(s, pid, 'subdueOwn'));
 }
 
 /** Prerequisite check for placing a worker on an action, ignoring choices. */
@@ -745,7 +679,8 @@ export function createGame(config = {}, seed) {
     suspicionHistory: [],
     deck: [],
     market: [],
-    publications: [],
+    partsDeck: [],
+    partsDiscard: [],
     occupancy: { day: {}, night: {} },
     resolution: null,
     restedBy: null,
@@ -765,7 +700,7 @@ export function createGame(config = {}, seed) {
   for (let i = 0; i < n; i++) {
     const id = `p${i + 1}`;
     const name = (cfg.playerNames && cfg.playerNames[i]) || `Scientist ${i + 1}`;
-    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, loose: [], body: emptyBody(), research: [], published: [], igorsHired: 0, controlAttemptsUsed: 0, rerollsUsed: 0, passed: false });
+    s.players.push({ id, name: String(name), seat: i, money: cfg.startingMoney, hand: [], body: emptyBody(), science: [], igorsHired: 0, passed: false });
     addWorker(s, { id: `scientist-${id}`, kind: 'scientist', ownerId: id, active: true });
     for (let k = 1; k <= cfg.startingIgors; k++) addWorker(s, { id: `igor-${id}-${k}`, kind: 'igor', ownerId: id, active: true });
   }
@@ -778,12 +713,19 @@ export function createGame(config = {}, seed) {
   s.unseenObjectives = objectiveDeck.slice(n);
 
   let k = 0;
-  for (const type of Object.keys(cfg.research).sort()) {
-    const copies = cfg.research[type].copies ?? cfg.researchCopies;
-    for (let c = 0; c < copies; c++) s.deck.push({ id: `card-${++k}`, type });
+  for (const type of Object.keys(cfg.science).sort()) {
+    for (let c = 0; c < cfg.science[type].copies; c++) s.deck.push({ id: `card-${++k}`, type });
   }
   shuffle(s.rng, s.deck);
   s.market = s.deck.splice(0, cfg.marketSize);
+
+  for (const [variantId, v] of Object.entries(cfg.partVariants)) {
+    for (let c = 0; c < v.copies; c++) {
+      s.counters.part += 1;
+      s.partsDeck.push({ id: `part-${s.counters.part}`, variantId, type: v.type });
+    }
+  }
+  shuffle(s.rng, s.partsDeck);
   s.suspicionHistory.push(Object.freeze({ eventSeq: 0, round: 1, phase: 'setup', value: 0, delta: 0, reason: 'start', playerId: null }));
 
   emit(s, 'GAME_STARTED', {
@@ -791,6 +733,7 @@ export function createGame(config = {}, seed) {
     players: s.players.map((p) => ({ id: p.id, name: p.name, seat: p.seat })),
     firstPlayerId: s.players[s.firstPlayerIndex].id,
     market: clone(s.market),
+    partsDeckSize: s.partsDeck.length,
   });
   for (const p of s.players) emit(s, 'OBJECTIVE_ASSIGNED', { playerId: p.id, objective: s.objectives[p.id] }, [p.id]);
   startRound(s);
@@ -841,34 +784,13 @@ function startResolution(s) {
   s.resolution = { order, resolved: 0 };
 }
 
-/** Pursuits a player has left: once per game per pursuit ability. */
-function pursuitsLeft(s, pid) {
-  const p = getPlayer(s, pid);
-  let n = 0;
-  for (const [type, def] of Object.entries(s.config.research)) {
-    if (!effectiveCopies(s, pid, type)) continue;
-    for (const e of def.effects) if (e.kind === 'pursuit') n += e.uses ?? 1;
-  }
-  return Math.max(0, n - (p.pursuitsUsed || 0));
-}
-
-/** Whether a player may subdue the current monster: an attempt left, and a garrisoned worker unless they created it. In a pursuit, a pursuit left instead of a garrison. */
-function canSubdue(s, pid) {
-  if (controlAttempts(s, pid) <= 0) return false;
-  if (s.control.pursuit) return pursuitsLeft(s, pid) > 0;
-  return pid === s.control.creatorId || canSubdueOthers(s, pid);
-}
-
-/** The next player in a control chain who could subdue the monster, skipping (and logging) those with no attempts left. */
+/** The next player in a control chain who may try to subdue the monster, skipping (and logging) the rest. */
 function nextController(s) {
   const k = s.control;
   while (k.position < k.chain.length) {
     const pid = k.chain[k.position];
-    const reason = controlAttempts(s, pid) <= 0 ? 'no_control_attempts'
-      : k.pursuit ? (pursuitsLeft(s, pid) > 0 ? null : 'no_pursuit')
-        : pid !== k.creatorId && !canSubdueOthers(s, pid) ? 'not_garrisoned' : null;
-    if (!reason) return pid;
-    emit(s, 'CONTROL_SKIPPED', { playerId: pid, creatureId: k.creatureId, reason });
+    if (canSubdue(s, pid, k.creatorId)) return pid;
+    emit(s, 'CONTROL_SKIPPED', { playerId: pid, creatureId: k.creatureId, reason: 'not_garrisoned' });
     k.position += 1;
   }
   return null;
@@ -930,15 +852,6 @@ function advance(s) {
       if (s.control) {
         const pid = nextController(s);
         if (pid) { s.activePlayerId = pid; return; }
-        // A one-off pursuit ability gives its holders one more chance, in chain order.
-        if (!s.control.pursuit) {
-          const pursuers = s.control.chain.filter((x) => controlAttempts(s, x) > 0 && pursuitsLeft(s, x) > 0);
-          if (pursuers.length) {
-            Object.assign(s.control, { pursuit: true, chain: pursuers, position: 0 });
-            emit(s, 'PURSUIT_BEGUN', { creatureId: s.control.creatureId, playerIds: [...pursuers] });
-            continue;
-          }
-        }
         unleash(s, 'no_one_subdued');
         continue;
       }
@@ -946,8 +859,7 @@ function advance(s) {
       if (c.resolved < c.order.length) {
         const pid = c.order[c.resolved];
         c.resolved += 1;
-        if (bodyComplete(getPlayer(s, pid))) resurrect(s, pid);
-        else emit(s, 'RESURRECTION_CANCELLED', { playerId: pid, reason: 'incomplete_body' });
+        resurrect(s, pid);
         continue;
       }
       endPhase(s);
@@ -966,113 +878,66 @@ function advance(s) {
 // Resurrection
 // ---------------------------------------------------------------------------
 
-function applyEffect(s, e, source, acc) {
-  if (e.op === 'die') {
-    const result = rollDie(s.rng, e.die);
-    acc.dice.push({ source, die: e.die, sign: e.sign, result, value: e.sign * result });
-  } else if (e.op === 'fixed') {
-    acc.fixed.push({ source, amount: e.amount });
-  } else if (e.op === 'threshold') {
-    acc.thresholdAdjustments.push({ source, amount: e.amount });
-  }
-}
-
-/** How many times a research effect applies, beyond its copies: e.g. once per rival who prepared this round. */
-function effectMultiplier(s, pid, e) {
-  if (e.per === 'rivalPrepared') {
-    const prepared = new Set((s.occupancy.night.prepare || []).map((wid) => s.workers[wid].ownerId));
-    prepared.delete(pid);
-    return prepared.size;
-  }
-  return 1;
-}
-
-/** Research effects on a resurrection attribute, in type order, one entry per application. */
-function resurrectionResearch(s, pid, attr) {
-  const out = [];
-  for (const type of Object.keys(s.config.research).sort()) {
-    const copies = effectiveCopies(s, pid, type);
-    for (let i = 0; i < copies; i++) {
-      for (const e of s.config.research[type].effects) {
-        if (e.kind !== 'resurrection' || e.attribute !== attr) continue;
-        const times = effectMultiplier(s, pid, e);
-        for (let j = 0; j < times; j++) out.push({ e, source: { kind: 'research', researchType: type, copy: i + 1 } });
-      }
+function rollEffects(s, effects, acc) {
+  for (const { e, source } of effects) {
+    if (e.op === 'die') {
+      const result = rollDie(s.rng, e.die);
+      acc.dice.push({ source, die: e.die, sign: e.sign, result, value: e.sign * result });
+    } else if (e.op === 'fixed') {
+      acc.fixed.push({ source, amount: e.amount });
     }
   }
+}
+
+/** The Humanity dice of a body, in roll order: parts in slot order, then science in type order. */
+function humanityEffects(s, pid, body) {
+  const out = [];
+  for (const slot of SLOT_ORDER) {
+    const part = body[slot];
+    for (const e of s.config.partVariants[part.variantId].effects) {
+      if (e.attribute === 'humanity') out.push({ e, source: { kind: 'part', slot, partId: part.id, variantId: part.variantId } });
+    }
+  }
+  out.push(...scienceEffects(s, pid, (e) => e.kind === 'resurrection' && e.attribute === 'humanity'));
   return out;
 }
 
-/** Rerolls of a failed attribute a player has left: once per game per ability. */
-function rerollsLeft(s, pid, attr) {
-  const p = getPlayer(s, pid);
-  let n = 0;
-  for (const [type, def] of Object.entries(s.config.research)) {
-    if (!effectiveCopies(s, pid, type)) continue;
-    for (const e of def.effects) if (e.kind === 'reroll' && e.attribute === attr) n += e.uses ?? 1;
-  }
-  return Math.max(0, n - (p.rerollsUsed || 0));
-}
-
-function rollAttribute(s, pid, attr, parts) {
-  const rc = s.config.resurrection;
-  const acc = { dice: [], fixed: [], thresholdAdjustments: [] };
-  const base = rollDie(s.rng, rc.baseDie);
-  acc.dice.push({ source: { kind: 'base' }, die: rc.baseDie, sign: 1, result: base, value: base });
+/** The Vitality sources of a body: parts in slot order, then science in type order. */
+function vitalitySources(s, pid, body) {
+  const out = [];
   for (const slot of SLOT_ORDER) {
-    const part = parts[slot];
-    const v = s.config.partVariants[part.variantId];
-    for (const e of v.effects) {
-      if (e.attribute === attr) applyEffect(s, e, { kind: 'part', slot, partId: part.id, variantId: part.variantId }, acc);
-    }
+    const part = body[slot];
+    const amount = partVitality(s.config, part.variantId);
+    if (amount) out.push({ source: { kind: 'part', slot, partId: part.id, variantId: part.variantId }, amount });
   }
-  for (const { e, source } of resurrectionResearch(s, pid, attr)) applyEffect(s, e, source, acc);
-  const score = acc.dice.reduce((a, d) => a + d.value, 0) + acc.fixed.reduce((a, f) => a + f.amount, 0);
-  const baseThreshold = rc.thresholds[attr];
-  const threshold = baseThreshold + acc.thresholdAdjustments.reduce((a, t) => a + t.amount, 0);
-  return { attribute: attr, ...acc, baseThreshold, threshold, score, success: score >= threshold };
+  for (const { e, source } of scienceEffects(s, pid, (x) => x.kind === 'resurrection' && x.attribute === 'vitality')) out.push({ source, amount: e.amount });
+  return out;
 }
 
 function resurrect(s, pid) {
   const p = getPlayer(s, pid);
-  const parts = { ...p.body };
-  const consumed = SLOT_ORDER.map((slot) => parts[slot]);
+  const rc = s.config.resurrection;
+  const body = { ...p.body };
+  const consumed = SLOT_ORDER.map((slot) => body[slot]);
   p.body = emptyBody();
-  emit(s, 'RESURRECTION_STARTED', { playerId: pid, parts: SLOT_ORDER.map((slot) => ({ slot, partId: parts[slot].id, variantId: parts[slot].variantId })) });
-  const attributes = {};
-  for (const attr of ATTRIBUTES) {
-    attributes[attr] = rollAttribute(s, pid, attr, parts);
-    // A one-off ability may reroll a failed attribute once.
-    if (!attributes[attr].success && rerollsLeft(s, pid, attr) > 0) {
-      p.rerollsUsed = (p.rerollsUsed || 0) + 1;
-      emit(s, 'ATTRIBUTE_REROLLED', { playerId: pid, attribute: attr, firstScore: attributes[attr].score });
-      attributes[attr] = { ...rollAttribute(s, pid, attr, parts), rerolled: true };
-    }
-  }
-  for (const attr of ATTRIBUTES) {
-    const a = attributes[attr];
-    for (const d of a.dice) emit(s, 'DIE_ROLLED', { playerId: pid, purpose: 'resurrection', attribute: attr, source: d.source, die: d.die, sign: d.sign, result: d.result });
-  }
-  emit(s, 'RESURRECTION_ROLLED', { playerId: pid, attributes: clone(attributes) });
+  emit(s, 'RESURRECTION_STARTED', { playerId: pid, parts: SLOT_ORDER.map((slot) => ({ slot, partId: body[slot].id, variantId: body[slot].variantId })) });
+  const sources = vitalitySources(s, pid, body);
+  const vitality = { total: sources.reduce((a, x) => a + x.amount, 0), threshold: rc.thresholds.vitality, sources };
+  const acc = { dice: [], fixed: [] };
+  const base = rollDie(s.rng, rc.baseDie);
+  acc.dice.push({ source: { kind: 'base' }, die: rc.baseDie, sign: 1, result: base, value: base });
+  rollEffects(s, humanityEffects(s, pid, body), acc);
+  const score = acc.dice.reduce((a, d) => a + d.value, 0);
+  const humanity = { dice: acc.dice, threshold: rc.thresholds.humanity, score, success: score >= rc.thresholds.humanity };
+  for (const d of acc.dice) emit(s, 'DIE_ROLLED', { playerId: pid, purpose: 'resurrection', attribute: 'humanity', source: d.source, die: d.die, sign: d.sign, result: d.result });
+  emit(s, 'RESURRECTION_ROLLED', { playerId: pid, vitality: clone(vitality), humanity: clone(humanity) });
+  discardParts(s, p, consumed, 'resurrection');
   const record = {
     round: s.round, playerId: pid,
-    scores: Object.fromEntries(ATTRIBUTES.map((a) => [a, { score: attributes[a].score, threshold: attributes[a].threshold, success: attributes[a].success }])),
+    vitality: vitality.total,
+    humanity: { score, threshold: humanity.threshold, success: humanity.success },
     outcome: null, creatureId: null,
   };
-  const { vitality, humanity } = attributes;
-  if (!vitality.success) {
-    const pool = [...consumed];
-    const refund = [];
-    const n = Math.min(s.config.resurrection.failedVitalityRefund, pool.length);
-    for (let i = 0; i < n; i++) refund.push(pool.splice(randInt(s.rng, pool.length), 1)[0]);
-    p.loose.push(...refund);
-    record.outcome = 'failed';
-    s.resurrections.push(deepFreeze(record));
-    emit(s, 'RESURRECTION_FAILED', { playerId: pid, refundedParts: clone(refund), lostParts: clone(pool) });
-    const failSus = Math.max(0, s.config.resurrection.failedVitalitySuspicion - researchBonus(s, pid, 'quietFailure'));
-    if (failSus > 0) changeSuspicion(s, failSus, 'failed_resurrection', pid);
-    return;
-  }
   s.counters.creature += 1;
   const cid = `creature-${s.counters.creature}`;
   if (humanity.success) {
@@ -1092,7 +957,7 @@ function resurrect(s, pid) {
   record.controlDecisions = [];
   const n = s.players.length;
   const chain = Array.from({ length: n }, (_, i) => s.players[(p.seat + i) % n].id);
-  s.control = { creatorId: pid, creatureId: cid, parts: clone(consumed), chain, position: 0, record };
+  s.control = { creatorId: pid, creatureId: cid, chain, position: 0, record };
   emit(s, 'MONSTER_CREATED', { playerId: pid, creatureId: cid, chain: [...chain] });
 }
 
@@ -1101,37 +966,20 @@ function mobCannotStopMonster(s) {
   unleash(s, 'mob_overwhelmed');
 }
 
-/** Control-roll effects for a player: research in type order, one entry per effective copy. */
+/** Control-roll effects for a player: science in type order, one entry per card. */
 function controlEffects(s, pid) {
-  const out = [];
-  for (const type of Object.keys(s.config.research).sort()) {
-    const copies = effectiveCopies(s, pid, type);
-    for (let i = 0; i < copies; i++) for (const e of s.config.research[type].effects) if (e.kind === 'control') out.push({ e, source: { kind: 'research', researchType: type, copy: i + 1 } });
-  }
-  return out;
+  return scienceEffects(s, pid, (e) => e.kind === 'control');
 }
 
-/** The control threshold against a creator's monsters: the base, plus their Ferocity research. */
-export function controlThreshold(s, creatorId = null) {
-  if (!creatorId) return s.config.control.threshold;
-  let ferocity = 0;
-  for (const [type, def] of Object.entries(s.config.research)) {
-    const copies = effectiveCopies(s, creatorId, type);
-    if (!copies) continue;
-    for (const e of def.effects) {
-      if (e.kind !== 'ferocity') continue;
-      // Per hunter: once for each rival able to subdue the monster, after the first `beyond`.
-      const times = e.per === 'rivalHunters' ? Math.max(0, s.players.filter((x) => x.id !== creatorId && canSubdueOthers(s, x.id)).length - (e.beyond || 0)) : 1;
-      ferocity += copies * e.amount * times;
-    }
-  }
-  return s.config.control.threshold + ferocity;
+/** The control threshold. */
+export function controlThreshold(s) {
+  return s.config.control.threshold;
 }
 
-/** Exact chance that a player's control roll succeeds against a creator's monster (default: an ordinary one). Pure: consumes no RNG. */
-export function estimateControl(s, pid, creatorId = null) {
+/** Exact chance that a player's control roll succeeds. Pure: consumes no RNG. */
+export function estimateControl(s, pid) {
   const cc = s.config.control;
-  return successChance([{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, pid).map((x) => x.e)], controlThreshold(s, creatorId));
+  return successChance([{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, pid).map((x) => x.e)], cc.threshold);
 }
 
 // successChance is pure and called for every player against every creator on
@@ -1151,7 +999,6 @@ function successChance(effects, threshold) {
 function computeSuccessChance(effects, threshold) {
   let dist = new Map([[0, 1]]);
   for (const e of effects) {
-    if (e.op === 'threshold') { threshold += e.amount; continue; }
     const faces = e.op === 'die' ? Array.from({ length: e.die }, (_, i) => e.sign * (i + 1)) : [e.amount];
     const next = new Map();
     for (const [v, pr] of dist) for (const f of faces) next.set(v + f, (next.get(v + f) || 0) + pr / faces.length);
@@ -1164,20 +1011,16 @@ function computeSuccessChance(effects, threshold) {
 
 function attemptControl(s, pid) {
   const k = s.control;
-  const p = getPlayer(s, pid);
   const cc = s.config.control;
-  p.controlAttemptsUsed += 1;
-  if (k.pursuit) p.pursuitsUsed = (p.pursuitsUsed || 0) + 1;
-  const acc = { dice: [], fixed: [], thresholdAdjustments: [] };
+  const acc = { dice: [], fixed: [] };
   const base = rollDie(s.rng, cc.baseDie);
   acc.dice.push({ source: { kind: 'base' }, die: cc.baseDie, sign: 1, result: base, value: base });
-  for (const { e, source } of controlEffects(s, pid)) applyEffect(s, e, source, acc);
+  rollEffects(s, controlEffects(s, pid), acc);
   const score = acc.dice.reduce((a, d) => a + d.value, 0) + acc.fixed.reduce((a, f) => a + f.amount, 0);
-  const threshold = controlThreshold(s, k.creatorId);
+  const threshold = cc.threshold;
   const success = score >= threshold;
   for (const d of acc.dice) emit(s, 'DIE_ROLLED', { playerId: pid, purpose: 'control', source: d.source, die: d.die, sign: d.sign, result: d.result });
-  const roll = { dice: acc.dice, fixed: acc.fixed, threshold, score, success };
-  emit(s, 'CONTROL_ROLLED', { playerId: pid, creatureId: k.creatureId, attemptsLeft: controlAttempts(s, pid), ...clone(roll) });
+  emit(s, 'CONTROL_ROLLED', { playerId: pid, creatureId: k.creatureId, dice: clone(acc.dice), fixed: clone(acc.fixed), threshold, score, success });
   k.record.controlDecisions.push({ playerId: pid, subdue: true, score, threshold, success });
   if (success) { subdue(s, pid); return; }
   // A failed attempt adds no suspicion; the monster passes on.
@@ -1186,12 +1029,6 @@ function attemptControl(s, pid) {
 
 function subdue(s, pid) {
   const k = s.control;
-  const p = getPlayer(s, pid);
-  const pool = [...k.parts];
-  const salvage = [];
-  const n = Math.min(s.config.control.subdueSalvage, pool.length);
-  for (let i = 0; i < n; i++) salvage.push(pool.splice(randInt(s.rng, pool.length), 1)[0]);
-  p.loose.push(...salvage);
   const c = s.creatures[k.creatureId];
   c.status = 'destroyed';
   c.disposition = 'subdued';
@@ -1200,7 +1037,7 @@ function subdue(s, pid) {
   k.record.subduedBy = pid;
   s.resurrections.push(deepFreeze(k.record));
   s.control = null;
-  emit(s, 'MONSTER_SUBDUED', { playerId: pid, creatorId: c.ownerId, creatureId: c.id, attemptsLeft: controlAttempts(s, pid), salvagedParts: clone(salvage), lostParts: clone(pool) });
+  emit(s, 'MONSTER_SUBDUED', { playerId: pid, creatorId: c.ownerId, creatureId: c.id });
   // The struggle is noticed. The monster is already destroyed, so a mob
   // formed now is an ordinary mob.
   changeSuspicion(s, s.config.control.subdueSuspicion, 'monster_subdued', pid);
@@ -1210,9 +1047,7 @@ function declineSubdue(s, pid) {
   const k = s.control;
   k.record.controlDecisions.push({ playerId: pid, subdue: false });
   k.position += 1;
-  emit(s, 'SUBDUE_DECLINED', { playerId: pid, creatureId: k.creatureId, pursuit: !!k.pursuit });
-  // Letting a monster you are chasing get away is not noticed.
-  if (k.pursuit) return;
+  emit(s, 'SUBDUE_DECLINED', { playerId: pid, creatureId: k.creatureId });
   // The mob cannot stop a monster: if it forms now, the monster is unleashed.
   changeSuspicion(s, s.config.control.declineSuspicion, 'monster_not_subdued', pid, mobCannotStopMonster);
 }
@@ -1230,33 +1065,36 @@ function unleash(s, cause) {
 }
 
 /**
- * Exact success probabilities for a resurrection attempt with the player's
- * currently installed body and effective research. Pure: consumes no RNG.
- * Returns null if the body is incomplete.
+ * A body's Vitality total and exact Humanity odds with the player's current
+ * science: six part IDs from their hand, or (by default) their prepared body.
+ * Pure: consumes no RNG. Returns null without a full set.
  */
-export function estimateResurrection(s, pid) {
+export function estimateResurrection(s, pid, partIds = null) {
   const p = getPlayer(s, pid);
-  if (!p || !bodyComplete(p)) return null;
-  const rc = s.config.resurrection;
-  const out = {};
-  for (const attr of ATTRIBUTES) {
-    const effects = [{ op: 'die', die: rc.baseDie, sign: 1 }];
-    for (const slot of SLOT_ORDER) for (const e of s.config.partVariants[p.body[slot].variantId].effects) if (e.attribute === attr) effects.push(e);
-    for (const { e } of resurrectionResearch(s, pid, attr)) effects.push(e);
-    const threshold = rc.thresholds[attr] + effects.filter((e) => e.op === 'threshold').reduce((a, e) => a + e.amount, 0);
-    let success = successChance(effects, rc.thresholds[attr]);
-    // One reroll at most per attribute per attempt; rerolls are spent in attribute order.
-    const rerollAvail = rerollsLeft(s, pid, attr) > 0;
-    if (rerollAvail) success = 1 - (1 - success) * (1 - success);
-    out[attr] = { threshold, success, reroll: rerollAvail };
+  if (!p) return null;
+  let body;
+  if (partIds) {
+    const parts = partIds.map((id) => p.hand.find((x) => x.id === id) || Object.values(p.body).find((x) => x && x.id === id));
+    if (parts.length !== SLOT_ORDER.length || parts.some((x) => !x)) return null;
+    body = emptyBody();
+    for (const part of parts) {
+      const slot = s.config.partTypes[part.type].slots.find((sl) => body[sl] === null);
+      if (!slot) return null;
+      body[slot] = part;
+    }
+  } else {
+    if (!bodyComplete(p)) return null;
+    body = p.body;
   }
-  const pv = out.vitality.success;
-  const ph = out.humanity.success;
+  const rc = s.config.resurrection;
+  const total = vitalitySources(s, pid, body).reduce((a, x) => a + x.amount, 0);
+  const effects = [{ op: 'die', die: rc.baseDie, sign: 1 }, ...humanityEffects(s, pid, body).map((x) => x.e)];
+  const pStable = successChance(effects, rc.thresholds.humanity);
   return {
-    attributes: out,
-    pFailed: 1 - pv,
-    pStable: pv * ph,
-    pMonster: pv * (1 - ph),
+    vitality: { total, threshold: rc.thresholds.vitality, ok: total >= rc.thresholds.vitality },
+    humanity: { threshold: rc.thresholds.humanity, success: pStable },
+    pStable,
+    pMonster: 1 - pStable,
   };
 }
 
@@ -1294,7 +1132,7 @@ const COMMAND_FIELDS = {
   PLACE_MEEPLE: { required: ['type', 'playerId', 'workerId', 'actionId'], optional: ['choices', 'seq'] },
   PASS_TURN: { required: ['type', 'playerId'], optional: ['seq'] },
   SUBDUE_MONSTER: { required: ['type', 'playerId', 'subdue'], optional: ['seq'] },
-  PICK_RESEARCH: { required: ['type', 'playerId', 'cardId'], optional: ['seq'] },
+  PICK_PART: { required: ['type', 'playerId', 'partId'], optional: ['seq'] },
 };
 
 export const COMMAND_TYPES = Object.keys(COMMAND_FIELDS);
@@ -1321,14 +1159,13 @@ export function validateCommand(s, cmd) {
     if (typeof cmd.subdue !== 'boolean') return err('INVALID_CHOICE', 'subdue must be a boolean.');
     return null;
   }
-  if (cmd.type === 'PICK_RESEARCH') {
+  if (cmd.type === 'PICK_PART') {
     const k = s.pendingPick;
-    if (!k) return err('WRONG_PHASE', 'There are no drawn research cards to pick from.');
-    if (typeof cmd.cardId !== 'string' || !k.cards.some((x) => x.id === cmd.cardId)) return err('INVALID_TARGET', `Card ${cmd.cardId} was not drawn.`);
-    if (!k.eligible.includes(cmd.cardId)) return err('ALREADY_DISCOVERED', 'You already discovered that type.');
+    if (!k) return err('WRONG_PHASE', 'There are no drawn parts to pick from.');
+    if (typeof cmd.partId !== 'string' || !k.parts.some((x) => x.id === cmd.partId)) return err('INVALID_TARGET', `Part ${cmd.partId} was not drawn.`);
     return null;
   }
-  if (s.pendingPick) return err('PICK_PENDING', 'Pick from the drawn research cards first.');
+  if (s.pendingPick) return err('PICK_PENDING', 'Pick one of the drawn parts first.');
   if (s.phase !== 'day' && s.phase !== 'night') return err('WRONG_PHASE', 'Workers can only be placed by day or night.');
   if (cmd.type === 'PASS_TURN') return null;
 
@@ -1363,12 +1200,15 @@ function applyCommand(s, cmd) {
     emit(s, 'WORKER_PLACED', { playerId: p.id, workerId: w.id, workerKind: w.kind, actionId: cmd.actionId, location: def.location, choices: clone(choices) });
     HANDLERS[cmd.actionId].apply(s, p, w, def, choices);
     s.turnPointer = (p.seat + 1) % s.players.length;
-  } else if (cmd.type === 'PICK_RESEARCH') {
-    // Experiment discoveries stay private: they are never published.
+  } else if (cmd.type === 'PICK_PART') {
+    // Keep one specimen; the rest go to the discard pile.
     const k = s.pendingPick;
     s.pendingPick = null;
-    gainResearch(s, p, k.cards.find((x) => x.id === cmd.cardId), 'experiment');
-    returnToDeck(s, p, k.cards.filter((x) => x.id !== cmd.cardId));
+    const kept = k.parts.find((x) => x.id === cmd.partId);
+    p.hand.push(kept);
+    emit(s, 'PARTS_GAINED', { playerId: p.id, source: 'specimens', parts: [clone(kept)] });
+    const rest = k.parts.filter((x) => x.id !== cmd.partId);
+    if (rest.length) discardParts(s, p, rest, 'specimens');
   } else if (cmd.type === 'SUBDUE_MONSTER') {
     if (cmd.subdue) attemptControl(s, p.id);
     else declineSubdue(s, p.id);
@@ -1386,11 +1226,11 @@ export function dispatch(state, command) {
   // entries never change, and the configuration is frozen: share them
   // structurally (new arrays, same entries) instead of copying them on every
   // command, which made a game quadratic in its length.
-  const { events, config, commandLog, suspicionHistory, resurrections, publications, ...rest } = state;
+  const { events, config, commandLog, suspicionHistory, resurrections, ...rest } = state;
   const copied = clone(rest);
   const shared = {
     config, events: events.slice(), commandLog: commandLog.slice(), suspicionHistory: suspicionHistory.slice(),
-    resurrections: resurrections.slice(), publications: publications.slice(),
+    resurrections: resurrections.slice(),
   };
   // Keep the key order earlier versions produced (every key in place, events
   // last): saves are verified by comparing serialized text.
@@ -1425,7 +1265,7 @@ export function getLegalCommands(s, pid) {
   }
   const p = getPlayer(s, pid);
   if (s.pendingPick) {
-    return s.pendingPick.eligible.map((cardId) => ({ type: 'PICK_RESEARCH', playerId: pid, cardId }));
+    return s.pendingPick.parts.map((x) => ({ type: 'PICK_PART', playerId: pid, partId: x.id }));
   }
   const out = [{ type: 'PASS_TURN', playerId: pid }];
   for (const w of playerWorkers(s, pid)) {
@@ -1465,6 +1305,11 @@ export function enumerateLegalCommands(s, pid, { dedupe = true } = {}) {
   const seenWorkerKinds = new Set();
   const p = getPlayer(s, pid);
   for (const t of templates) {
+    if (t.type === 'PICK_PART' && dedupe) {
+      // Drawn parts of the same variant are interchangeable.
+      const v = s.pendingPick.parts.find((x) => x.id === t.partId).variantId;
+      if (out.some((o) => o.type === 'PICK_PART' && s.pendingPick.parts.find((x) => x.id === o.partId).variantId === v)) continue;
+    }
     if (t.type !== 'PLACE_MEEPLE') { out.push(t); continue; }
     if (dedupe) {
       const kind = s.workers[t.workerId].kind;
@@ -1480,69 +1325,45 @@ export function enumerateLegalCommands(s, pid, { dedupe = true } = {}) {
   return out;
 }
 
-// Parts are interchangeable when they share a variant and a location: a loose
-// part and an installed one of the same variant are not (discarding the
-// installed one empties a slot).
-function partKey(p, id) {
-  const loose = p.loose.find((x) => x.id === id);
-  return loose ? `loose:${loose.variantId}` : `installed:${installedParts(p).find((x) => x.id === id).variantId}`;
-}
-
-function partSignature(p, ids) {
-  return ids.map((id) => partKey(p, id)).sort().join('|');
+/** Groups of a player's parts in hand: one group per variant when deduplicating, else one per part. */
+function handGroups(p, values, dedupe) {
+  const groups = [];
+  const byKey = new Map();
+  for (const id of values) {
+    const part = p.hand.find((x) => x.id === id);
+    const key = dedupe ? part.variantId : id;
+    let g = byKey.get(key);
+    if (!g) { g = { type: part.type, variantId: part.variantId, ids: [] }; byKey.set(key, g); groups.push(g); }
+    g.ids.push(id);
+  }
+  return groups;
 }
 
 /**
- * Part selections that differ in their variants, built by choosing how many of
- * each distinct variant to take rather than which instances. This stays small
- * when a player holds many parts (choosing 6 of 52 instances one by one would
- * be millions of combinations). `typeCaps` optionally limits parts per type.
+ * Part selections of exactly `size` parts that differ in their variants (or,
+ * without dedupe, in their instances), built by choosing how many of each
+ * group to take. `perType` optionally fixes the number of each type.
  */
-function variantCombos(p, values, min, max, typeCaps = null) {
-  const all = [...p.loose, ...installedParts(p)];
-  const groups = [];
-  const byVariant = new Map();
-  for (const id of values) {
-    const part = all.find((x) => x.id === id);
-    const key = partKey(p, id);
-    let g = byVariant.get(key);
-    if (!g) { g = { type: part.type, ids: [] }; byVariant.set(key, g); groups.push(g); }
-    g.ids.push(id);
-  }
+function partSelections(p, values, size, dedupe, perType = null) {
+  const groups = handGroups(p, values, dedupe);
   const out = [];
   const used = {};
   const rec = (gi, picked) => {
-    if (gi === groups.length) {
-      if (picked.length >= min) out.push({ partIds: [...picked] });
+    if (picked.length === size) {
+      if (!perType || Object.entries(perType).every(([t, n]) => (used[t] || 0) === n)) out.push([...picked]);
       return;
     }
+    if (gi === groups.length) return;
     const g = groups[gi];
-    const typeLeft = typeCaps ? (typeCaps[g.type] || 0) - (used[g.type] || 0) : Infinity;
-    const most = Math.min(g.ids.length, max - picked.length, typeLeft);
-    for (let n = 0; n <= most; n++) {
+    const typeLeft = perType ? (perType[g.type] || 0) - (used[g.type] || 0) : Infinity;
+    const most = Math.min(g.ids.length, size - picked.length, typeLeft);
+    for (let n = most; n >= 0; n--) {
       used[g.type] = (used[g.type] || 0) + n;
       rec(gi + 1, [...picked, ...g.ids.slice(0, n)]);
       used[g.type] -= n;
     }
   };
   rec(0, []);
-  return out.sort((a, b) => a.partIds.length - b.partIds.length);
-}
-
-function uniqueCombos(p, values, min, max, dedupe) {
-  if (dedupe) return variantCombos(p, values, min, max);
-  const out = [];
-  const seen = new Set();
-  for (let size = min; size <= Math.min(max, values.length); size++) {
-    for (const combo of combinations(values, size)) {
-      if (dedupe) {
-        const sig = partSignature(p, combo);
-        if (seen.has(sig)) continue;
-        seen.add(sig);
-      }
-      out.push({ partIds: combo });
-    }
-  }
   return out;
 }
 
@@ -1550,40 +1371,16 @@ function expandChoices(s, p, actionId, c, dedupe) {
   const out = [];
   if (actionId === 'research') {
     for (const id of c.researchCardId.values) out.push({ researchCardId: id });
-  } else if (actionId === 'specimens') {
-    const v = c.partTypes.values;
-    const rec = (start, acc) => {
-      if (acc.length === c.partTypes.count) { out.push({ partTypes: [...acc] }); return; }
-      for (let i = start; i < v.length; i++) { acc.push(v[i]); rec(i, acc); acc.pop(); }
-    };
-    rec(0, []);
-  } else if (actionId === 'assemble' && dedupe) {
-    out.push(...variantCombos(p, c.partIds.values, c.partIds.min, c.partIds.max, c.partIds.maxPerPartType));
-  } else if (actionId === 'assemble') {
-    const seen = new Set();
-    const k = c.partIds;
-    for (let size = k.min; size <= Math.min(k.max, k.values.length); size++) {
-      for (const combo of combinations(k.values, size)) {
-        const count = {};
-        let ok = true;
-        for (const id of combo) {
-          const type = p.loose.find((x) => x.id === id).type;
-          count[type] = (count[type] || 0) + 1;
-          if (count[type] > k.maxPerPartType[type]) { ok = false; break; }
-        }
-        if (!ok) continue;
-        if (dedupe) {
-          const sig = partSignature(p, combo);
-          if (seen.has(sig)) continue;
-          seen.add(sig);
-        }
-        out.push({ partIds: combo });
-      }
-    }
   } else if (actionId === 'charity') {
     for (const units of c.units.values) out.push({ units });
-  } else if (actionId === 'experiment' || actionId === 'sell') {
-    out.push(...uniqueCombos(p, c.partIds.values, c.partIds.min, c.partIds.max, dedupe));
+  } else if (actionId === 'sell' || actionId === 'experiment') {
+    for (const ids of partSelections(p, c.partIds.values, c.partIds.min, dedupe)) out.push({ partIds: ids });
+  } else if (actionId === 'prepare') {
+    const k = c.partIds;
+    for (const ids of partSelections(p, k.values, k.min, dedupe, k.perPartType)) {
+      const vitality = ids.reduce((a, id) => a + partVitality(s.config, p.hand.find((x) => x.id === id).variantId), 0) + k.vitalityBonus;
+      if (vitality >= k.minVitality) out.push({ partIds: ids });
+    }
   }
   return out;
 }
@@ -1601,27 +1398,20 @@ export function filterEvents(events, pid = null) {
   return events.filter((e) => eventVisibleTo(e, pid));
 }
 
-function publicPlayer(s, p, thresholdOf) {
-  // The player's control roll against each creator's monsters: its effects
-  // once, the threshold once per creator (as estimateControl, without the
-  // repeated work: every view needs every pair).
-  const cc = s.config.control;
-  const roll = [{ op: 'die', die: cc.baseDie, sign: 1 }, ...controlEffects(s, p.id).map((x) => x.e)];
+function publicPlayer(s, p) {
+  const counts = {};
+  for (const c of p.science) counts[c.type] = (counts[c.type] || 0) + 1;
   return {
     id: p.id, name: p.name, seat: p.seat, money: p.money,
-    loose: clone(p.loose), body: clone(p.body), bodyComplete: bodyComplete(p),
-    research: [...p.research], published: [...p.published], igorsHired: p.igorsHired,
+    hand: clone(p.hand), body: clone(p.body), bodyComplete: bodyComplete(p),
+    science: clone(p.science), scienceCounts: counts, igorsHired: p.igorsHired,
     nextIgorCost: igorCount(s, p) < s.config.maxIgors ? nextIgorCost(s) : null,
     passed: p.passed,
-    effectiveResearch: Object.fromEntries(Object.keys(s.config.research).sort().map((t) => [t, effectiveCopies(s, p.id, t)])),
-    rerollsUsed: p.rerollsUsed || 0,
-    assembleCapacity: assembleCapacity(s, p.id),
-    controlAttempts: controlAttempts(s, p.id),
-    controlChance: successChance(roll, cc.threshold),
-    controlChanceVs: Object.fromEntries(s.players.map((c) => [c.id, successChance(roll, thresholdOf(c.id))])),
-    controlThreshold: thresholdOf(p.id),
+    vitalityBonus: vitalityBonus(s, p.id),
+    bestVitality: bestVitality(s, p.id),
+    controlChance: estimateControl(s, p.id),
     garrisoned: garrisoned(s, p.id),
-    canSubdueOthers: canSubdueOthers(s, p.id),
+    subdueOwn: hasAbility(s, p.id, 'subdueOwn'),
     resurrectionOdds: estimateResurrection(s, p.id),
     workers: playerWorkers(s, p.id).map((w) => ({ ...clone(w), availableNow: (s.phase === 'day' || s.phase === 'night') ? workerAvailable(s, w) : false })),
   };
@@ -1642,13 +1432,10 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     suspicionHistory: s.suspicionHistory.slice(),
     market: clone(s.market),
     deckCount: s.deck.length,
-    publications: s.publications.slice(),
+    partsDeckCount: s.partsDeck.length,
+    partsDiscard: clone(s.partsDiscard),
     occupancy: clone(s.occupancy),
-    players: (() => {
-      const thresholds = {};
-      const thresholdOf = (id) => (thresholds[id] ??= controlThreshold(s, id));
-      return s.players.map((p) => publicPlayer(s, p, thresholdOf));
-    })(),
+    players: s.players.map((p) => publicPlayer(s, p)),
     creatures: s.creatureOrder.map((id) => clone(s.creatures[id])),
     stableTransitions: [...s.stableTransitions],
     capacities: Object.fromEntries(Object.keys(s.config.actions).map((id) => [id, capacityFor(s.config, id)])),
@@ -1658,9 +1445,9 @@ export function getPublicView(s, { includeEvents = true } = {}) {
     pendingPick: s.pendingPick ? clone(s.pendingPick) : null,
     control: s.control ? {
       creatorId: s.control.creatorId, creatureId: s.control.creatureId, chain: [...s.control.chain], position: s.control.position,
-      deciderId: s.control.chain[s.control.position] || null, pursuit: !!s.control.pursuit, decisions: clone(s.control.record.controlDecisions),
+      deciderId: s.control.chain[s.control.position] || null, decisions: clone(s.control.record.controlDecisions),
       // Players after the current decider who could still subdue this monster.
-      upcoming: s.control.chain.slice(s.control.position + 1).filter((pid) => canSubdue(s, pid)),
+      upcoming: s.control.chain.slice(s.control.position + 1).filter((pid) => canSubdue(s, pid, s.control.creatorId)),
     } : null,
     resurrections: s.resurrections.slice(),
     commandCount: s.commandLog.length,
@@ -1728,6 +1515,6 @@ export function deserialize(json, { verifyReplay = true } = {}) {
     if (serialize(rebuilt) !== serialize(s)) throw new Error('Save failed replay verification: state does not match its command history.');
   }
   deepFreeze(s.config);
-  for (const log of [s.suspicionHistory, s.publications, s.resurrections]) for (const x of log || []) deepFreeze(x);
+  for (const log of [s.suspicionHistory, s.resurrections]) for (const x of log || []) deepFreeze(x);
   return s;
 }

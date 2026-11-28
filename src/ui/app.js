@@ -3,8 +3,8 @@
 
 import * as E from '../engine/index.js';
 import {
-  esc, effectText, variantText, variantName, researchName, actionText, workerLabel, describeEvent,
-  sourceLabel, attrName, pct,
+  esc, variantText, variantName, actionText, workerLabel, describeEvent,
+  sourceLabel, pct,
 } from './format.js';
 import { POLICIES } from '../sim/policies.js';
 import { renderMarkdown } from './markdown.js';
@@ -172,7 +172,9 @@ function suspicionMeter(v, max) {
 function partChip(cfg, part, extra = '', slotLabel = '') {
   if (!part) return `<span class="part empty" title="${slotLabel ? `${slotLabel}: empty` : 'empty'}">${slotLabel ? slotLabel.toLowerCase() : 'empty'}</span>`;
   const v = cfg.partVariants[part.variantId];
-  const cls = v.effects.length ? (v.effects.some((e) => (e.op === 'die' && e.sign < 0) || (e.op === 'fixed' && e.amount < 0) || (e.op === 'threshold' && e.amount > 0)) ? 'bad' : 'good') : '';
+  const bad = v.effects.some((e) => (e.op === 'die' && e.sign < 0) || (e.op === 'fixed' && e.amount < 0));
+  const good = v.effects.some((e) => (e.op === 'die' && e.sign > 0) || (e.op === 'fixed' && e.amount > 0));
+  const cls = bad && good ? 'mixed' : bad ? 'bad' : good ? 'good' : '';
   return `<span class="part ${cls}" title="${slotLabel ? `${slotLabel}: ` : ''}${esc(variantText(cfg, part.variantId))}">${esc(v.name)}${extra}</span>`;
 }
 
@@ -185,48 +187,46 @@ function bodyDiagram(cfg, p) {
 
 function oddsLine(o) {
   if (!o) return '';
-  return `<div class="odds" title="Exact odds with the current body and effective research">
-    <span>Vit ${pct(o.attributes.vitality.success)}</span><span>Hum ${pct(o.attributes.humanity.success)}</span>
-    <span class="o-stable">Stable ${pct(o.pStable)}</span><span class="o-unleash">Monster ${pct(o.pMonster)}</span><span class="o-fail">Fail ${pct(o.pFailed)}</span>
+  return `<div class="odds" title="Vitality total, and exact Humanity odds with the player's science">
+    <span>Vitality ${o.vitality.total}/${o.vitality.threshold}</span>
+    <span class="o-stable">Stable ${pct(o.pStable)}</span><span class="o-unleash">Monster ${pct(o.pMonster)}</span>
   </div>`;
+}
+
+// Parts grouped by variant, as chips.
+function partChips(cfg, parts) {
+  const by = {};
+  for (const part of parts) (by[part.variantId] = by[part.variantId] || []).push(part);
+  return Object.values(by).map((arr) => partChip(cfg, arr[0], arr.length > 1 ? ` ×${arr.length}` : '')).join('') || '<span class="muted">none</span>';
 }
 
 function playerPanel(view, p) {
   const cfg = view.config;
   const active = view.activePlayerId === p.id;
   const first = view.firstPlayerId === p.id;
-  const research = Object.keys(cfg.research).sort().map((t) => {
-    const n = p.effectiveResearch[t];
-    if (!n) return '';
-    const own = p.research.includes(t);
-    const pub = p.published.includes(t);
-    return `<span class="rchip ${own ? 'own' : 'shared'}" title="${esc(cfg.research[t].text)}${own ? '' : ' (via publication)'}">${esc(cfg.research[t].name)}${n > 1 ? ` ×${n}` : ''}${pub ? ' <i>pub.</i>' : ''}</span>`;
-  }).join('');
+  const science = Object.entries(p.scienceCounts).sort().map(([t, n]) => `<span class="rchip own k-${esc(cfg.science[t].kind)}" title="${esc(cfg.science[t].text)}">${esc(cfg.science[t].name)}${n > 1 ? ` ×${n}` : ''}</span>`).join('');
   const workers = p.workers.map((w) => `<span class="wchip ${w.kind} ${w.active ? '' : 'pending'} ${(view.phase === 'day' || view.phase === 'night') && !w.availableNow && w.active ? 'used' : ''}" title="${w.active ? '' : 'Available next round'}">${workerLabel(w)}</span>`).join('');
-  const loose = {};
-  for (const part of p.loose) (loose[part.variantId] = loose[part.variantId] || []).push(part);
-  const looseHtml = Object.entries(loose).map(([vid, arr]) => partChip(cfg, arr[0], arr.length > 1 ? ` ×${arr.length}` : '')).join('') || '<span class="muted">none</span>';
+  const T = cfg.resurrection.thresholds.vitality;
+  const best = p.bestVitality == null ? 'no full set' : `best body: Vitality ${p.bestVitality}/${T}${p.bestVitality >= T ? ' ✓' : ''}`;
+  const canSub = p.garrisoned ? '<b>garrisoned</b>' : p.subdueOwn ? 'own monster only' : 'not garrisoned';
   const creatures = view.creatures.filter((c) => c.ownerId === p.id && c.status === 'stable').length;
   return `<section class="player seat-${p.seat} ${active ? 'active' : ''} ${p.passed && (view.phase === 'day' || view.phase === 'night') ? 'passed' : ''}">
     <header><span class="pname pc pc-${p.seat}">${esc(p.name)}</span>${aiKind(p.id) ? `<span class="badge ai" title="${esc(AI_KINDS[aiKind(p.id)])}">AI</span>` : ''}${first ? '<span class="badge" title="Has initiative this round">1st</span>' : ''}${p.passed && (view.phase === 'day' || view.phase === 'night') ? '<span class="badge muted">passed</span>' : ''}<span class="money" title="Money">⚱ ${p.money}</span></header>
     <div class="row" aria-label="Workers">${workers}${p.nextIgorCost != null ? `<span class="muted small" title="Next Igor costs ${p.nextIgorCost}">+Igor ${p.nextIgorCost}</span>` : ''}</div>
-    <div class="row"><span class="lbl">Research</span>${research || '<span class="muted">none</span>'}</div>
-    <div class="row" title="${p.controlAttempts} control attempt${p.controlAttempts === 1 ? '' : 's'} left, ${pct(p.controlChance)} chance per roll"><span class="lbl">Control</span>${p.controlAttempts} left · ${pct(p.controlChance)}/roll${p.garrisoned ? ' · <b>garrisoned</b>' : ''}</div>
-    ${bodyDiagram(cfg, p)}
-    ${oddsLine(p.resurrectionOdds)}
-    <div class="row"><span class="lbl">Loose</span>${looseHtml}</div>
+    <div class="row"><span class="lbl">Science</span>${science || '<span class="muted">none</span>'}</div>
+    <div class="row" title="${pct(p.controlChance)} chance per control roll"><span class="lbl">Control</span>${pct(p.controlChance)}/roll · ${canSub}</div>
+    <div class="row"><span class="lbl">Hand</span>${partChips(cfg, p.hand)}</div>
+    <div class="row small muted">${best}</div>
+    ${p.bodyComplete ? `<div class="row"><span class="lbl">Prepared</span></div>${bodyDiagram(cfg, p)}${oddsLine(p.resurrectionOdds)}` : ''}
     ${creatures ? `<div class="row"><span class="lbl">Creatures</span>${creatures} stable</div>` : ''}
   </section>`;
 }
 
 function marketPanel(view) {
   const cfg = view.config;
-  const cards = view.market.map((c) => `<div class="rcard r-${c.type}"><b>${esc(cfg.research[c.type].name)}</b><span>${esc(cfg.research[c.type].text)}</span></div>`).join('');
-  const pubs = view.publications.length
-    ? view.publications.map((x) => `<li>${esc(researchName(cfg, x.type))} — <span class="pc pc-${ctx().seat(x.playerId)}">${esc(ctx().name(x.playerId))}</span> (round ${x.round})</li>`).join('')
-    : '<li class="muted">Nothing published yet.</li>';
-  return `<section class="panel market"><h2>Research market <small>${view.deckCount} in deck</small></h2><div class="rcards">${cards || '<span class="muted">Market empty.</span>'}</div>
-    <h3>Publications</h3><ul class="pubs">${pubs}</ul></section>`;
+  const cards = view.market.map((c) => `<div class="rcard r-${c.type} k-${esc(cfg.science[c.type].kind)}"><b>${esc(cfg.science[c.type].name)}</b><span>${esc(cfg.science[c.type].text)}</span></div>`).join('');
+  return `<section class="panel market"><h2>Science market <small>${view.deckCount} in deck</small></h2><div class="rcards">${cards || '<span class="muted">Market empty.</span>'}</div>
+    <h3>Body parts <small>${view.partsDeckCount} in deck · ${view.partsDiscard.length} discarded</small></h3><div class="row">${view.partsDiscard.length ? partChips(cfg, view.partsDiscard) : '<span class="muted">Discard pile empty.</span>'}</div></section>`;
 }
 
 function logPanel(view) {
@@ -376,15 +376,15 @@ function objectivesFlow() {
     <button class="big" data-act="obj-hide">Hide and pass the device</button>`);
 }
 
-// After an experiment the player keeps one eligible drawn research card (public).
+// After buying specimens the player keeps one of the drawn parts (public).
 function pickFlow() {
   const s = ui.state;
   const cfg = s.config;
   const k = s.pendingPick;
   const opts = E.getLegalCommands(s, s.activePlayerId);
-  const typeOf = (id) => k.cards.find((x) => x.id === id).type;
+  const partOf = (id) => k.parts.find((x) => x.id === id);
   return modal(`${esc(cfg.actions[k.actionId].name)}: keep one`,
-    `<p>You draw ${k.cards.map((x) => esc(researchName(cfg, x.type))).join(', ')}. Keep one you have not discovered; it stays private. The rest go to the bottom of the deck.</p><div class="opts">${opts.map((c, i) => `<button class="opt" data-act="pick" data-i="${i}"><b>${esc(researchName(cfg, typeOf(c.cardId)))}</b> <small class="muted">— ${esc(cfg.research[typeOf(c.cardId)].text)}</small></button>`).join('')}</div>`,
+    `<p>You draw ${k.parts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}. Keep one; the others go to the discard pile.</p><div class="opts">${opts.map((c, i) => `<button class="opt" data-act="pick" data-i="${i}"><b>${esc(variantName(cfg, partOf(c.partId).variantId))}</b> <small class="muted">— ${esc(variantText(cfg, partOf(c.partId).variantId))}</small></button>`).join('')}</div>`,
     '');
 }
 
@@ -399,7 +399,7 @@ function subdueFlow() {
   const inc = view.config.control.declineSuspicion;
   return modal('⚡ A monster is loose',
     `<p>${own ? 'Your' : `<span class="pc pc-${c.seat(k.creatorId)}">${esc(c.name(k.creatorId))}</span>'s`} Creature lives, but its Humanity failed.</p>
-    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, you have <b>${me.controlAttempts}</b> control attempt${me.controlAttempts === 1 ? '' : 's'}. Trying spends one and rolls d20 + your control research: you need ${view.config.control.threshold}+, a <b>${pct(me.controlChance)}</b> chance. Success destroys the monster, gives you ${view.config.control.subdueSalvage} of its parts at random and adds ${view.config.control.subdueSuspicion} suspicion. Failure adds nothing and passes the monster on.</p>
+    <p><span class="pc pc-${me.seat}">${esc(me.name)}</span>, trying rolls d20 + your control science: you need ${view.config.control.threshold}+, a <b>${pct(me.controlChance)}</b> chance. Success destroys the monster and adds ${view.config.control.subdueSuspicion} suspicion. Failure adds nothing and passes the monster on.</p>
     <p class="small muted">If you don't, suspicion rises by ${inc} (now ${view.suspicion}/${view.suspicionMax}) and ${later.length ? `the monster passes to ${later.map((pid) => esc(c.name(pid))).join(', then ')}` : '<b>nobody else can stop it: it will be unleashed</b>'}. If the mob forms, it cannot stop the monster either.</p>`,
     `<button class="big" data-act="subdue" data-v="1">Try to subdue (${pct(me.controlChance)})</button><button class="big ghost danger-outline" data-act="subdue" data-v="0">Let it pass</button>`);
 }
@@ -410,18 +410,13 @@ function reportOverlay(rep) {
   const blocks = [];
   for (const e of rep.events) {
     if (e.type === 'RESURRECTION_ROLLED') {
-      const rows = Object.keys(e.attributes).map((a) => {
-        const at = e.attributes[a];
-        const dice = at.dice.map((d) => `<li>${esc(sourceLabel(cfg, d.source))}: ${d.source.kind === 'base' ? '' : d.sign < 0 ? '−' : '+'}d${d.die} → <b>${d.sign < 0 ? '−' : ''}${d.result}</b></li>`).join('');
-        const fixed = at.fixed.map((f) => `<li>${esc(sourceLabel(cfg, f.source))}: fixed ${f.amount >= 0 ? '+' : '−'}${Math.abs(f.amount)}</li>`).join('');
-        const thr = at.thresholdAdjustments.map((t) => `<li>${esc(sourceLabel(cfg, t.source))}: threshold ${t.amount >= 0 ? '+' : '−'}${Math.abs(t.amount)}</li>`).join('');
-        return `<div class="attr ${at.success ? 'ok' : 'no'}"><h4>${attrName(a)} <span>${at.score} vs ${at.threshold}+ ${at.success ? '✓' : '✗'}</span></h4><ul>${dice}${fixed}${thr}</ul><small>Base threshold ${at.baseThreshold}</small></div>`;
-      }).join('');
+      const v = e.vitality;
+      const vit = v.sources.map((x) => `<li>${esc(sourceLabel(cfg, x.source))}: ${x.amount >= 0 ? '+' : '−'}${Math.abs(x.amount)}</li>`).join('');
+      const h = e.humanity;
+      const dice = h.dice.map((d) => `<li>${esc(sourceLabel(cfg, d.source))}: ${d.source.kind === 'base' ? '' : d.sign < 0 ? '−' : '+'}d${d.die} → <b>${d.sign < 0 ? '−' : ''}${d.result}</b></li>`).join('');
+      const rows = `<div class="attr ok"><h4>Vitality <span>${v.total} vs ${v.threshold}+ ✓</span></h4><ul>${vit || '<li class="muted">no modifiers</li>'}</ul></div>`
+        + `<div class="attr ${h.success ? 'ok' : 'no'}"><h4>Humanity <span>${h.score} vs ${h.threshold}+ ${h.success ? '✓' : '✗'}</span></h4><ul>${dice}</ul></div>`;
       blocks.push(`<div class="attempt"><h3><span class="pc pc-${c.seat(e.playerId)}">${esc(c.name(e.playerId))}</span></h3><div class="attrs">${rows}</div>`);
-    } else if (e.type === 'RESURRECTION_CANCELLED') {
-      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))}'s body is incomplete; the attempt is called off.</p>`);
-    } else if (e.type === 'RESURRECTION_FAILED') {
-      blocks.push(`<p class="outcome fail">Vitality failed — no Creature. Salvaged: ${e.refundedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
     } else if (e.type === 'CREATURE_STABILIZED') {
       blocks.push(`<p class="outcome stable">It lives — a stable, ${esc(e.disposition.replace(/_/g, ' '))} Creature!</p></div>`);
     } else if (e.type === 'MONSTER_CREATED') {
@@ -429,12 +424,12 @@ function reportOverlay(rep) {
     } else if (e.type === 'SUBDUE_DECLINED') {
       blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} does not subdue it.</p>`);
     } else if (e.type === 'CONTROL_SKIPPED') {
-      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} ${e.reason === 'not_garrisoned' ? 'has no one in the garrison' : 'has no control attempts left'}.</p>`);
+      blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} has no one in the garrison.</p>`);
     } else if (e.type === 'CONTROL_ROLLED') {
       const parts = [...e.dice.map((d) => `${esc(sourceLabel(cfg, d.source))} d${d.die} → ${d.result}`), ...e.fixed.map((f) => `${esc(sourceLabel(cfg, f.source))} +${f.amount}`)].join(', ');
       blocks.push(`<p class="outcome minor">${esc(c.name(e.playerId))} tries to subdue it: ${parts} = <b>${e.score}</b> vs ${e.threshold}+ ${e.success ? '✓' : '✗ — it breaks free'}</p>`);
     } else if (e.type === 'MONSTER_SUBDUED') {
-      blocks.push(`<p class="outcome stable">${esc(c.name(e.playerId))} subdues and destroys the monster, salvaging ${e.salvagedParts.map((x) => esc(variantName(cfg, x.variantId))).join(', ')}.</p></div>`);
+      blocks.push(`<p class="outcome stable">${esc(c.name(e.playerId))} subdues and destroys the monster.</p></div>`);
     } else if (e.type === 'CREATURE_UNLEASHED') {
       blocks.push('<p class="outcome unleash">The monster is UNLEASHED!</p></div>');
     } else if (e.type === 'MOB_FORMED') {
@@ -462,6 +457,20 @@ function gameOverOverlay() {
   '<button data-act="close">View board</button><button data-act="export">Export save</button><button data-act="new-from-over" class="big">New game</button>');
 }
 
+// The live Vitality total and Humanity odds of the parts chosen so far.
+function bodyOddsText(s, pid, ids) {
+  const cfg = s.config;
+  const T = cfg.resurrection.thresholds.vitality;
+  if (ids.length !== 6) {
+    const bonus = E.vitalityBonus(s, pid);
+    const sum = ids.reduce((a, id) => a + E.partVitality(cfg, E.getPlayer(s, pid).hand.find((x) => x.id === id).variantId), 0) + bonus;
+    return `Vitality so far: <b>${sum}</b>/${T}${bonus ? ` (science +${bonus})` : ''} · ${ids.length} of 6 parts chosen`;
+  }
+  const o = E.estimateResurrection(s, pid, ids);
+  if (!o) return 'That is not a full set: choose two arms, two legs, a chest and a head.';
+  return `Vitality <b>${o.vitality.total}</b>/${T} ${o.vitality.ok ? '✓' : '✗ too low'} · Stable <b>${pct(o.pStable)}</b> · Monster ${pct(o.pMonster)}`;
+}
+
 function choiceModal() {
   const m = ui.modal;
   const s = ui.state;
@@ -471,29 +480,20 @@ function choiceModal() {
   const w = s.workers[m.workerId];
   const title = `${esc(def.name)} <small>${esc(def.location)} · ${workerLabel(w)}</small>`;
   let body = `<p>${esc(actionText(m.actionId, def, cfg))}</p>`;
-  const marketOptions = (name) => s.market.map((c) => {
-    const owned = p.research.includes(c.type);
-    return `<label class="opt ${owned ? 'disabled' : ''}"><input type="radio" name="${name}" value="${c.id}" ${owned ? 'disabled' : ''}> <b>${esc(cfg.research[c.type].name)}</b> <span class="muted">${esc(cfg.research[c.type].text)}${owned ? ' (already discovered)' : ''}</span></label>`;
-  }).join('');
-  const installedOptions = () => Object.entries(p.body).filter(([, x]) => x).map(([slot, x]) => `<label class="opt"><input type="checkbox" name="part" value="${x.id}"> ${esc(variantName(cfg, x.variantId))} <span class="muted">${slot} — ${esc(variantText(cfg, x.variantId))}</span></label>`).join('') || '<p class="muted">No installed parts.</p>';
-  const looseOptions = (filterFits) => {
-    const open = {};
-    for (const [t, d] of Object.entries(cfg.partTypes)) open[t] = d.slots.filter((sl) => p.body[sl] === null).length;
-    return p.loose.map((x) => {
-      const fits = !filterFits || open[x.type] > 0;
-      return `<label class="opt ${fits ? '' : 'disabled'}"><input type="checkbox" name="part" value="${x.id}" ${fits ? '' : 'disabled'}> ${esc(variantName(cfg, x.variantId))} <span class="muted">${esc(variantText(cfg, x.variantId))}</span></label>`;
-    }).join('') || '<p class="muted">No loose parts.</p>';
-  };
+  const marketOptions = (name) => s.market.map((c) => `<label class="opt"><input type="radio" name="${name}" value="${c.id}"> <b>${esc(cfg.science[c.type].name)}</b> <span class="muted">${esc(cfg.science[c.type].text)}</span></label>`).join('');
+  const handOptions = () => p.hand.map((x) => `<label class="opt"><input type="checkbox" name="part" value="${x.id}"> ${esc(variantName(cfg, x.variantId))} <span class="muted">${esc(variantText(cfg, x.variantId))}</span></label>`).join('') || '<p class="muted">No parts in hand.</p>';
   switch (m.actionId) {
     case 'research': body += `<div class="opts">${marketOptions('card')}</div>`; break;
-    case 'experiment': body += `<h3>Discard 1–${Math.min(def.maxParts, s.deck.length)} parts</h3><h4>Loose</h4><div class="opts">${looseOptions(false)}</div><h4>Installed (empties the slot)</h4><div class="opts">${installedOptions()}</div><p class="small muted">You draw one research card per part discarded and keep one you have not discovered.</p>`; break;
-    case 'sell': body += `<h3>Sell exactly ${def.parts} loose parts</h3><div class="opts">${looseOptions(false)}</div>`; break;
-    case 'assemble': body += `<p class="small">Choose any parts for empty slots — up to a whole body.</p><div class="opts">${looseOptions(true)}</div>`; break;
-    case 'specimens': {
-      const opts = Object.entries(cfg.partTypes).map(([t, td]) => `<option value="${t}">${esc(td.name)}</option>`).join('');
-      body += Array.from({ length: def.count }, (_, i) => `<label class="sel">Part ${i + 1} <select name="ptype${i}">${opts}</select></label>`).join('');
-      body += '<p class="small muted">You choose the type; its variant is drawn at random:</p><ul class="small">'
-        + Object.entries(cfg.partTypes).map(([t, td]) => `<li><b>${esc(td.name)}</b>: ${Object.entries(cfg.partVariants).filter(([, v]) => v.type === t).map(([, v]) => `${esc(v.name)} (${esc(v.effects.length ? v.effects.map(effectText).join(', ') : 'no effect')})`).join(', ')}</li>`).join('') + '</ul>';
+    case 'experiment': body += `<h3>Discard exactly ${def.parts} parts</h3><div class="opts">${handOptions()}</div><p class="small muted">You draw ${def.cards} science cards from the deck and keep them all.</p>`; break;
+    case 'sell': body += `<h3>Sell exactly ${def.parts} parts</h3><div class="opts">${handOptions()}</div>`; break;
+    case 'specimens': body += `<p class="small muted">You draw ${def.draw} parts from the deck and keep one; the others are discarded.</p>`; break;
+    case 'prepare': {
+      // A full set: two arms, two legs, a chest and a head, at the Vitality threshold.
+      const byType = Object.entries(cfg.partTypes).map(([type, td]) => {
+        const opts = p.hand.filter((x) => x.type === type).map((x) => `<label class="opt"><input type="checkbox" name="part" value="${x.id}" data-type="${type}"> ${esc(variantName(cfg, x.variantId))} <span class="muted">${esc(variantText(cfg, x.variantId))}</span></label>`).join('');
+        return `<h4>${esc(td.name)} <small class="muted">choose ${td.slots.length}</small></h4><div class="opts">${opts || '<p class="muted">none in hand</p>'}</div>`;
+      }).join('');
+      body += `<p>Choose a full set. Its Vitality must reach ${cfg.resurrection.thresholds.vitality}. Everyone will see that you prepared, and you cannot back out.</p>${byType}<p class="body-odds" id="body-odds">${bodyOddsText(s, p.id, [])}</p>`;
       break;
     }
     case 'charity': {
@@ -503,7 +503,6 @@ function choiceModal() {
       break;
     }
     case 'hire': body += `<p>Cost: <b>${def.cost}</b> money. You have ${p.money}. The Igor can work straight away.</p>`; break;
-    case 'prepare': body += `<p>Your body is ${p.body && Object.values(p.body).every(Boolean) ? '<b>complete</b>' : '<b>not yet complete</b> — finish it tonight with another worker, or the attempt is called off'}. Everyone will see that you prepared, and you cannot back out.</p>`; break;
     default: break;
   }
   return modal(title, body, '<button data-act="close" class="ghost">Cancel</button><button data-act="confirm-place" class="big">Confirm</button>');
@@ -517,9 +516,7 @@ function collectChoices() {
   const card = () => (q('.modal input[name=card]:checked') || {}).value;
   switch (m.actionId) {
     case 'research': return { researchCardId: card() };
-    case 'experiment': case 'sell': return { partIds: checkedParts() };
-    case 'assemble': return { partIds: checkedParts() };
-    case 'specimens': return { partTypes: qa('.modal select[name^=ptype]').map((x) => x.value) };
+    case 'experiment': case 'sell': case 'prepare': return { partIds: checkedParts() };
     case 'charity': return q('.modal select[name=units]') ? { units: Number(q('.modal select[name=units]').value) } : undefined;
     default: return undefined;
   }
@@ -819,6 +816,10 @@ root.addEventListener('change', (ev) => {
     const input = ev.target.closest('.prow')?.querySelector('input[name=pname]');
     const i = [...root.querySelectorAll('select[name=pkind]')].indexOf(ev.target);
     if (input) input.placeholder = seatPlaceholder(ev.target.value, i);
+  } else if (ev.target.name === 'part' && ui.modal && ui.modal.kind === 'choice' && ui.modal.actionId === 'prepare') {
+    const out = root.querySelector('#body-odds');
+    const ids = [...root.querySelectorAll('.modal input[name=part]:checked')].map((x) => x.value);
+    if (out) out.innerHTML = bodyOddsText(ui.state, ui.state.activePlayerId, ids);
   } else if (ev.target.id === 'debug') {
     ui.debug = ev.target.checked;
     writeDebugFlag(ui.debug);

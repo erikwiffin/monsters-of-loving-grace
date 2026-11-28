@@ -4,30 +4,30 @@ Every committed action that a player would perform at the physical table is a se
 
 ## What is and isn't a command
 
-Commands are player decisions: placing a worker with all of its choices, picking a drawn research card, passing, and choosing whether to subdue a monster. Publishing and resurrection attempts are not separate commands: they are effects of the research and prepare placements (specs 022 and 023). Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
+Commands are player decisions: placing a worker with all of its choices, picking a drawn body part, passing, and choosing whether to subdue a monster. Resurrection attempts are not separate commands: they are effects of the prepare placement (spec 022). Clicking, hovering, highlighting, selecting an option before confirming, opening a panel and acknowledging a privacy screen are UI interactions, not commands, and never reach the engine.
 
-Dice outcomes, suspicion changes, resource grants, research refills, phase transitions, resurrection results, victory and defeat are never commands. The engine resolves them automatically.
+Dice outcomes, suspicion changes, resource grants, card draws, market refills, deck reshuffles, phase transitions, resurrection results, victory and defeat are never commands. The engine resolves them automatically.
 
 ## Command types
 
 Every command has a `type` and the acting `playerId`. It may also carry an optional `seq`, described below. Unknown command types and unknown fields are rejected.
 
 - `PASS_TURN` gives up all of the player's remaining placements in the current day or night phase. Passing is irrevocable for that phase.
-- `PICK_RESEARCH` with `cardId` is legal only for the player who has just experimented and drawn at least one eligible card, and is then their only legal command. It names one drawn card of a type they have not discovered (spec 022).
+- `PICK_PART` with `partId` is legal only for the player who has just bought specimens, and is then their only legal command. It names one of the drawn parts to keep (spec 022).
 - `SUBDUE_MONSTER` with `subdue: true | false` is legal only for the player currently deciding in a monster's control chain during resolution (spec 025).
 - `PLACE_MEEPLE` names a `workerId`, an `actionId` and a `choices` object. `choices` may be omitted for actions that need no choices. The choices required by each action are:
 
 | Action | Choices |
 |---|---|
-| medicine, hire, garrison, graves, prepare, rest | none (`{}`) |
+| medicine, hire, garrison, graves, vespers, rest | none (`{}`) |
 | charity | `units`: optional when at most one unit may be bought; otherwise the number of units to buy (spec 022) |
 | research | `researchCardId`: a market card |
-| specimens | `partTypes`: exactly one part type ID |
-| assemble | `partIds`: one or more unique loose part instance IDs, each fitting a distinct empty slot |
-| sell | `partIds`: exactly the configured number of unique loose part instance IDs |
-| experiment | `partIds`: one or more unique part instance IDs, loose or installed, up to the configured maximum and the cards left in the deck |
+| specimens | none (`{}`); the part is chosen afterwards with `PICK_PART` |
+| prepare | `partIds`: six unique part instance IDs from the hand, a full set (two arms, two legs, a chest, a head) whose Vitality meets the threshold |
+| sell | `partIds`: exactly the configured number of unique part instance IDs from the hand |
+| experiment | `partIds`: exactly the configured number of unique part instance IDs from the hand |
 
-Specimen purchases select part *types*; the variant is random. Assembly, selling and experiments select specific part *instances*. Unknown choice keys and missing required choice keys are both rejected.
+Preparing, selling and experiments select specific part *instances*. Unknown choice keys and missing required choice keys are both rejected.
 
 ## Validation
 
@@ -45,7 +45,7 @@ Before changing anything, dispatch checks:
 
 No action may be selected unless its full cost can be paid, and balances never go negative.
 
-A rejected command returns `{ ok: false, error }`, where `error` is a structured `{ code, message }`. Codes are stable and machine-readable, for example `UNKNOWN_COMMAND`, `UNKNOWN_FIELD`, `MISSING_FIELD`, `NOT_YOUR_TURN`, `WRONG_PHASE`, `WORKER_USED`, `WORKER_PENDING`, `IGOR_NOT_PERMITTED`, `SCIENTIST_NOT_PERMITTED`, `SPACE_FULL`, `INSUFFICIENT_MONEY`, `INVALID_CHOICE`, `INVALID_TARGET`, `PICK_PENDING`, `STALE_COMMAND` and `GAME_OVER`. A rejection returns the very same state object. It leaves the RNG, the event history and the command log unchanged, and it emits no events.
+A rejected command returns `{ ok: false, error }`, where `error` is a structured `{ code, message }`. Codes are stable and machine-readable, for example `UNKNOWN_COMMAND`, `UNKNOWN_FIELD`, `MISSING_FIELD`, `NOT_YOUR_TURN`, `WRONG_PHASE`, `WORKER_USED`, `WORKER_PENDING`, `IGOR_NOT_PERMITTED`, `SCIENTIST_NOT_PERMITTED`, `SPACE_FULL`, `INSUFFICIENT_MONEY`, `INVALID_CHOICE`, `INVALID_TARGET`, `PICK_PENDING`, `VITALITY_TOO_LOW`, `STALE_COMMAND` and `GAME_OVER`. A rejection returns the very same state object. It leaves the RNG, the event history and the command log unchanged, and it emits no events.
 
 ## Acceptance and automatic progression
 
@@ -63,9 +63,9 @@ A command may include `seq`, equal to the number of commands accepted so far. If
 
 - `PASS_TURN`, which is always legal in day or night;
 - one entry per available worker and legal action;
-- one `PICK_RESEARCH` per eligible drawn card while an experiment pick is pending;
+- one `PICK_PART` per drawn part while a specimens pick is pending;
 - both subdue options for the player deciding in a control chain.
 
-Templates for actions needing choices carry machine-readable constraints. These are an `enum` of values, a `multiset` with a count, or a `subset` with a minimum, a maximum and optional per-part-type maximums.
+Templates for actions needing choices carry machine-readable constraints. These are an `enum` of values, or a `subset` with a minimum, a maximum, optional per-part-type maximums and an optional least Vitality total (with the player's Vitality science bonus).
 
 `enumerateLegalCommands` expands the templates into concrete, dispatchable commands. By default it collapses equivalent options, such as identical Igors or part selections with the same variants, to keep the list small. Every enumerated command must be accepted by dispatch, and a test enforces this.

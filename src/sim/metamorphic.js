@@ -6,8 +6,8 @@
 // Each check runs a base and a transformed batch on the same seeds and tests
 // one relation:
 //   - an action made strictly cheaper or safer is not used less;
-//   - a research card with no effect is not bought;
-//   - renaming every research type, or the players, changes nothing at all:
+//   - a science card with no effect is not bought;
+//   - renaming every science type, or the players, changes nothing at all:
 //     the same seeds give the same games, move for move (the AI must depend
 //     on effects, never on IDs).
 //
@@ -29,14 +29,14 @@ function meanSe(xs) {
 }
 const perPlayerRound = (actionId) => (r) => (r.economy.actions[actionId] ? r.economy.actions[actionId].placements : 0) / Math.max(1, r.rounds * r.playerCount);
 
-/** Renames every research type of a configuration (x → prefix + x), retiring the old names from the deck. */
-export function renameResearch(prefix = 'renamed_', cfg = DEFAULT_CONFIG) {
-  const research = {};
-  for (const [t, def] of Object.entries(cfg.research)) {
-    research[prefix + t] = clone(def);
-    research[t] = { copies: 0 };
+/** Renames every science type of a configuration (x → prefix + x), retiring the old names from the deck. */
+export function renameScience(prefix = 'renamed_', cfg = DEFAULT_CONFIG) {
+  const science = {};
+  for (const [t, def] of Object.entries(cfg.science)) {
+    science[prefix + t] = clone(def);
+    science[t] = { copies: 0 };
   }
-  return { research };
+  return { science };
 }
 
 export const CHECKS = [
@@ -55,25 +55,25 @@ export const CHECKS = [
   {
     id: 'quiet-graves',
     text: 'Graves that never raise suspicion are not robbed less often',
-    config: { actions: { graves: { suspicion: { die: 6, bands: [{ max: 6, amount: 0 }] } } } },
+    config: { actions: { graves: { suspicion: 0 } } },
     relation: 'not-less', games: 150, stat: perPlayerRound('graves'),
   },
   {
-    id: 'blank-research',
+    id: 'blank-science',
     // The Inquisitor may buy it to block a research slot, which is a reason.
-    text: 'A research card with no effect is not bought, except to block a slot',
-    config: { research: { blank: { name: 'Blank', text: 'No effect.', effects: [] } } },
+    text: 'A science card with no effect is not bought, except to block a slot',
+    config: { science: { blank: { name: 'Blank', kind: 'other', copies: 4, text: 'No effect.', effects: [] } } },
     relation: 'rare', limit: 0.05, games: 100,
     stat: (r) => (((r.uptake.acquiredBy.blank || {}).research) || []).filter((pid) => r.objectives[pid] !== 'inquisitor').length,
   },
   {
-    id: 'renamed-research',
+    id: 'renamed-science',
     // Retired names keep their place with no copies, and the new names sort
     // in the same order, so the deck and every roll are the same: any
     // difference is the AI reading an ID.
-    text: 'Renaming every research type changes nothing at all',
+    text: 'Renaming every science type changes nothing at all',
     // A function of the rules under test, so a changed card is renamed as changed.
-    config: (cfg) => renameResearch('renamed_', cfg),
+    config: (cfg) => renameScience('renamed_', cfg),
     relation: 'identical', games: 20, exact: true,
   },
   {

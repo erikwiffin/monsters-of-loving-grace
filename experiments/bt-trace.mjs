@@ -23,10 +23,10 @@ for (const t of lines) {
   if (showTree) console.log(t.trace.filter((l) => l.includes('success')).join('\n'));
 }
 for (const e of state.events) {
-  if (['SUSPICION_CHANGED', 'RESURRECTION_RESOLVED', 'RESEARCH_PUBLISHED', 'MONSTER_SUBDUED', 'CREATURE_UNLEASHED', 'GAME_ENDED', 'ROUND_STARTED', 'CREATURE_STABLE', 'RESURRECTION_PREPARED', 'RESURRECTION_ROLLED'].includes(e.type)) {
+  if (['SUSPICION_CHANGED', 'RESURRECTION_RESOLVED', 'SCIENCE_ACQUIRED', 'MONSTER_SUBDUED', 'CREATURE_UNLEASHED', 'GAME_ENDED', 'ROUND_STARTED', 'CREATURE_STABLE', 'RESURRECTION_PREPARED', 'RESURRECTION_ROLLED'].includes(e.type)) {
     const { type, visibility, seq, ...rest } = e;
     console.log(type, JSON.stringify(rest).slice(0, 220));
   }
 }
 const me = state.players.find((p) => p.id === target);
-console.log('final me', JSON.stringify({ money: me.money, research: me.research, loose: me.loose.map((x) => x.variantId), body: Object.values(me.body).map((x) => x && x.variantId) }));
+console.log('final me', JSON.stringify({ money: me.money, science: me.science.map((c) => c.type), hand: me.hand.map((x) => x.variantId), body: Object.values(me.body).map((x) => x && x.variantId) }));

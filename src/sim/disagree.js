@@ -21,10 +21,10 @@ export function describe(cmd) {
   if (!cmd) return '-';
   if (cmd.type === 'PASS_TURN') return 'pass';
   if (cmd.type === 'SUBDUE_MONSTER') return cmd.subdue ? 'subdue' : 'decline';
-  if (cmd.type === 'PICK_RESEARCH') return `keep ${cmd.cardId}`;
+  if (cmd.type === 'PICK_PART') return `keep ${cmd.partId}`;
   const who = cmd.workerId.startsWith('scientist') ? 'S' : 'I';
   const c = cmd.choices || {};
-  const extra = c.partTypes ? ` ${c.partTypes.join('+')}` : c.partIds ? ` ×${c.partIds.length}` : c.researchCardId ? ` ${c.researchCardId}` : '';
+  const extra = c.partIds ? ` ×${c.partIds.length}` : c.researchCardId ? ` ${c.researchCardId}` : '';
   return `${who}:${cmd.actionId}${extra}`;
 }
 

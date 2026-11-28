@@ -37,7 +37,7 @@ Each game produces a machine-readable summary containing:
 - action-economy metrics: per-action placements, Igor placements, rounds used and full phases, each player's Igors and leftover money, and round 1's initiative order;
 - optionally, the full replay command list.
 
-Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, the median round in which games end, average final suspicion and resurrection outcome counts (failed, stable, subdued and unleashed). For balance work, they also report how many players were dealt each objective and each objective's win rate: wins divided by players dealt it. They also aggregate the action-economy metrics (spec 016) and the invalid-command total.
+Aggregates report the number of games, truncations, terminal reasons, wins by objective, collective defeats, average rounds, the median round in which games end, average final suspicion and resurrection outcome counts (stable, subdued and unleashed). For balance work, they also report how many players were dealt each objective and each objective's win rate: wins divided by players dealt it. They also aggregate the action-economy metrics (spec 016) and the invalid-command total.
 
 ## Command-line tools
 

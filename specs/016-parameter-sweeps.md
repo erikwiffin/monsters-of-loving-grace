@@ -19,7 +19,7 @@ Sweep files live in `sweeps/`.
 
 ## Variables
 
-A variable is named by a dotted path into the configuration, such as `actions.medicine.gain`, `actions.research.capacity.5` (the 5–6 player tier) or `actions.graves.suspicion.bands.0.max`. Paths may reach into arrays, so discovery-roll bands can be swept. Several paths joined with `|` share one value, so one variable can drive several numbers, for example the larger tier of every 2/3 space. A variable's values are a list, or an integer range with an optional step.
+A variable is named by a dotted path into the configuration, such as `actions.medicine.gain`, `actions.research.capacity.5` (the 5–6 player tier) or `partVariants.ordinary_arm.copies`. Paths may reach into arrays, so the dice in an effect list can be swept. Several paths joined with `|` share one value, so one variable can drive several numbers, for example the larger tier of every 2/3 space. A variable's values are a list, or an integer range with an optional step.
 
 Each point's configuration is the full default configuration, then the sweep's base overrides, then the point's values. A path that does not exist, or a value the engine rejects, stops the sweep with an error before any game is played.
 
@@ -38,7 +38,7 @@ Every point uses the same game seeds for a given player count, so differences be
 
 ## Policies
 
-Sweeps rely on the heuristic policy (spec 014) deciding sensibly whatever the numbers are. The heuristic therefore values actions from the configuration in its view, in a common currency of money, rather than from fixed scores per action: what an action gives and costs, the expected suspicion of its discovery roll, and the worth of parts, research and workers to its objective. When a sweep changes a cost or a gain, the heuristic's valuation changes with it.
+Sweeps rely on the heuristic policy (spec 014) deciding sensibly whatever the numbers are. The heuristic therefore values actions from the configuration in its view, in a common currency of money, rather than from fixed scores per action: what an action gives and costs, the suspicion it adds, and the worth of parts, science and workers to its objective. When a sweep changes a cost or a gain, the heuristic's valuation changes with it.
 
 Two variants, **cautious** and **bold**, price suspicion and resurrection risk higher and lower than the standard heuristic. Running a point under several styles shows whether a value works only for one way of playing. Mixed sets, such as `heuristic,random`, are also allowed.
 
@@ -60,7 +60,7 @@ Each batch is scored as a total penalty, where 0 means every target is met. The 
 | Fallback space (medicine) placements per round | at least 1 |
 | Largest gap between seats' win rates | 0.10 |
 
-Private spaces (assemble, prepare) have no usage target. The score lists the penalty for each missed target, so a reader can see why a point scored badly. Any invalid command adds a penalty large enough to rank the point last, and the sweep exits with an error.
+The private space (prepare) has no usage target. The score lists the penalty for each missed target, so a reader can see why a point scored badly. Any invalid command adds a penalty large enough to rank the point last, and the sweep exits with an error.
 
 ## Output
 

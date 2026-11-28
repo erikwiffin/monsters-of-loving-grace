@@ -1,4 +1,4 @@
-<!-- rules-fingerprint: c00081f1 -->
+<!-- rules-fingerprint: 34b3df2b -->
 <!-- This rulebook describes the physical game. It is maintained by hand (spec 032): every change to gameplay — the 02x specs or the default configuration — updates it in the same commit, together with the fingerprint above. `npm test` prints the new fingerprint when it is out of date. -->
 
 ![Monsters of Loving Grace logo: a stitched heart struck by lightning](logo.png)
@@ -9,22 +9,24 @@
 
 Each of you is a scientist in a nervous village. By day you earn money and buy what you need honestly. By night you rob graves, sell parts in back alleys and experiment in your laboratory, and every risk you take makes the villagers more suspicious. Some of you want to create life. Others secretly want the village to rise up, or a monster to break loose.
 
+Everything builds to one moment: a single roll of a handful of dice to see whether your Creature has a conscience, and the rolls of the players who try to stop it if it doesn't. No dice are rolled until then.
+
 ## Components
 
 The print view prints everything except the dice and money.
 
 - **Rulebook** (this document).
-- **Village board**: the suspicion track (0–10), and spaces for the research deck and the four-card market.
+- **Village board**: the suspicion track (0–10), spaces for the science deck and the four-card market, and spaces for the body-part deck and its discard pile.
 - **Action board**: one page with the 6 day spaces on the left and the 6 night spaces on the right. If a single space changes, reprint it and glue it over the old one.
-- **6 player sheets**, one per colour, each with six body slots, a control-attempt track, the random body-part table and a summary of the rules.
+- **6 player sheets**, one per colour, each with six body slots and a summary of the rules.
 - **7 objective cards**: 3 Prometheus, 1 Visionary, 1 Inquisitor, 2 Unleashers.
-- **36 research cards**: 4 copies of each of 9 types.
-- **Body part cards**: 13 named variants. The supply is meant to be unlimited; if a variant runs out, use any proxy.
+- **31 science cards** of 12 types (see *Science*).
+- **60 body-part cards** of 29 variants (see *Body parts*).
 - **Worker tiles**: per colour, 1 Scientist and 3 Igors.
 - **Money (not printed)**: use coins, poker chips, or pencil and paper. Money is unlimited.
-- **Markers**: suspicion, first player, and one control-attempt marker per colour.
-- Everything prints single-sided. Use card stock or opaque sleeves so cards don't show through from the back.
-- **Dice (not printed)**: at least one d20, two d4, four d6 and one d8. If you are short of a die, roll it again and add the results.
+- **Markers**: suspicion and first player.
+- Everything prints single-sided. Use card stock or opaque sleeves so the decks don't show through from the back.
+- **Dice (not printed)**: at least one d20, four d4, four d6 and two d8. If you are short of a die, roll it again and add the results.
 
 ## Overview
 
@@ -37,15 +39,18 @@ The game is played in rounds. Each round has four phases:
 
 There is no last round. The game ends only when a Creature becomes stable, the mob forms, or a monster is unleashed.
 
-Everything is public except the objective cards and the order of the research deck: money, parts, research, workers, control attempts and suspicion are all open for everyone to see. There is no trading between players.
+**Day and night.** Day actions generally cost money and never raise suspicion: you choose what you get. Night actions are generally free, but each risky one raises suspicion by exactly 1, and you take what the decks give you.
+
+Everything is public except the objective cards and the order of the two decks: money, hands of parts, science, workers and suspicion are all open for everyone to see. There is no trading between players.
 
 ## Setup
 
-1. **Seats.** Sit in a circle. Each player takes a colour, its player sheet, its Scientist and 3 Igors, and its control-attempt marker.
-2. **Starting resources.** Each player places their Scientist and **one** Igor in front of them, ready to work. The other two Igors stay beside the sheet until hired. Each player takes **3 money** and sets their control-attempt marker on **3**.
-3. **The village.** Put the village board in the middle. Place the suspicion marker on **0**. Put the action board beside it. Sort the body part cards into a face-up supply by variant, and put the money beside it.
-4. **Research.** Shuffle the 36 research cards into a face-down deck on the village board. Deal the top **4** face up into the market.
-5. **Objectives.** Build the objective deck for your player count, shuffle it, and deal one card face down to each player. Look at your own card secretly. Set the remaining card aside, unseen and face down.
+1. **Seats.** Sit in a circle. Each player takes a colour, its player sheet, and its Scientist and 3 Igors.
+2. **Starting resources.** Each player places their Scientist and **one** Igor in front of them, ready to work. The other two Igors stay beside the sheet until hired. Each player takes **3 money**.
+3. **The village.** Put the village board in the middle. Place the suspicion marker on **0**. Put the action board beside it, and the money.
+4. **Science.** Shuffle the 31 science cards into a face-down deck on the village board. Deal the top **4** face up into the market.
+5. **Body parts.** Shuffle the 60 body-part cards into a face-down deck on the village board, leaving room for a discard pile beside it.
+6. **Objectives.** Build the objective deck for your player count, shuffle it, and deal one card face down to each player. Look at your own card secretly. Set the remaining card aside, unseen and face down.
 
    | Players | Prometheus | Visionary | Inquisitor | Unleasher | Cards |
    |---|---:|---:|---:|---:|---:|
@@ -54,7 +59,7 @@ Everything is public except the objective cards and the order of the research de
    | 5 | 3 | 1 | 1 | 1 | 6 |
    | 6 | 3 | 1 | 1 | 2 | 7 |
 
-6. **First player.** Choose a first player at random and give them the first-player marker.
+7. **First player.** Choose a first player at random and give them the first-player marker.
 
 ## Objectives
 
@@ -88,7 +93,7 @@ At the start of night, everyone who passed is back in, and the turn returns to t
 
 ### Capacity
 
-Each action space shows a worker slot per capacity. Most spaces hold **2 workers with 3–4 players** and **3 with 5–6 players**; the dashed slot is used only with 5–6 players. *Garrison the watch* holds 3 at every player count. *Practice medicine*, *Assemble body* and *Prepare resurrection* have no limit. *Rest* holds one worker. Workers stay on their spaces until dawn, and which workers are where is public.
+Each action space shows a worker slot per capacity. Most spaces hold **2 workers with 3–4 players** and **3 with 5–6 players**; the dashed slot is used only with 5–6 players. *Garrison the watch* holds 3 at every player count. *Practice medicine*, *Prepare resurrection* and *Attend vespers* have no limit. *Rest* holds one worker. Workers stay on their spaces until dawn, and which workers are where is public.
 
 An action needs its full cost and every prerequisite. Money never goes below 0.
 
@@ -96,148 +101,150 @@ An action needs its full cost and every prerequisite. Money never goes below 0.
 
 | Space | Location | Effect |
 |---|---|---|
-| **Practice medicine** | Hospital | Gain 3 money, plus 1 for each effective copy of Medical Expertise. |
-| **Conduct research** | University | Pay 2. Take a market card of a type you have not discovered and **publish** it (see *Research*). Refill the market from the deck at once. Then suspicion −1 for each effective copy of Public Lectures. |
-| **Buy specimens** | Anatomical supplier | Pay 2. Choose a type of body part: arm, leg, chest or head. Roll for its variant on the table on your player sheet and take that part from the supply. |
-| **Donate to charity** | Town hall | Pay 3. Suspicion −2, and 1 more for each effective copy of Parish Benefactor, to a minimum of 0. Only allowed while suspicion is above 0. |
+| **Practice medicine** | Hospital | Gain 3 money, plus 1 if you hold Medical Expertise. |
+| **Conduct research** | University | Pay 2. Take any science card from the market. Refill the market from the deck at once. With Public Lectures, suspicion −1. |
+| **Buy specimens** | Anatomical supplier | Pay 2. Draw 3 body parts, show them, and keep one. Discard the other two. |
+| **Donate to charity** | Town hall | Pay 3. Suspicion −2, and 1 more with Parish Benefactor, to a minimum of 0. Only allowed while suspicion is above 0. |
 | **Hire an Igor** | Tavern | Pay 4. Take one of your reserve Igors; it can act at once. At most 3 Igors each. |
-| **Garrison the watch** | Watch house | Igors only. No cost and no immediate effect. Until dawn, you may try to subdue other players' monsters (see *Control*). |
+| **Garrison the watch** | Watch house | Igors only. No cost and no immediate effect. Until dawn, you may try to subdue monsters, your own included (see *Control*). |
 
 ## Night actions
 
 | Space | Location | Effect |
 |---|---|---|
-| **Assemble body** | Private laboratory | Move any number of your loose parts onto matching empty slots of your player sheet, at least one. |
-| **Prepare resurrection** | Private laboratory | Scientists only. You will attempt a resurrection in this round's resolution. |
-| **Sell parts** | Back alley | Discard exactly 2 of your loose parts and gain 7 money. Then make a discovery roll: d6, 1–2 → suspicion +1. |
-| **Conduct experiments** | Private laboratory | Discard 1 to 3 of your parts, loose or installed, and draw that many research cards; keep one. Then make a discovery roll: d6, 1–3 → suspicion +1. |
-| **Rob graves** | Graveyard | Draw 2 random body parts. Then make a discovery roll: d6, 1–4 → suspicion +1. |
+| **Prepare resurrection** | Private laboratory | Scientists only. Lay out a full set of body parts whose Vitality is at least 10. You will attempt a resurrection in this round's resolution. |
+| **Sell parts** | Back alley | Discard exactly 2 parts from your hand and gain 7 money. Suspicion +1. |
+| **Conduct experiments** | Private laboratory | Discard exactly 2 parts from your hand. Draw 2 science cards from the top of the deck and keep both. Suspicion +1. |
+| **Rob graves** | Graveyard | Draw 2 body parts into your hand. Suspicion +1. |
+| **Attend vespers** | Chapel | Free. Suspicion −1, to a minimum of 0. Only allowed while suspicion is above 0. |
 | **Rest** | Home | You will go first next round. |
 
-Night actions mirror day actions: graves for specimens, selling for medicine, experiments for research. They are free, but the results are random and the village may notice.
+Night actions mirror day actions: robbing graves for buying specimens, selling for medicine, experiments for research. They are free or pay more, but the results are random and the village notices.
 
 ### Details
 
-**Discovery rolls.** Roll the die shown on the space and add 1 for each effective copy of Discreet Methods you have. If the total is in the range shown, suspicion rises by 1. For example, with one copy, robbing graves is noticed only on a roll of 1–3. Any rise can form the mob at once.
+**Suspicion.** Rob graves, sell parts and conduct experiments each raise suspicion by exactly 1, after their other effects. Any rise can form the mob at once.
 
-**Rob graves.** Draw both random parts first (below), then make the discovery roll.
+**Rob graves.** Draw both parts first, then raise suspicion.
 
-**Sell parts.** Only loose parts can be sold. Discard them and take the money first, then make the discovery roll.
+**Sell parts.** Discard the parts and take the money first, then raise suspicion.
 
-**Conduct experiments.** You may discard no more parts than there are cards in the research deck, and you need at least one part and a non-empty deck. Discarding an installed part empties its slot. Draw one card from the top of the deck per part discarded and show them to everyone, then make the discovery roll. If the mob forms, the game ends at once. Otherwise, if any drawn card is a type you have not discovered, you must keep one such card. It is **not published** (see *Research*). Put the other cards on the bottom of the deck, in the order drawn.
+**Conduct experiments.** You need 2 parts in your hand and at least one card in the science deck. Discard the parts, then draw 2 science cards, or as many as remain, show them to everyone, and keep them all. Then raise suspicion.
 
-**Assemble body.** Each part goes into an empty slot of its own type: arms into arm slots, legs into leg slots, the chest and the head into theirs. Installed parts can't be removed, swapped or taken back. The only way to empty a slot is to discard its part in an experiment.
+**Buy specimens.** You may look at all three before choosing; everyone sees them too.
 
-**Prepare resurrection.** Preparing is public and binding. Your body does not have to be complete when you place your Scientist, only when your attempt resolves, so you may still assemble afterwards that night, for example with an Igor.
+**Attend vespers.** Any number of workers may attend, Scientists and Igors alike. Parish Benefactor does not affect it.
+
+**Prepare resurrection.** See *Preparing* below. Preparing is public and binding.
 
 **Rest.** Only one player can rest each round.
 
 ## Body parts
 
-A complete body has **two arms, two legs, one chest and one head**: one part in each of the six slots on your player sheet. Arms are interchangeable, and so are legs. You have one body under construction at a time. Loose parts can be kept for as long as you like, with no limit.
+All body parts come from one shuffled deck. Draw from the top. When a part is spent, put it face up on the **discard pile**. Whenever you need to draw and the deck is empty, shuffle the discard pile to form a new deck. Parts you hold are your **hand**: keep them face up beside your sheet, with no limit.
 
-Each part may change the resurrection rolls:
+A **full set** is **two arms, two legs, one chest and one head**. Arms are interchangeable, and so are legs.
 
-| Type | Variant | Effect |
-|---|---|---|
-| Arm | Ordinary arm | None |
-| Arm | Arm of a labourer | Vitality +1d4 |
-| Arm | Damaged arm | Vitality −1d4 |
-| Leg | Ordinary leg | None |
-| Leg | Leg of an athlete | Vitality +1d6 |
-| Leg | Frail leg | Vitality −2 |
-| Chest | Ordinary chest | None |
-| Chest | Robust chest | Vitality +1d8 |
-| Chest | Scarred chest | Vitality −1d6 |
-| Head | Ordinary head | None |
-| Head | Brain of a criminal | Humanity threshold +3 |
-| Head | Brain of a scholar | Humanity +1d6 |
-| Head | Brain of a poet | Humanity +1d4 |
+Each part may have a **Vitality** number (does the body live?) and a **Humanity** die (does it have a conscience?). Most parts are ordinary or worse, so a strong body comes from choosing well from a larger hand.
 
-### Random parts
+| Type | Variant | Copies | Vitality | Humanity |
+|---|---|---:|---:|---|
+| Arm | Ordinary arm | 5 | +1 | |
+| Arm | Arm of a labourer | 2 | +3 | |
+| Arm | Arm of a blacksmith | 1 | +4 | −d4 |
+| Arm | Arm of a surgeon | 1 | +1 | +d4 |
+| Arm | Arm of a strangler | 2 | +2 | −d6 |
+| Arm | Damaged arm | 4 | −1 | |
+| Arm | Withered arm | 3 | −2 | |
+| Arm | Gangrenous arm | 2 | −3 | |
+| Leg | Ordinary leg | 5 | +1 | |
+| Leg | Leg of an athlete | 2 | +3 | |
+| Leg | Leg of a highwayman | 1 | +3 | −d6 |
+| Leg | Leg of a soldier | 2 | +2 | −d4 |
+| Leg | Leg of a dancer | 1 | +1 | +d4 |
+| Leg | Frail leg | 4 | −1 | |
+| Leg | Lame leg | 3 | −2 | |
+| Leg | Crushed leg | 2 | −3 | |
+| Chest | Ordinary chest | 3 | +2 | |
+| Chest | Robust chest | 1 | +4 | |
+| Chest | Chest of a prizefighter | 1 | +4 | −d6 |
+| Chest | Chest of a priest | 1 | +1 | +d6 |
+| Chest | Scarred chest | 2 | −1 | |
+| Chest | Consumptive chest | 2 | −3 | |
+| Head | Ordinary head | 3 | | |
+| Head | Brain of a scholar | 1 | | +d6 |
+| Head | Brain of a poet | 1 | | +d4 |
+| Head | Brain of a saint | 1 | | +d8 |
+| Head | Brain of a criminal | 2 | | −d6 |
+| Head | Brain of a madman | 1 | +2 | −d8 |
+| Head | Brain of a drunkard | 1 | −1 | −d4 |
 
-Each random part is drawn separately, from an unlimited supply. Roll for its type, then for its variant, using the table on your player sheet. When you buy specimens you choose the type yourself and roll only for the variant:
+## Science
 
-| Type (d6) | | Variant |
-|---|---|---|
-| 1–2 | Arm | d6: 1–2 ordinary, 3–4 labourer, 5–6 damaged |
-| 3–4 | Leg | d6: 1–2 ordinary, 3–4 athlete, 5–6 frail |
-| 5 | Chest | d6: 1–2 ordinary, 3–4 robust, 5–6 scarred |
-| 6 | Head | d4: 1 ordinary, 2 criminal, 3 scholar, 4 poet |
+Science cards are permanent: once you hold one, it applies for the rest of the game. All science is yours alone: nothing you do gives other players a copy. You may hold several cards of the same type, and **every card you hold applies**. Keep them face up beside your sheet.
 
-The player sheet's table is generated from the game's data, so if the two ever disagree, the player sheet is right.
+There are four kinds of science card:
 
-## Research
+| Kind | Card | Copies | Effect |
+|---|---|---:|---|
+| Vitality | **Comparative Anatomy** | 5 | Vitality +1 |
+| Vitality | **Galvanic Mastery** | 4 | Vitality +2 |
+| Vitality | **Voltaic Pile** | 2 | Vitality +3 |
+| Humanity | **Sentimental Education** | 4 | Humanity +d4 |
+| Humanity | **Moral Philosophy** | 4 | Humanity +d6 |
+| Humanity | **Natural Theology** | 2 | Humanity +d8 |
+| Control | **Restraining Apparatus** | 3 | Control rolls +3 |
+| Control | **Mesmerism** | 3 | Control rolls +d6 |
+| Other | **Medical Expertise** | 1 | +1 money from Practice medicine |
+| Other | **Public Lectures** | 1 | When you conduct research, suspicion −1 |
+| Other | **Parish Benefactor** | 1 | Your charity removes 1 more suspicion |
+| Other | **Neural Conditioning** | 1 | You may try to subdue your own monster without an Igor in the garrison |
 
-Research cards are permanent: they are never spent. There are nine types:
-
-| Research | Effect of each effective copy |
-|---|---|
-| **Medical Expertise** | +1 money from Practice medicine |
-| **Galvanic Mastery** | Add 1d6 to resurrection Vitality |
-| **Neural Conditioning** | +1 control attempt |
-| **Mesmerism** | Add 1d6 to control rolls |
-| **Restraining Apparatus** | Add +4 to control rolls |
-| **Moral Philosophy** | Add +3 to resurrection Humanity |
-| **Discreet Methods** | Add 1 to each of your discovery rolls |
-| **Public Lectures** | When you conduct research, suspicion −1 after you publish |
-| **Parish Benefactor** | Each Donate to charity you make removes 1 more suspicion |
-
-**Two ways to discover research.** Conducting research takes a card from the market and **publishes** it. An experiment keeps a card from the deck **privately**: it is still face up for all to see, but never published. Keep published cards in one row above your player sheet and experiment discoveries in another.
-
-**One of each type.** You can never take a type you have already discovered, by either route. You may take a type another player has already published, and that publishes it again. Conducting research is not allowed when the market has no card you may take.
-
-**Effective copies stack.** Your effective copies of a type are:
-
-- **1** if you have that card in front of you, plus
-- **1 for each other player** who has **published** that type (a card in their published row).
-
-Your own publication doesn't count twice. Every effective copy applies in full: two copies of Galvanic Mastery roll two d6, and three of Moral Philosophy add +9. Because other players' publications count, a publication can give you new control attempts in the middle of the game: move your control marker up when it happens.
+Every science effect is positive. For example, two Galvanic Mastery and a Comparative Anatomy add +5 Vitality to every body you prepare, and two Moral Philosophy add two d6 to every Humanity roll.
 
 **The market.** The market holds 4 face-up cards. Refill it from the top of the deck as soon as a card is taken. There is no reshuffle. When the deck is empty, the market shrinks.
 
-## Resolution: resurrection
+## Resurrection
 
-When night ends, everyone who prepared announces it, then attempts resolve one at a time in initiative order, starting with the first player. A player whose body is not complete when their turn comes does nothing: the attempt is called off and no parts are lost. If nobody prepared, skip to dawn.
+### Preparing: Vitality
 
-### Rolling
+At night, place your Scientist on *Prepare resurrection* and choose a full set of six parts from your hand. Lay them on the six body slots of your player sheet.
 
-The attempt uses up all six installed parts; loose parts are untouched. Set the six parts aside, then roll two attributes:
+**Vitality is not rolled: you count it.** Add the Vitality of the six parts and the Vitality of your science cards. You may prepare **only if the total is 10 or more**. A body you can prepare always lives.
 
-- **Vitality** — does it live? Roll **d20**, add every Vitality die and modifier from your parts and research. It succeeds on **20 or more**.
-- **Humanity** — does it have a conscience? Roll **d20**, add every Humanity die and modifier. It succeeds on **20 or more**, plus any threshold changes (the Brain of a criminal makes it 23).
+The six parts stay on your sheet until resolution. They can't be sold, discarded or changed.
 
-Negative dice are rolled and subtracted. There are no automatic results on a natural 1 or 20, and no rerolls. Unmodified, each attribute succeeds only on a natural 20, so parts and research matter.
+### Resolving: Humanity
 
-### Outcomes
+When night ends, everyone who prepared announces it, then attempts resolve one at a time in initiative order, starting with the first player. If nobody prepared, skip to dawn.
 
-1. **Vitality fails.** No Creature. Shuffle the six used parts face down and take **3** at random back as loose parts; discard the rest. Suspicion +1.
-2. **Vitality and Humanity succeed.** A **stable Creature**! The game will end at dawn, after the round's other attempts. Discard the parts.
-3. **Vitality succeeds, Humanity fails.** A **monster**. Resolve its control chain before the next attempt.
+Each attempt is **one roll**: a **d20**, plus every Humanity die on the six parts and on your science cards. Positive dice are added, negative dice subtracted. **20 or more** succeeds. There are no automatic results on a natural 1 or 20, and no rerolls. A bare d20 succeeds only on a 20, so good heads and Humanity science matter; and a body full of negative dice may have no chance at all.
+
+Either way, discard the six parts. Then:
+
+1. **Humanity succeeds.** A **stable Creature**! The game will end at dawn, after the round's other attempts.
+2. **Humanity fails.** A **monster**. Resolve its control chain before the next attempt.
 
 ## Control: subduing monsters
 
-Everyone starts with **3 control attempts**, plus one for each effective copy of Neural Conditioning. Track them on your player sheet. Spent attempts never come back.
+When a monster is created, a **control chain** begins with its creator and goes clockwise, giving each player exactly one chance at it:
 
-When a monster is created, a **control chain** begins with its creator and goes clockwise, giving each player exactly one chance:
-
-- A player who has no control attempts left, or who is not the creator and has **no Igor on Garrison the watch** this round, is skipped. Being skipped adds no suspicion.
-- Every other player chooses, openly:
-  - **Try to subdue.** Spend one attempt and make a control roll: **d20**, plus 1d6 per effective Mesmerism and +4 per effective Restraining Apparatus. **20 or more** succeeds: the monster is destroyed. Shuffle its six parts face down, the subduer takes **3** at random as loose parts, and the rest are discarded. Then suspicion +1. The chain ends and resolution continues. A failed roll adds nothing, and the chain moves on.
+- Only players with an **Igor on Garrison the watch** this round may try, **the creator included**. (Neural Conditioning lets its holder try to subdue their own monster without one.) Anyone else is skipped, and being skipped adds no suspicion.
+- Every player who may try chooses, openly:
+  - **Try to subdue.** Make a control roll: **d20**, plus your control science (+3 for each Restraining Apparatus, +d6 for each Mesmerism). **20 or more** succeeds: the monster is destroyed and its parts stay discarded. Then suspicion +1. The chain ends and resolution continues. A failed roll adds nothing, and the chain moves on.
   - **Let it pass.** Suspicion +2, and the chain moves on. This applies to the creator too.
 
-Body parts never affect control rolls. If the chain gets back to the creator without anyone subduing the monster, it is **unleashed** and the game ends at once.
+You may try to subdue any number of monsters over a game. Body parts never affect control rolls. If the chain gets back to the creator without anyone subduing the monster, it is **unleashed** and the game ends at once.
 
 ## Suspicion
 
 Suspicion is one shared track from 0 to 10. Only these raise it:
 
-- discovery rolls when robbing graves, selling parts or conducting experiments;
-- a failed Vitality roll (+1);
+- robbing graves, selling parts or conducting experiments (+1 each);
 - subduing a monster (+1);
 - letting a monster pass when you could have tried (+2).
 
-Donate to charity lowers it (−2, more with Parish Benefactor), and so does conducting research with Public Lectures. It never changes on its own, and a stable Creature adds none. Suspicion can't go below 0 or above 10.
+Only these lower it: donating to charity (−2, more with Parish Benefactor), attending vespers (−1), and conducting research with Public Lectures (−1). It never changes on its own, and a stable Creature adds none. Suspicion can't go below 0 or above 10.
 
 **When suspicion reaches 10, the mob forms** and arrests every scientist: the game ends at once.
 
@@ -269,23 +276,22 @@ When the game ends, everyone reveals their objective, and the unseen card is tur
 
 The browser game handles some things automatically. At the table:
 
-- **Random parts** use the dice table on the player sheets; specimens use only its variant column.
-- **Random salvage** is three parts drawn from the six shuffled face down.
-- **Experiment cards** are shown to everyone; only the kept card stays with you, face up in your experiment row.
-- **Odds** are not printed. Discovery rolls are printed on their spaces.
-- **Order of dice** doesn't matter at the table. Roll all of an attribute's dice, add them up, and compare.
+- **Shuffling** is the only randomness before resolution: the science deck, the body-part deck, and the body-part discard pile when the deck runs out.
+- **Specimens and experiment cards** are shown to everyone.
+- **Vitality** is a sum you count yourself; check each other's when a body is laid out.
+- **Odds** are not printed.
+- **Order of dice** doesn't matter at the table. Roll all the Humanity dice at once, add them up, and compare.
 
 ## Designer rulings
 
 These rulings clarify the original v0.3 design and are part of the rules above:
 
-1. **Conducting research publishes.** There is no other way to publish, and experiment discoveries are never published.
-2. **Resurrection is prepared, not secretly committed.** Preparing is public and binding; the body must be complete when the attempt resolves.
-3. **Research copies stack**: 1 for your own discovery, plus 1 per publication of that type by another player.
+1. **Resurrection is prepared, not secretly committed.** Preparing is public and binding, and the six parts are committed when you prepare.
+2. **Vitality is a known total**, checked when you prepare; only Humanity is rolled.
+3. **Science is personal, and every card you hold applies**, including several copies of one type.
 4. **A stable Creature ends the game** at that round's dawn, whether or not anyone wins. Creatures never act.
 5. **Hired Igors act at once**, and an Igor may hire another Igor.
-6. **Assembly has no limit**: a whole body can be built in one action.
-7. **Every player starts with 3 control attempts**; subduing another player's monster needs an Igor in the garrison, and the creator needs none.
-8. **The mob can't stop a monster** that is waiting to be subdued.
-9. **The mob forms at 10** at every player count. The Visionary is used only with 4 or more players.
-10. **Six players deal two Unleashers**, who win together without knowing each other.
+6. **Subduing any monster needs an Igor in the garrison**, the creator's own included, unless the creator holds Neural Conditioning. A subduer gains nothing.
+7. **The mob can't stop a monster** that is waiting to be subdued.
+8. **The mob forms at 10** at every player count. The Visionary is used only with 4 or more players.
+9. **Six players deal two Unleashers**, who win together without knowing each other.

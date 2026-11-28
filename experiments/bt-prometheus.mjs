@@ -70,7 +70,7 @@ if (!isMainThread) {
     const avg = (f) => { const v = rs.map(f).filter((x) => x != null); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-'; };
     console.log(`    first attempt: mine r${avg((r) => r.myFirst)} rivals r${avg((r) => r.rivalFirst)}`);
     const logs = rs.flatMap((r) => r.log);
-    if (logs.length) console.log(`    attempts ${logs.length}: pStable ${avg2(logs, 'pStable')} pH ${avg2(logs, 'pH')} pV ${avg2(logs, 'pV')} pEscape ${avg2(logs, 'pEscape')}`);
+    if (logs.length) console.log(`    attempts ${logs.length}: pStable ${avg2(logs, 'pStable')} vitality ${avg2(logs, 'vitality')} pEscape ${avg2(logs, 'pEscape')}`);
     console.log(`    outcomes ${JSON.stringify(why)}  own attempts ${JSON.stringify(own)}`);
     if (args.includes('--verbose')) for (const r of rs) if (!r.won) console.log(`    ${r.seed} ${r.key} r${r.rounds} ${r.mine.join(',')}`);
   }

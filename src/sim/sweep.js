@@ -19,7 +19,7 @@ export const DEFAULT_TARGETS = {
   fallbackMinPerRound: 1, // unlimited spaces (other than private ones) used this often
   fallbackActions: ['medicine'],
   maxSeatSpread: 0.10, // win rate gap between initiative seats in round 1
-  ignoreActions: ['prepare', 'assemble'], // private spaces with no economy target
+  ignoreActions: ['prepare'], // a private space with no economy target
 };
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ function setPath(obj, path, value) {
  * The full configuration for a point: the defaults, then the sweep's base
  * overrides, then the point's values. Returning the whole resolved config
  * (rather than a sparse override) lets a path reach into arrays such as
- * discovery-roll bands. Throws if the engine rejects the result.
+ * the dice in an effect list. Throws if the engine rejects the result.
  */
 export function configForPoint(base, point, playerCount) {
   const cfg = clone(resolveConfig({ ...clone(base || {}), playerCount }));

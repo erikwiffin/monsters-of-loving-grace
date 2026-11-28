@@ -2,8 +2,8 @@
 // Everything here is copied into the game state's `config` at creation, so
 // experiments can override any value via createGame(configOverrides, seed).
 
-export const ENGINE_VERSION = '0.14.0';
-export const SCHEMA_VERSION = 9;
+export const ENGINE_VERSION = '0.15.0';
+export const SCHEMA_VERSION = 10;
 
 export const SLOT_ORDER = ['arm1', 'arm2', 'leg1', 'leg2', 'chest', 'head'];
 export const ATTRIBUTES = ['vitality', 'humanity'];
@@ -47,84 +47,96 @@ export const DEFAULT_CONFIG = {
   maxIgors: 3, // including the starting Igor(s)
   startingIgors: 1,
   marketSize: 4,
-  researchCopies: 4,
+  // Vitality is a known total, checked when preparing; Humanity is one roll
+  // of baseDie plus every Humanity die, checked at resolution (spec 025).
   resurrection: {
     baseDie: 20,
-    thresholds: { vitality: 20, humanity: 20 },
-    failedVitalityRefund: 3,
-    failedVitalitySuspicion: 1,
+    thresholds: { vitality: 10, humanity: 20 },
   },
   // Subduing a monster whose Humanity failed (spec 025).
   control: {
-    startingAttempts: 3,
-    // A control attempt succeeds on baseDie + research modifiers >= threshold.
+    // A control roll succeeds on baseDie + control science >= threshold.
     baseDie: 20,
     threshold: 20,
     declineSuspicion: 2,
     subdueSuspicion: 1,
-    subdueSalvage: 3,
   },
   // capacity: null = unlimited; a number = the same at every player count; or
   //   an object keyed by the smallest player count of each tier, e.g.
   //   { 3: 2, 5: 3 } = 2 slots with 3-4 players, 3 slots with 5-6.
   // igor: false = Scientist only; scientist: false = Igor only.
-  // suspicion: a discovery roll. Roll `die`; the first band whose `max` is at
-  //   least the roll plus the player's discovery roll bonus (Discreet Methods)
-  //   adds its `amount`; a result above
-  //   every band adds nothing.
+  // suspicion: added, flat, after the action's other effects.
   actions: {
     medicine: { phase: 'day', name: 'Practice medicine', location: 'Hospital', capacity: null, igor: true, gain: 3 },
     research: { phase: 'day', name: 'Conduct research', location: 'University', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2 },
-    specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2, count: 1 },
+    specimens: { phase: 'day', name: 'Buy specimens', location: 'Anatomical supplier', capacity: { 3: 2, 5: 3 }, igor: true, cost: 2, draw: 3 },
     charity: { phase: 'day', name: 'Donate to charity', location: 'Town hall', capacity: { 3: 2, 5: 3 }, igor: true, cost: 3, reduction: 2, maxUnits: 1 },
     hire: { phase: 'day', name: 'Hire an Igor', location: 'Tavern', capacity: { 3: 2, 5: 3 }, igor: true, cost: 4 },
     garrison: { phase: 'day', name: 'Garrison the watch', location: 'Watch house', capacity: 3, igor: true, scientist: false },
-    assemble: { phase: 'night', name: 'Assemble body', location: 'Private laboratory', capacity: null, igor: true, max: null }, // max: null = any number of parts
     prepare: { phase: 'night', name: 'Prepare resurrection', location: 'Private laboratory', capacity: null, igor: false },
-    sell: { phase: 'night', name: 'Sell parts', location: 'Back alley', capacity: { 3: 2, 5: 3 }, igor: true, gain: 7, parts: 2, suspicion: { die: 6, bands: [{ max: 2, amount: 1 }] } },
-    experiment: { phase: 'night', name: 'Conduct experiments', location: 'Private laboratory', capacity: { 3: 2, 5: 3 }, igor: true, maxParts: 3, suspicion: { die: 6, bands: [{ max: 3, amount: 1 }] } },
-    graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: { 3: 2, 5: 3 }, igor: true, parts: 2, suspicion: { die: 6, bands: [{ max: 4, amount: 1 }] } },
+    sell: { phase: 'night', name: 'Sell parts', location: 'Back alley', capacity: { 3: 2, 5: 3 }, igor: true, gain: 7, parts: 2, suspicion: 1 },
+    experiment: { phase: 'night', name: 'Conduct experiments', location: 'Private laboratory', capacity: { 3: 2, 5: 3 }, igor: true, parts: 2, cards: 2, suspicion: 1 },
+    graves: { phase: 'night', name: 'Rob graves', location: 'Graveyard', capacity: { 3: 2, 5: 3 }, igor: true, parts: 2, suspicion: 1 },
+    vespers: { phase: 'night', name: 'Attend vespers', location: 'Chapel', capacity: null, igor: true, reduction: 1 },
     rest: { phase: 'night', name: 'Rest', location: 'Home', capacity: 1, igor: true },
   },
   partTypes: {
-    arm: { name: 'Arm', slots: ['arm1', 'arm2'], weight: 2 },
-    leg: { name: 'Leg', slots: ['leg1', 'leg2'], weight: 2 },
-    chest: { name: 'Chest', slots: ['chest'], weight: 1 },
-    head: { name: 'Head', slots: ['head'], weight: 1 },
+    arm: { name: 'Arm', slots: ['arm1', 'arm2'] },
+    leg: { name: 'Leg', slots: ['leg1', 'leg2'] },
+    chest: { name: 'Chest', slots: ['chest'] },
+    head: { name: 'Head', slots: ['head'] },
   },
-  // Effects: { attribute, op: 'die' | 'fixed' | 'threshold', die?, sign?, amount? }
+  // The body-part deck: `copies` cards of each variant (spec 024). Effects:
+  // Vitality { op: 'fixed', amount } and Humanity { op: 'die', die, sign }.
   partVariants: {
-    ordinary_arm: { name: 'Ordinary arm', type: 'arm', effects: [] },
-    labourer_arm: { name: 'Arm of a labourer', type: 'arm', effects: [{ attribute: 'vitality', op: 'die', die: 4, sign: 1 }] },
-    damaged_arm: { name: 'Damaged arm', type: 'arm', effects: [{ attribute: 'vitality', op: 'die', die: 4, sign: -1 }] },
-    ordinary_leg: { name: 'Ordinary leg', type: 'leg', effects: [] },
-    athlete_leg: { name: 'Leg of an athlete', type: 'leg', effects: [{ attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
-    frail_leg: { name: 'Frail leg', type: 'leg', effects: [{ attribute: 'vitality', op: 'fixed', amount: -2 }] },
-    ordinary_chest: { name: 'Ordinary chest', type: 'chest', effects: [] },
-    robust_chest: { name: 'Robust chest', type: 'chest', effects: [{ attribute: 'vitality', op: 'die', die: 8, sign: 1 }] },
-    scarred_chest: { name: 'Scarred chest', type: 'chest', effects: [{ attribute: 'vitality', op: 'die', die: 6, sign: -1 }] },
-    ordinary_head: { name: 'Ordinary head', type: 'head', effects: [] },
-    criminal_brain: { name: 'Brain of a criminal', type: 'head', effects: [{ attribute: 'humanity', op: 'threshold', amount: 3 }] },
-    scholar_brain: { name: 'Brain of a scholar', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 6, sign: 1 }] },
-    poet_brain: { name: 'Brain of a poet', type: 'head', effects: [{ attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
+    ordinary_arm: { name: 'Ordinary arm', type: 'arm', copies: 5, effects: [{ attribute: 'vitality', op: 'fixed', amount: 1 }] },
+    labourer_arm: { name: 'Arm of a labourer', type: 'arm', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: 3 }] },
+    blacksmith_arm: { name: 'Arm of a blacksmith', type: 'arm', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 4 }, { attribute: 'humanity', op: 'die', die: 4, sign: -1 }] },
+    surgeon_arm: { name: 'Arm of a surgeon', type: 'arm', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 1 }, { attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
+    strangler_arm: { name: 'Arm of a strangler', type: 'arm', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: 2 }, { attribute: 'humanity', op: 'die', die: 6, sign: -1 }] },
+    damaged_arm: { name: 'Damaged arm', type: 'arm', copies: 4, effects: [{ attribute: 'vitality', op: 'fixed', amount: -1 }] },
+    withered_arm: { name: 'Withered arm', type: 'arm', copies: 3, effects: [{ attribute: 'vitality', op: 'fixed', amount: -2 }] },
+    gangrenous_arm: { name: 'Gangrenous arm', type: 'arm', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: -3 }] },
+    ordinary_leg: { name: 'Ordinary leg', type: 'leg', copies: 5, effects: [{ attribute: 'vitality', op: 'fixed', amount: 1 }] },
+    athlete_leg: { name: 'Leg of an athlete', type: 'leg', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: 3 }] },
+    highwayman_leg: { name: 'Leg of a highwayman', type: 'leg', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 3 }, { attribute: 'humanity', op: 'die', die: 6, sign: -1 }] },
+    soldier_leg: { name: 'Leg of a soldier', type: 'leg', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: 2 }, { attribute: 'humanity', op: 'die', die: 4, sign: -1 }] },
+    dancer_leg: { name: 'Leg of a dancer', type: 'leg', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 1 }, { attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
+    frail_leg: { name: 'Frail leg', type: 'leg', copies: 4, effects: [{ attribute: 'vitality', op: 'fixed', amount: -1 }] },
+    lame_leg: { name: 'Lame leg', type: 'leg', copies: 3, effects: [{ attribute: 'vitality', op: 'fixed', amount: -2 }] },
+    crushed_leg: { name: 'Crushed leg', type: 'leg', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: -3 }] },
+    ordinary_chest: { name: 'Ordinary chest', type: 'chest', copies: 3, effects: [{ attribute: 'vitality', op: 'fixed', amount: 2 }] },
+    robust_chest: { name: 'Robust chest', type: 'chest', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 4 }] },
+    prizefighter_chest: { name: 'Chest of a prizefighter', type: 'chest', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 4 }, { attribute: 'humanity', op: 'die', die: 6, sign: -1 }] },
+    priest_chest: { name: 'Chest of a priest', type: 'chest', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 1 }, { attribute: 'humanity', op: 'die', die: 6, sign: 1 }] },
+    scarred_chest: { name: 'Scarred chest', type: 'chest', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: -1 }] },
+    consumptive_chest: { name: 'Consumptive chest', type: 'chest', copies: 2, effects: [{ attribute: 'vitality', op: 'fixed', amount: -3 }] },
+    ordinary_head: { name: 'Ordinary head', type: 'head', copies: 3, effects: [] },
+    scholar_brain: { name: 'Brain of a scholar', type: 'head', copies: 1, effects: [{ attribute: 'humanity', op: 'die', die: 6, sign: 1 }] },
+    poet_brain: { name: 'Brain of a poet', type: 'head', copies: 1, effects: [{ attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
+    saint_brain: { name: 'Brain of a saint', type: 'head', copies: 1, effects: [{ attribute: 'humanity', op: 'die', die: 8, sign: 1 }] },
+    criminal_brain: { name: 'Brain of a criminal', type: 'head', copies: 2, effects: [{ attribute: 'humanity', op: 'die', die: 6, sign: -1 }] },
+    madman_brain: { name: 'Brain of a madman', type: 'head', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: 2 }, { attribute: 'humanity', op: 'die', die: 8, sign: -1 }] },
+    drunkard_brain: { name: 'Brain of a drunkard', type: 'head', copies: 1, effects: [{ attribute: 'vitality', op: 'fixed', amount: -1 }, { attribute: 'humanity', op: 'die', die: 4, sign: -1 }] },
   },
-  // Research effect kinds: medicineBonus, discoveryRollBonus (added to discovery
-  // rolls), suspicionReduction (a flat cut per discovery), controlAttempts,
-  // control ({ op: 'die' | 'fixed', ... } added to control rolls),
-  // resurrection (same shape as part effects), researchCalm (suspicion lowered
-  // when the holder conducts research), charityBonus (extra reduction per
-  // charity unit). Every effective copy applies. A type may set `copies`
-  // (default researchCopies); the engine also supports experimental kinds and
-  // `stacks: false` for configuration overrides (see experiments/).
-  research: {
-    discretion: { name: 'Discreet Methods', text: 'Add 1 to the discovery roll of each graves, sell or experiment action.', effects: [{ kind: 'discoveryRollBonus', amount: 1 }] },
-    galvanism: { name: 'Galvanic Mastery', text: 'Add 1d6 to resurrection Vitality.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'die', die: 6, sign: 1 }] },
-    medicine: { name: 'Medical Expertise', text: '+1 money on medicine, for any worker.', effects: [{ kind: 'medicineBonus', amount: 1 }] },
-    neurology: { name: 'Neural Conditioning', text: '+1 control attempt for subduing monsters.', effects: [{ kind: 'controlAttempts', amount: 1 }] },
-    mesmerism: { name: 'Mesmerism', text: 'Add 1d6 to control rolls.', effects: [{ kind: 'control', op: 'die', die: 6, sign: 1 }] },
-    restraint: { name: 'Restraining Apparatus', text: 'Add +4 to control rolls.', effects: [{ kind: 'control', op: 'fixed', amount: 4 }] },
-    philosophy: { name: 'Moral Philosophy', text: 'Add +3 to resurrection Humanity.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'fixed', amount: 3 }] },
-    lectures: { name: 'Public Lectures', text: 'When you conduct research, suspicion −1.', effects: [{ kind: 'researchCalm', amount: 1 }] },
-    benefactor: { name: 'Parish Benefactor', text: 'Your charity removes 1 more suspicion per unit.', effects: [{ kind: 'charityBonus', amount: 1 }] },
+  // Science (spec 023): every card held applies; every effect is positive.
+  // Kinds: resurrection (Vitality fixed or Humanity die), control (a die or
+  // fixed amount added to control rolls), medicineBonus, researchCalm
+  // (suspicion lowered when the holder conducts research), charityBonus
+  // (extra reduction per charity unit), subdueOwn (subdue your own monster
+  // without a garrison). `copies` is the number of cards in the deck.
+  science: {
+    anatomy: { name: 'Comparative Anatomy', kind: 'vitality', copies: 5, text: 'Vitality +1.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'fixed', amount: 1 }] },
+    galvanism: { name: 'Galvanic Mastery', kind: 'vitality', copies: 4, text: 'Vitality +2.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'fixed', amount: 2 }] },
+    voltaic: { name: 'Voltaic Pile', kind: 'vitality', copies: 2, text: 'Vitality +3.', effects: [{ kind: 'resurrection', attribute: 'vitality', op: 'fixed', amount: 3 }] },
+    sentiment: { name: 'Sentimental Education', kind: 'humanity', copies: 4, text: 'Humanity +d4.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'die', die: 4, sign: 1 }] },
+    philosophy: { name: 'Moral Philosophy', kind: 'humanity', copies: 4, text: 'Humanity +d6.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'die', die: 6, sign: 1 }] },
+    theology: { name: 'Natural Theology', kind: 'humanity', copies: 2, text: 'Humanity +d8.', effects: [{ kind: 'resurrection', attribute: 'humanity', op: 'die', die: 8, sign: 1 }] },
+    restraint: { name: 'Restraining Apparatus', kind: 'control', copies: 3, text: 'Control +3.', effects: [{ kind: 'control', op: 'fixed', amount: 3 }] },
+    mesmerism: { name: 'Mesmerism', kind: 'control', copies: 3, text: 'Control +d6.', effects: [{ kind: 'control', op: 'die', die: 6, sign: 1 }] },
+    medicine: { name: 'Medical Expertise', kind: 'other', copies: 1, text: '+1 money from Practice medicine.', effects: [{ kind: 'medicineBonus', amount: 1 }] },
+    lectures: { name: 'Public Lectures', kind: 'other', copies: 1, text: 'When you conduct research, suspicion −1.', effects: [{ kind: 'researchCalm', amount: 1 }] },
+    benefactor: { name: 'Parish Benefactor', kind: 'other', copies: 1, text: 'Your charity removes 1 more suspicion per unit.', effects: [{ kind: 'charityBonus', amount: 1 }] },
+    neurology: { name: 'Neural Conditioning', kind: 'other', copies: 1, text: 'You may subdue your own monster without a garrison.', effects: [{ kind: 'subdueOwn' }] },
   },
 };

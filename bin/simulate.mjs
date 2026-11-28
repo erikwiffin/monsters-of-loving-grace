@@ -30,7 +30,7 @@ const runOpts = {
   maxCommands: Number(opt('max-commands', 20000)),
   maxRounds: Number(opt('max-rounds', 200)),
   includeCommands: flag('commands'),
-  // Stop a game, flagging the bot, once anyone holds more money or loose parts than this.
+  // Stop a game, flagging the bot, once anyone holds more money or parts in hand than this.
   hoardLimit: flag('no-hoard-limit') ? null : {
     money: Number(opt('hoard-money', DEFAULT_HOARD_LIMIT.money)),
     parts: Number(opt('hoard-parts', DEFAULT_HOARD_LIMIT.parts)),

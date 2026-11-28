@@ -34,7 +34,7 @@ Behaviour is specified in [`specs/`](specs/000-specs.md), a set of short specs t
 
 The in-game **Rules** button shows the same summary.
 
-- **Setup:** each player starts with 3 money, 1 Scientist and 1 Igor. Suspicion starts at 0 and the starting player is random. Objective cards (N+1) are one each of Inquisitor and Unleasher, one Visionary with 4+ players, and Prometheus for the rest. They are dealt secretly through a pass-the-device screen, and one card stays unseen.
+- **Setup:** each player starts with 3 money, 1 Scientist and 1 Igor. Suspicion starts at 0 and the starting player is random. The science deck (31 cards) and the body-part deck (60 cards) are shuffled. Objective cards (N+1) are one each of Inquisitor and Unleasher, one Visionary with 4+ players, and Prometheus for the rest. They are dealt secretly through a pass-the-device screen, and one card stays unseen.
 - **Objectives:**
   - *Prometheus*: be the only player whose Creature becomes stable in a round; win at dawn.
   - *Visionary*: two or more Creatures become stable in the same round.
@@ -45,35 +45,32 @@ The in-game **Rules** button shows the same summary.
 - **Workers:**
   - The Scientist acts once by day and once by night.
   - Everyone starts with one Igor. More cost a flat 4 (maximum 3 in all), can be hired by any worker and can act as soon as they're hired. Each Igor acts once per round in either phase. Igors may take every action except *Prepare resurrection*; only Igors may garrison.
+- **Day and night:** day actions generally cost money and never raise suspicion, with medium value and low variance (you choose what you get). Night actions are generally free and each risky one adds exactly 1 suspicion, with slightly higher value and much higher variance (you take what the decks give). No dice are rolled before resolution.
 - **Actions** (capacity "2/3" means 2 slots with 3–4 players, 3 with 5–6):
 
   | Phase | Actions |
   |---|---|
-  | Day | medicine (unlimited), research (publishes the card), specimens (choose a type, random variant), charity, hire, garrison (Igor only) |
-  | Night | assemble (unlimited), prepare resurrection (Scientist only, unlimited), sell parts, experiments (discard loose or installed parts, draw that many cards, keep one privately), graves, rest (1: go first next round) |
+  | Day | medicine (unlimited), research (any market card), specimens (draw 3 parts, keep 1), charity, hire, garrison (Igor only) |
+  | Night | prepare resurrection (Scientist only, unlimited), sell 2 parts (+1 suspicion), experiments (discard 2 parts, draw and keep 2 science cards, +1 suspicion), graves (draw 2 parts, +1 suspicion), vespers (suspicion −1, unlimited), rest (1: go first next round) |
 
-  Each action space shows its cost, effect, capacity and discovery-roll odds. Spec 022 has the details; every number is a configuration value meant for tuning (spec 016). Design principle: night actions mirror day actions (graves ↔ specimens, sell ↔ medicine, experiments ↔ research) with similar expected value but higher variance; selling pays 7 because it costs two parts.
+  Spec 022 has the details; every number is a configuration value meant for tuning (spec 016).
+- **Body parts:** one shuffled 60-card deck with a public discard pile that is reshuffled when the deck runs out. Each part may carry a fixed Vitality number and a Humanity die; the deck is biased towards negative values.
+- **Science:** personal and permanent. Vitality cards (fixed +), Humanity cards (+dice) and control cards (fixed + or +dice) come in several copies; other cards (Medical Expertise, Public Lectures, Parish Benefactor, Neural Conditioning) are singletons. Every card held applies, duplicates included.
 - **Resurrection:**
-  - Roll d20 each for Vitality (needs 20+) and Humanity (20+). Installed parts and research add dice, fixed modifiers or threshold changes.
-  - Vitality fails → three parts are salvaged and suspicion rises by 1.
-  - Vitality and Humanity succeed → a stable Creature.
-  - Vitality succeeds but Humanity fails → a monster. Its creator, then each player clockwise, may spend one of their control attempts (3 each, +1 per copy of Neural Conditioning) to try to subdue it — everyone except the creator needs an Igor in the garrison that round. A try rolls d20 + control research (Mesmerism +1d6, Restraining Apparatus +4 per copy) and needs 20+. Success destroys the monster, gives the subduer 3 of its parts at random and adds 1 suspicion; failure adds nothing and the monster passes on. Each player who could try but doesn't adds 2 suspicion. If nobody subdues it, it is unleashed.
-- **Suspicion** comes only from discovery rolls on graves, sell and experiments, failed resurrections, subdued monsters (+1) and monsters left unsubdued (+2 per decline). Charity lowers it (by 2, plus 1 per Parish Benefactor), and so does conducting research with Public Lectures (1 per copy).
+  - *Prepare* (Scientist, night): lay out a full set from your hand (two arms, two legs, a chest, a head) whose Vitality, with Vitality science, is at least 10. The parts are committed at once.
+  - At resolution, roll d20 plus every Humanity die from the parts and science: 20+ is a stable Creature, anything less a monster. The parts are discarded either way.
+  - A monster's control chain runs from its creator clockwise. Only players with an Igor in the garrison may try, the creator included (Neural Conditioning waives this for one's own monster). A try rolls d20 + control science and needs 20+: success destroys the monster and adds 1 suspicion; failure adds nothing and passes it on. Each player who could try but declines adds 2 suspicion. If nobody subdues it, it is unleashed.
+- **Suspicion** comes only from graves, sell and experiments (+1 each), subdued monsters (+1) and monsters let pass (+2 per decline). Charity (−2, plus 1 with Parish Benefactor), vespers (−1) and research with Public Lectures (−1) lower it.
 
 ### Designer rulings (clarifications to spec v0.3)
 
 These rulings resolve ambiguities in the spec and are implemented in the engine:
 
-1. **Publishing** happens only through the research action, which always publishes the card taken. There is no free publishing. Experiment discoveries are never published.
-2. **Resurrection is prepared, not secretly committed.** Placing your Scientist on *Prepare resurrection* is public and binding; the body must be complete when the attempt resolves.
-3. **Research copies stack.** A player's effective copies of a type are 1 for their own discovery, plus 1 for each publication of that type by *another* player. Every copy applies its effect:
-   - Galvanic Mastery adds 1d6 per copy; Moral Philosophy adds +3 per copy.
-   - Medical Expertise adds +1 money per copy.
-   - Discreet Methods adds 1 per copy to discovery rolls, making a discovery less likely.
-   - Public Lectures lowers suspicion by 1 per copy when you conduct research; Parish Benefactor adds 1 to each charity unit's reduction per copy.
-
-   Players still cannot buy a type they personally discovered.
+1. **Resurrection is prepared, not secretly committed.** Placing your Scientist on *Prepare resurrection* is public and binding, and commits the six chosen parts.
+2. **Vitality is a known total**, checked when preparing; only Humanity is rolled.
+3. **Science is personal, and every card held applies**, duplicates included.
 4. **A stable Creature ends the game.** At the dawn of any round in which a Creature becomes stable, the game ends. If exactly one became stable and its owner is a Prometheus, that player wins. If two or more became stable, the Visionary wins if dealt. Otherwise everyone loses. Two Prometheus players stabilizing in the same round both lose. There are no Creature workers.
+5. **Subduing needs a garrison**, the creator's own monster included, unless the creator holds Neural Conditioning; a subduer gains nothing.
 
 ---
 
@@ -103,7 +100,7 @@ These rulings resolve ambiguities in the spec and are implemented in the engine:
 ```
 index.html, styles.css    static entry point
 src/engine/               pure rules engine (no DOM, storage, timers or Math.random)
-  data.js                 catalogs and balance constants (actions, parts, research)
+  data.js                 catalogs and balance constants (actions, parts, science)
   rng.js                  seeded, serializable PRNG (sfc32)
   engine.js               state machine, command bus, legal moves, views, save/replay
   index.js                public API
@@ -127,8 +124,8 @@ test/policy-scenarios.test.mjs  how the bots should behave in set situations
 
 All balance values and catalogs live in `DEFAULT_CONFIG` (`src/engine/data.js`) and are copied into each game's state.
 
-- `createGame(overrides, seed)` deep-merges your overrides into the defaults; arrays are replaced rather than merged. For example: `{ startingMoney: 5, actions: { graves: { suspicion: { die: 6, bands: [{ max: 2, amount: 1 }] } } } }`. An action's `capacity` (a number, `null` for unlimited, or tiers such as `{ 3: 2, 5: 3 }`) is always replaced whole.
-- Part variants and research cards use effect records of the form `{ attribute, op: 'die' | 'fixed' | 'threshold', die, sign, amount }`. You can edit them without touching engine code.
+- `createGame(overrides, seed)` deep-merges your overrides into the defaults; arrays are replaced rather than merged. For example: `{ startingMoney: 5, actions: { graves: { suspicion: 2 } }, partVariants: { ordinary_arm: { copies: 8 } } }`. An action's `capacity` (a number, `null` for unlimited, or tiers such as `{ 3: 2, 5: 3 }`) is always replaced whole.
+- Part variants and science cards use effect records: Vitality `{ attribute: 'vitality', op: 'fixed', amount }` and Humanity `{ attribute: 'humanity', op: 'die', die, sign }`. Science may also add control rolls (`{ kind: 'control', op: 'die' | 'fixed', ... }`) and a few named abilities. Every science effect is positive. You can edit them without touching engine code.
 
 ### Engine API
 
@@ -144,7 +141,7 @@ E.getPublicView(state);               // shared info only
 const r = E.dispatch(state, command); // { ok, state, events, error? }
 E.serialize(state); E.deserialize(json);  // deserialize verifies by replaying the command log
 E.replay({ config, seed, commands });  E.getReplayRecord(state);
-E.estimateResurrection(state, pid);   // exact odds, consumes no randomness
+E.estimateResurrection(state, pid, partIds?); // Vitality total and exact Humanity odds, consumes no randomness
 ```
 
 `dispatch` behaves as follows:
@@ -161,26 +158,24 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 | Command | Fields |
 |---|---|
 | `PASS_TURN` | — (gives up all remaining placements this day/night) |
-| `PICK_RESEARCH` | `cardId` — after an experiment, the drawn card to keep (a type you haven't discovered); the only legal command until made |
+| `PICK_PART` | `partId` — after buying specimens, the drawn part to keep; the only legal command until made |
 | `SUBDUE_MONSTER` | `subdue: boolean` — only for the player currently deciding in a monster's control chain |
 | `PLACE_MEEPLE` | `workerId`, `actionId`, `choices` (below) |
 
 | `actionId` | `choices` |
 |---|---|
-| `medicine`, `hire`, `charity`, `garrison`, `graves`, `prepare`, `rest` | `{}` (or omitted) |
-| `research` | `{ researchCardId: 'card-17' }`: a market card whose type you have not discovered |
-| `specimens` | `{ partTypes: ['chest'] }`: exactly 1 part type; the variant is random |
-| `assemble` | `{ partIds: ['part-12', 'part-18'] }`: 1 or more unique loose part instances (up to a whole body), each needing an empty matching slot |
-| `sell` | `{ partIds: ['part-3', 'part-9'] }`: exactly the configured number of loose parts |
-| `experiment` | `{ partIds: ['part-3', 'part-9'] }`: 1 to the configured maximum of parts, loose or installed |
+| `medicine`, `hire`, `charity`, `garrison`, `graves`, `specimens`, `vespers`, `rest` | `{}` (or omitted) |
+| `research` | `{ researchCardId: 'card-17' }`: any market card |
+| `prepare` | `{ partIds: [...] }`: six parts from your hand, a full set whose Vitality meets the threshold |
+| `sell` | `{ partIds: ['part-3', 'part-9'] }`: exactly the configured number of parts from your hand |
+| `experiment` | `{ partIds: ['part-3', 'part-9'] }`: exactly the configured number of parts from your hand |
 
 - **Worker IDs:**
   - Scientists are `scientist-p1`.
   - Igors are `igor-p1-1`, `igor-p1-2` and so on.
 - **Choice constraints** returned by `getLegalCommands` take these forms:
   - `{ type: 'enum', values }`
-  - `{ type: 'multiset', count, values }`
-  - `{ type: 'subset', min, max, values, maxPerPartType? }`
+  - `{ type: 'subset', min, max, values, perPartType?, minVitality?, vitalityBonus? }`
 
 ### Events and privacy
 
@@ -188,9 +183,7 @@ Every command needs `type` and `playerId`; `seq` is optional. Unknown fields are
 - **Private events:** objective assignments (`OBJECTIVE_ASSIGNED`) are visible only to their own player.
 - **Public reveals:** `RESURRECTIONS_ANNOUNCED` lists every prepared attempt before any roll, and `OBJECTIVES_REVEALED` publishes every objective at game end.
 - **Filtered views:** `getPlayerView` and `filterEvents` never include other players' objectives, the seed, the RNG state or the deck order.
-- **Dice detail:** `RESURRECTION_ROLLED` lists every die with its source, sign and result, plus fixed modifiers, threshold adjustments, the adjusted threshold and the final score. Dice are rolled in a fixed order:
-  1. Vitality, then Humanity.
-  2. Within each attribute: the base die, then parts in slot order, then research in sorted type ID order.
+- **Dice detail:** `RESURRECTION_ROLLED` lists the Vitality total with its sources, and every Humanity die with its source, sign and result, the threshold and the final score. Dice are rolled in a fixed order: the base die, then parts in slot order, then science in sorted type ID order.
 
 ---
 
@@ -221,16 +214,16 @@ Each game result records:
 
 Games that hit `--max-commands` or `--max-rounds` are reported as `truncated: true` with no terminal reason. They are never counted as an in-game result.
 
-A bot holding more than 25 money or 25 loose parts is no longer playing realistically, so the runner stops the game there and flags it (`truncationReason: "hoarding"` and the `hoarding` record above). Aggregates count stops by reason (`truncatedByReason`) and hoarders by objective and resource (`hoardingBy`). Change the limits with `--hoard-money` and `--hoard-parts`, or turn the stop off with `--no-hoard-limit` (`hoardLimit` in `runGame`/`runBatch`; `null` disables it). Seats played by the `random` policy are exempt, since random play is not meant to be realistic.
+A bot holding more than 25 money or 25 parts in hand is no longer playing realistically, so the runner stops the game there and flags it (`truncationReason: "hoarding"` and the `hoarding` record above). Aggregates count stops by reason (`truncatedByReason`) and hoarders by objective and resource (`hoardingBy`). Change the limits with `--hoard-money` and `--hoard-parts`, or turn the stop off with `--no-hoard-limit` (`hoardLimit` in `runGame`/`runBatch`; `null` disables it). Seats played by the `random` policy are exempt, since random play is not meant to be realistic.
 
 Policies: `random`, `heuristic`, and the heuristic's `cautious` and `bold` styles, plus, for robustness checks, `noisy` (picks at random among options near its best) and `bt` (the behaviour-tree Prometheus in `src/sim/bt-prometheus.js`, the heuristic for other roles). Names resolve through `src/sim/registry.js`, which also takes specs such as `{"policy":"heuristic","options":{"weights":{...}}}` and seatings such as `{"default":"heuristic","byObjective":{"prometheus":"bt"}}` (only the first Prometheus seat deviates unless `"deviators":"all"`).
 
 Every result also has an `uptake` record, aggregated as `uptake`:
-- each research type: how often it was acquired (by research or experiment), published and applied in rolls, with the win rate of the players who held it (a correlation, not a cause);
+- each science type: how often it was acquired (by research or experiment) and applied in rolls, with the win rate of the players who held it (a correlation, not a cause);
 - how often each part variant went into an attempted body;
-- suspicion avoided by Discreet Methods, lowered by Public Lectures, and money from Medical Expertise;
+- suspicion lowered by Public Lectures and by vespers, and money from Medical Expertise;
 - the share of Igor-rounds and Scientist phases left idle, by objective and policy;
-- `rarelyUsed`: research and actions the bots barely touched. A new card here is weak or not understood by the AI; fix that before reading its balance numbers.
+- `rarelyUsed`: science and actions the bots barely touched. A new card here is weak or not understood by the AI; fix that before reading its balance numbers.
 
 ### Parameter sweeps
 
@@ -282,12 +275,13 @@ node bin/llm-playtest.mjs --objective visionary --players 5
 
 - **Quick check** (`bin/quick-check.mjs`): the scenario tests and the exact metamorphic checks under the changed rules, a screening comparison (standard heuristic, 3 and 5 players, 200 games per arm, so changes of about ±7 points show), and the uptake of the content the change touches. It lists what it flagged and what to run next. It is for catching big effects and AI blind spots before a full run, not for balance numbers.
 - **Compare** (`src/sim/compare.js`): both arms play the same seeds. For each player count and policy set it reports each objective's win rate in both arms, the change with a 95% interval and a p-value, and how many marks chance alone would give. Its verdict per objective is *robust* (every policy set agrees), *policy-dependent* (sets disagree significantly: the effect comes from the AI), or *no clear effect*.
-- **Metamorphic checks** (`src/sim/metamorphic.js`): cheaper or safer actions are not used less; a research card with no effect is not bought (except by an Inquisitor blocking a slot); renaming every research type, or the players, changes no game at all, move for move, so the AI depends on effects, not IDs. A failure is an AI flaw to fix before trusting balance numbers.
+- **Metamorphic checks** (`src/sim/metamorphic.js`): cheaper or safer actions are not used less; a science card with no effect is not bought (except by an Inquisitor blocking a slot); renaming every science type, or the players, changes no game at all, move for move, so the AI depends on effects, not IDs. A failure is an AI flaw to fix before trusting balance numbers.
 - **Scenario tests** (`test/policy-scenarios.test.mjs`, part of `npm test`): set up a situation, let a policy play the phase, and check what it did. They state how the bots should behave.
 - **Explanations** (`src/sim/disagree.js`): the heuristic takes an `explain` callback that receives every option's score, split into value, suspicion risk, Scientist tax and Igor reserve.
-- **Effect values** (`src/sim/effect-values.js`): every policy values research from one two-layer table. Layer 1 (`EFFECT_IMPACT`) says what each effect kind does in a few game quantities (Vitality and Humanity points, control points and attempts, money, suspicion kept off the table, parts, ferocity, hunting); it is the same for every role. Layer 2 prices each quantity per role, for itself (`QUANTITY_PRICE`) and in a rival's hands (`RIVAL_PRICE`, which prices publishing and denial). A new card that uses existing effect kinds needs no code. A new effect kind needs one layer-1 entry, and a new quantity only for a genuinely new kind of benefit, priced once per role. The behaviour tree models resurrection and control odds itself and takes every other kind from the table.
+- **Effect values** (`src/sim/effect-values.js`): every policy values science from one two-layer table. Layer 1 (`EFFECT_IMPACT`) says what each effect kind does in a few game quantities (Vitality and Humanity points, control points, money, suspicion kept off the table, subduing one's own monster); it is the same for every role. Layer 2 prices each quantity per role, for itself (`QUANTITY_PRICE`) and in a rival's hands (`RIVAL_PRICE`). A new card that uses existing effect kinds needs no code. A new effect kind needs one layer-1 entry, and a new quantity only for a genuinely new kind of benefit, priced once per role.
+- **Body planning** (`src/sim/body-plan.js`): both AI policies plan the best full set a hand can make for their objective (Vitality first, then Humanity), with exact Humanity odds, and value a part by how much it improves that plan.
 - **Occasional tools**, too slow or too uncertain for routine use: tuning, best response and the LLM playtest.
-- **Tuning and best response** (`src/sim/tune.js`): the heuristic's numbers are `DEFAULT_WEIGHTS` in `src/sim/policies.js`, with per-role defaults in `OBJECTIVE_WEIGHTS` (Prometheus uses tuned weights), overridable with the `weights` option. `bin/tune.mjs` searches them for one objective with the cross-entropy method, as a best response to standard opponents, and saves them under `experiments/tuned/`. `bin/best-response.mjs` puts one seat of each role on its best known policy against a standard field: a large gap over the standard heuristic means that role's balance numbers measure AI skill as much as rules.
+- **Tuning and best response** (`src/sim/tune.js`): the heuristic's numbers are `DEFAULT_WEIGHTS` in `src/sim/policies.js`, with per-role defaults in `OBJECTIVE_WEIGHTS` overridable with the `weights` option. `bin/tune.mjs` searches them for one objective with the cross-entropy method, as a best response to standard opponents, and saves them under `experiments/tuned/`. `bin/best-response.mjs` puts one seat of each role on its best known policy against a standard field: a large gap over the standard heuristic means that role's balance numbers measure AI skill as much as rules.
 - **LLM playtest** (`src/sim/llm-policy.js`): Claude (`claude-opus-5-5`, low effort, with server-side refusal fallbacks) plays one seat from `assets/rulebook.md`, one API call per decision, and writes a transcript of its moves and reasons and its feedback on unclear rules and unused content to `playtests/`. It needs `npm install @anthropic-ai/sdk` and credentials. Use it for qualitative checks of new content, not for statistics.
 - **Statistics** (`src/sim/stats.js`): Wilson intervals, two-proportion tests and `gamesForHalfWidth`. At a 50% rate, 100 games give about ±10 points and 500 about ±4.4.
 
@@ -330,9 +324,10 @@ For each decision belonging to a seat on stdin, the driver writes `{"type":"deci
 - setup and deck composition
 - rejected commands leaving state unchanged
 - capacity, Igor timing and night use
-- suspicion tables and Discreet Methods
-- capacity tiers, worker permissions, discovery-roll bands, sell, experiments and rest
-- assembly limits, research publishing and research stacking
+- the body-part deck: specimens, graves, the discard pile and reshuffling
+- capacity tiers, worker permissions, flat night suspicion, sell, experiments, vespers and rest
+- preparing a body: full sets, the Vitality threshold and committed parts
+- science: the market, duplicates and every card applying
 - every resurrection outcome and each victory or defeat path
 - a stable Creature always ending the game at dawn
 - prepared resurrections and filtered views
